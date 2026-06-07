@@ -1,0 +1,15 @@
+# Binary
+bin/
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# Go test cache / coverage
+*.test
+*.out
+
+# OS
+.DS_Store
+Thumbs.db

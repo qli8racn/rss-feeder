@@ -11,7 +11,7 @@ Go 製 RSS リーダー CLI。Claude Code のエージェント・Hooks・SQLite
 
 ```bash
 go mod tidy
-go build -o rss-feeder ./cmd/rss-feeder
+go build -o bin/rss-feeder ./cmd/rss-feeder
 ```
 
 DB 初期化は初回起動時に自動実行される。
@@ -21,10 +21,10 @@ DB 初期化は初回起動時に自動実行される。
 ## CLI Commands
 
 ```bash
-rss-feeder fetch
-rss-feeder list [--all | --bookmarked]
-rss-feeder bookmark <id>
-rss-feeder reset [-y]
+bin/rss-feeder fetch
+bin/rss-feeder list [--all | --bookmarked]
+bin/rss-feeder bookmark <id>
+bin/rss-feeder reset [-y]
 ```
 
 ---

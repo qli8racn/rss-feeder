@@ -113,33 +113,47 @@ driver           → adapter(interface)
 rss-feeder/
 ├── cmd/
 │   └── rss-feeder/
-│       └── main.go                    # Composition Root・samber/do コンテナ構築・サブコマンド登録
+│       └── main.go                         # Composition Root・samber/do コンテナ構築・サブコマンド登録
 ├── internal/
 │   ├── domain/
-│   │   ├── article.go                 # Article エンティティ・ToggleBookmark() など
-│   │   └── feed.go                    # Feed エンティティ
+│   │   ├── article.go                      # Article エンティティ・ToggleBookmark() など
+│   │   └── feed.go                         # Feed エンティティ
+│   ├── migration/
+│   │   └── migration.go                    # DB スキーマ作成（Run(*sql.DB) error）
 │   ├── usecase/
-│   │   ├── fetch.go                   # 取得・重複チェック・保存の orchestration
-│   │   ├── list.go                    # 記事一覧取得ロジック
-│   │   ├── bookmark.go                # お気に入りトグルロジック
-│   │   └── reset.go                   # 非お気に入り記事削除ロジック
+│   │   ├── fetch.go                        # 取得・重複チェック・保存の orchestration
+│   │   ├── list.go                         # 記事一覧取得ロジック
+│   │   ├── bookmark.go                     # お気に入りトグルロジック
+│   │   └── reset.go                        # 非お気に入り記事削除ロジック
 │   ├── adapter/
-│   │   ├── repository.go              # ArticleRepository・FeedRepository interface
-│   │   ├── rss_reader.go              # RSSReader interface
+│   │   ├── driver/
+│   │   │   ├── file/
+│   │   │   │   └── feeds_reader.go         # FeedsReader interface
+│   │   │   └── rss/
+│   │   │       └── rss_reader.go           # RSSReader interface
+│   │   ├── repository/
+│   │   │   ├── article/
+│   │   │   │   └── article.go             # ArticleRepository interface
+│   │   │   └── feed/
+│   │   │       └── feed.go                # FeedRepository interface
 │   │   └── handler/
-│   │       ├── fetch.go               # cobra コマンド → FetchUsecase 呼び出し
+│   │       ├── fetch.go                   # cobra コマンド → FetchUsecase 呼び出し
 │   │       ├── list.go
 │   │       ├── bookmark.go
 │   │       └── reset.go
 │   └── driver/
-│       ├── sqlite/
-│       │   ├── client.go              # DB 接続・テーブル初期化
-│       │   ├── article.go             # ArticleRepository 実装（SQL 文はここ）
-│       │   └── feed.go                # FeedRepository 実装
+│       ├── readerdb/                       # reader.db への接続・リポジトリ実装
+│       │   ├── client.go                   # DB 接続（sql.Open のみ）
+│       │   ├── article/
+│       │   │   └── article.go             # ArticleRepository 実装（SQL 文はここ）
+│       │   └── feed/
+│       │       └── feed.go                # FeedRepository 実装
+│       ├── file/
+│       │   └── feeds_reader.go            # FeedsReader 実装（feeds.txt 読み込み）
 │       └── rss/
-│           └── reader.go              # RSSReader 実装（gofeed による HTTP Fetch）
-├── feeds.txt                          # RSS フィード URL リスト（1行1URL、# コメント・空行スキップ）
-├── reader.db                          # SQLite データベース（gitignore）
+│           └── reader.go                  # RSSReader 実装（gofeed による HTTP Fetch）
+├── feeds.txt                               # RSS フィード URL リスト（1行1URL、# コメント・空行スキップ）
+├── reader.db                               # SQLite データベース（gitignore）
 ├── go.mod
 └── go.sum
 ```
@@ -152,7 +166,7 @@ rss-feeder/
 |----------|------|---------|
 | `github.com/spf13/cobra` | CLI サブコマンド管理 | 複数サブコマンドの構造化に適している |
 | `github.com/mmcdole/gofeed` | RSS/Atom パース | RSS 2.0・Atom 両対応、メンテ活発 |
-| `modernc.org/sqlite` | SQLite ドライバ | CGO 不要でコンテナ環境でのビルドが容易 |
+| `github.com/mattn/go-sqlite3` | SQLite ドライバ | CGO 使用。devcontainer に GCC あり・純 Go 版は コンパイル時メモリ不足のため除外 |
 | `github.com/samber/do/v2` | DI コンテナ | CLI 向きのシンプルな API、コード生成不要 |
 
 ---
