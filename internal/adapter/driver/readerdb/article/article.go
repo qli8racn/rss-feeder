@@ -2,9 +2,12 @@ package article
 
 import (
 	"context"
+	"errors"
 
 	"github.com/qli8racn/rss-feeder/internal/domain"
 )
+
+var ErrDuplicate = errors.New("duplicate article")
 
 type Repository interface {
 	Save(ctx context.Context, article domain.Article) error
