@@ -41,6 +41,9 @@ func main() {
 		do.MustInvoke[feedrepo.Repository](i),
 		do.MustInvoke[adapterrss.RSSReader](i),
 	)
+	listUC := usecase.NewListUsecase(
+		do.MustInvoke[articlerepo.Repository](i),
+	)
 
 	root := &cobra.Command{
 		Use:   "rss-feeder",
@@ -52,6 +55,7 @@ func main() {
 			do.MustInvoke[adapterfile.FeedsReader](i),
 			fetchUC,
 		),
+		handler.NewListCommand(listUC),
 	)
 
 	if err := root.Execute(); err != nil {
