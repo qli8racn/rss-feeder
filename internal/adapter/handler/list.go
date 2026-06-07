@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -27,7 +26,7 @@ func NewListCommand(uc *usecase.ListUsecase) *cobra.Command {
 				mode = usecase.ListModeBookmarked
 			}
 
-			articles, err := uc.Execute(context.Background(), mode)
+			articles, err := uc.Execute(cmd.Context(), mode)
 			if err != nil {
 				return err
 			}

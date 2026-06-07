@@ -1,12 +1,12 @@
-package usecase_test
+package usecase
 
 import (
 	"context"
 	"errors"
 	"testing"
 
+	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	"github.com/qli8racn/rss-feeder/internal/domain"
-	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
 
 // --- mocks ---
@@ -17,7 +17,7 @@ type mockArticleRepo struct {
 
 func (m *mockArticleRepo) Save(_ context.Context, a domain.Article) error {
 	if m.existing[a.URL] {
-		return errors.New("duplicate")
+		return articlerepo.ErrDuplicate
 	}
 	return nil
 }
@@ -26,8 +26,10 @@ func (m *mockArticleRepo) FindUnread(_ context.Context) ([]domain.Article, error
 func (m *mockArticleRepo) FindBookmarked(_ context.Context) ([]domain.Article, error)    { return nil, nil }
 func (m *mockArticleRepo) FindByID(_ context.Context, _ int64) (*domain.Article, error)  { return nil, nil }
 func (m *mockArticleRepo) Update(_ context.Context, _ domain.Article) error              { return nil }
+func (m *mockArticleRepo) MarkAsRead(_ context.Context, _ []int64) error                 { return nil }
 func (m *mockArticleRepo) DeleteNonBookmarked(_ context.Context) (int64, error)          { return 0, nil }
 func (m *mockArticleRepo) CountNonBookmarked(_ context.Context) (int64, error)           { return 0, nil }
+func (m *mockArticleRepo) CountBookmarked(_ context.Context) (int64, error)              { return 0, nil }
 
 type mockFeedRepo struct{}
 
@@ -47,7 +49,7 @@ func (m *mockRSSReader) Fetch(_ context.Context, _ string) (string, []domain.Art
 
 func TestFetchUsecase_SkipsDuplicates(t *testing.T) {
 	repo := &mockArticleRepo{existing: map[string]bool{"https://example.com/1": true}}
-	uc := usecase.NewFetchUsecase(repo, &mockFeedRepo{}, &mockRSSReader{
+	uc := NewFetchUsecase(repo, &mockFeedRepo{}, &mockRSSReader{
 		articles: []domain.Article{{URL: "https://example.com/1", Title: "Test"}},
 	})
 
@@ -55,16 +57,16 @@ func TestFetchUsecase_SkipsDuplicates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Saved != 0 {
-		t.Errorf("Saved: got %d, want 0", result.Saved)
+	if result.TotalSaved() != 0 {
+		t.Errorf("Saved: got %d, want 0", result.TotalSaved())
 	}
-	if result.Skipped != 1 {
-		t.Errorf("Skipped: got %d, want 1", result.Skipped)
+	if result.TotalSkipped() != 1 {
+		t.Errorf("Skipped: got %d, want 1", result.TotalSkipped())
 	}
 }
 
 func TestFetchUsecase_SavesNewArticles(t *testing.T) {
-	uc := usecase.NewFetchUsecase(&mockArticleRepo{}, &mockFeedRepo{}, &mockRSSReader{
+	uc := NewFetchUsecase(&mockArticleRepo{}, &mockFeedRepo{}, &mockRSSReader{
 		articles: []domain.Article{
 			{URL: "https://example.com/1", Title: "Article 1"},
 			{URL: "https://example.com/2", Title: "Article 2"},
@@ -75,21 +77,43 @@ func TestFetchUsecase_SavesNewArticles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Saved != 2 {
-		t.Errorf("Saved: got %d, want 2", result.Saved)
+	if result.TotalSaved() != 2 {
+		t.Errorf("Saved: got %d, want 2", result.TotalSaved())
 	}
 }
 
 func TestFetchUsecase_HandlesReaderError(t *testing.T) {
-	uc := usecase.NewFetchUsecase(&mockArticleRepo{}, &mockFeedRepo{}, &mockRSSReader{
+	uc := NewFetchUsecase(&mockArticleRepo{}, &mockFeedRepo{}, &mockRSSReader{
 		err: errors.New("connection failed"),
 	})
 
 	result, err := uc.Execute(context.Background(), []string{"https://feed.example.com"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Error("expected error when feed fetch fails, got nil")
 	}
-	if result.Errors != 1 {
-		t.Errorf("Errors: got %d, want 1", result.Errors)
+	if result.TotalErrors() != 1 {
+		t.Errorf("Errors: got %d, want 1", result.TotalErrors())
 	}
+}
+
+func TestFetchUsecase_NonDuplicateSaveError_CountsAsError(t *testing.T) {
+	uc := NewFetchUsecase(
+		&mockSaveErrRepo{},
+		&mockFeedRepo{},
+		&mockRSSReader{articles: []domain.Article{{URL: "https://example.com/1", Title: "A"}}},
+	)
+
+	result, err := uc.Execute(context.Background(), []string{"https://feed.example.com"})
+	if err == nil {
+		t.Error("expected error when article save fails, got nil")
+	}
+	if result.TotalErrors() != 1 {
+		t.Errorf("Errors: got %d, want 1", result.TotalErrors())
+	}
+}
+
+type mockSaveErrRepo struct{ mockArticleRepo }
+
+func (m *mockSaveErrRepo) Save(_ context.Context, _ domain.Article) error {
+	return errors.New("disk full")
 }

@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
@@ -10,10 +11,40 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
-type FetchResult struct {
-	Saved   int
+type FeedFetchResult struct {
+	Saved   []domain.Article
 	Skipped int
-	Errors  int
+	Err     error
+}
+
+type FetchResult struct {
+	Feeds []FeedFetchResult
+}
+
+func (r FetchResult) TotalSaved() int {
+	n := 0
+	for _, f := range r.Feeds {
+		n += len(f.Saved)
+	}
+	return n
+}
+
+func (r FetchResult) TotalSkipped() int {
+	n := 0
+	for _, f := range r.Feeds {
+		n += f.Skipped
+	}
+	return n
+}
+
+func (r FetchResult) TotalErrors() int {
+	n := 0
+	for _, f := range r.Feeds {
+		if f.Err != nil {
+			n++
+		}
+	}
+	return n
 }
 
 type FetchUsecase struct {
@@ -35,43 +66,43 @@ func NewFetchUsecase(
 }
 
 func (uc *FetchUsecase) Execute(ctx context.Context, feedURLs []string) (FetchResult, error) {
-	var result FetchResult
-	total := len(feedURLs)
+	result := FetchResult{Feeds: make([]FeedFetchResult, 0, len(feedURLs))}
 
-	for idx, feedURL := range feedURLs {
-		fmt.Printf("[%d/%d] %s\n", idx+1, total, feedURL)
-
-		feedTitle, articles, err := uc.rssReader.Fetch(ctx, feedURL)
-		if err != nil {
-			fmt.Printf("  エラー: %v\n", err)
-			result.Errors++
-			continue
-		}
-
-		feedID, err := uc.feedRepo.Save(ctx, domain.Feed{FeedURL: feedURL, Title: feedTitle})
-		if err != nil {
-			fmt.Printf("  エラー: フィード保存に失敗: %v\n", err)
-			result.Errors++
-			continue
-		}
-
-		feedSaved, feedSkipped := 0, 0
-		for _, article := range articles {
-			article.FeedID = feedID
-			if err := uc.articleRepo.Save(ctx, article); err != nil {
-				feedSkipped++
-				continue
-			}
-			fmt.Printf("  + %s  %s\n", article.Title, article.URL)
-			feedSaved++
-		}
-		if feedSkipped > 0 {
-			fmt.Printf("  スキップ: %d 件\n", feedSkipped)
-		}
-		result.Saved += feedSaved
-		result.Skipped += feedSkipped
+	for _, feedURL := range feedURLs {
+		result.Feeds = append(result.Feeds, uc.fetchFeed(ctx, feedURL))
 	}
 
-	fmt.Printf("\n完了: 新規 %d 件 / スキップ %d 件 / エラー %d 件\n", result.Saved, result.Skipped, result.Errors)
+	if n := result.TotalErrors(); n > 0 {
+		return result, fmt.Errorf("%d 件のフィードで取得に失敗しました", n)
+	}
 	return result, nil
+}
+
+func (uc *FetchUsecase) fetchFeed(ctx context.Context, feedURL string) FeedFetchResult {
+	feedTitle, articles, err := uc.rssReader.Fetch(ctx, feedURL)
+	if err != nil {
+		return FeedFetchResult{Err: fmt.Errorf("フェッチ失敗: %w", err)}
+	}
+
+	feedID, err := uc.feedRepo.Save(ctx, domain.Feed{FeedURL: feedURL, Title: feedTitle})
+	if err != nil {
+		return FeedFetchResult{Err: fmt.Errorf("フィード保存失敗: %w", err)}
+	}
+
+	var saved []domain.Article
+	skipped := 0
+
+	for _, article := range articles {
+		article.FeedID = feedID
+		if err := uc.articleRepo.Save(ctx, article); err != nil {
+			if errors.Is(err, articlerepo.ErrDuplicate) {
+				skipped++
+				continue
+			}
+			return FeedFetchResult{Saved: saved, Skipped: skipped, Err: fmt.Errorf("記事保存失敗: %w", err)}
+		}
+		saved = append(saved, article)
+	}
+
+	return FeedFetchResult{Saved: saved, Skipped: skipped}
 }

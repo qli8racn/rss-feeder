@@ -3,6 +3,7 @@ package article
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
@@ -73,6 +74,22 @@ func (r *repository) Update(ctx context.Context, a domain.Article) error {
 	return err
 }
 
+func (r *repository) MarkAsRead(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	placeholders := strings.Repeat("?,", len(ids))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE articles SET read = 1 WHERE id IN (`+placeholders+`)`,
+		args...)
+	return err
+}
+
 func (r *repository) DeleteNonBookmarked(ctx context.Context) (int64, error) {
 	res, err := r.db.ExecContext(ctx, `DELETE FROM articles WHERE bookmarked = 0`)
 	if err != nil {
@@ -84,6 +101,12 @@ func (r *repository) DeleteNonBookmarked(ctx context.Context) (int64, error) {
 func (r *repository) CountNonBookmarked(ctx context.Context) (int64, error) {
 	var count int64
 	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM articles WHERE bookmarked = 0`).Scan(&count)
+	return count, err
+}
+
+func (r *repository) CountBookmarked(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM articles WHERE bookmarked = 1`).Scan(&count)
 	return count, err
 }
 

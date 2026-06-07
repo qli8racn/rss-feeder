@@ -47,6 +47,9 @@ func main() {
 	bookmarkUC := usecase.NewBookmarkUsecase(
 		do.MustInvoke[articlerepo.Repository](i),
 	)
+	resetUC := usecase.NewResetUsecase(
+		do.MustInvoke[articlerepo.Repository](i),
+	)
 
 	root := &cobra.Command{
 		Use:   "rss-feeder",
@@ -60,6 +63,7 @@ func main() {
 		),
 		handler.NewListCommand(listUC),
 		handler.NewBookmarkCommand(bookmarkUC),
+		handler.NewResetCommand(resetUC),
 	)
 
 	if err := root.Execute(); err != nil {

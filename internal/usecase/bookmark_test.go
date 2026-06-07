@@ -35,10 +35,14 @@ func (m *mockBookmarkArticleRepo) Update(_ context.Context, a domain.Article) er
 	m.updated = append(m.updated, a)
 	return m.updateErr
 }
+func (m *mockBookmarkArticleRepo) MarkAsRead(_ context.Context, _ []int64) error { return nil }
 func (m *mockBookmarkArticleRepo) DeleteNonBookmarked(_ context.Context) (int64, error) {
 	return 0, nil
 }
 func (m *mockBookmarkArticleRepo) CountNonBookmarked(_ context.Context) (int64, error) {
+	return 0, nil
+}
+func (m *mockBookmarkArticleRepo) CountBookmarked(_ context.Context) (int64, error) {
 	return 0, nil
 }
 

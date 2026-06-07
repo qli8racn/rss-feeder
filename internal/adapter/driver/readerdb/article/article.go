@@ -16,6 +16,8 @@ type Repository interface {
 	FindBookmarked(ctx context.Context) ([]domain.Article, error)
 	FindByID(ctx context.Context, id int64) (*domain.Article, error)
 	Update(ctx context.Context, article domain.Article) error
+	MarkAsRead(ctx context.Context, ids []int64) error
 	DeleteNonBookmarked(ctx context.Context) (int64, error)
 	CountNonBookmarked(ctx context.Context) (int64, error)
+	CountBookmarked(ctx context.Context) (int64, error)
 }

@@ -2,6 +2,7 @@ package rss
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/mmcdole/gofeed"
@@ -10,12 +11,16 @@ import (
 	"github.com/samber/do/v2"
 )
 
+const fetchTimeout = 30 * time.Second
+
 type reader struct {
 	parser *gofeed.Parser
 }
 
 func NewReader(_ do.Injector) (adapterrss.RSSReader, error) {
-	return &reader{parser: gofeed.NewParser()}, nil
+	p := gofeed.NewParser()
+	p.Client = &http.Client{Timeout: fetchTimeout}
+	return &reader{parser: p}, nil
 }
 
 func (r *reader) Fetch(ctx context.Context, feedURL string) (string, []domain.Article, error) {

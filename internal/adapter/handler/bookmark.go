@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -22,7 +21,7 @@ func NewBookmarkCommand(uc *usecase.BookmarkUsecase) *cobra.Command {
 				return fmt.Errorf("ID は整数で指定してください: %s", args[0])
 			}
 
-			article, err := uc.Execute(context.Background(), id)
+			article, err := uc.Execute(cmd.Context(), id)
 			if err != nil {
 				if errors.Is(err, usecase.ErrArticleNotFound) {
 					return fmt.Errorf("記事が見つかりません: ID %d", id)

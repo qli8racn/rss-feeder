@@ -189,6 +189,51 @@ func TestArticleRepository_DeleteNonBookmarked(t *testing.T) {
 	}
 }
 
+func TestArticleRepository_MarkAsRead(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	r.Save(ctx, makeArticle("https://example.com/1"))
+	r.Save(ctx, makeArticle("https://example.com/2"))
+	r.Save(ctx, makeArticle("https://example.com/3"))
+
+	all, _ := r.FindAll(ctx)
+	ids := []int64{all[0].ID, all[1].ID}
+
+	if err := r.MarkAsRead(ctx, ids); err != nil {
+		t.Fatalf("MarkAsRead: %v", err)
+	}
+
+	unread, _ := r.FindUnread(ctx)
+	if len(unread) != 1 {
+		t.Errorf("unread count: got %d, want 1", len(unread))
+	}
+}
+
+func TestArticleRepository_MarkAsRead_Empty(t *testing.T) {
+	r := newRepo(t)
+	if err := r.MarkAsRead(context.Background(), nil); err != nil {
+		t.Fatalf("MarkAsRead with empty ids should be no-op: %v", err)
+	}
+}
+
+func TestArticleRepository_CountBookmarked(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	r.Save(ctx, makeArticle("https://example.com/1"))
+	r.Save(ctx, makeArticle("https://example.com/2"))
+	r.db.Exec(`UPDATE articles SET bookmarked = 1 WHERE url = 'https://example.com/1'`)
+
+	count, err := r.CountBookmarked(ctx)
+	if err != nil {
+		t.Fatalf("CountBookmarked: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("count: got %d, want 1", count)
+	}
+}
+
 func TestArticleRepository_CountNonBookmarked(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)

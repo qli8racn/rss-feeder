@@ -11,9 +11,9 @@ type mockListArticleRepo struct {
 	all        []domain.Article
 	unread     []domain.Article
 	bookmarked []domain.Article
-	updated    []domain.Article
+	markedIDs  []int64 // IDs passed to MarkAsRead
 	findErr    error
-	updateErr  error
+	markErr    error
 }
 
 func (m *mockListArticleRepo) Save(_ context.Context, _ domain.Article) error        { return nil }
@@ -27,12 +27,14 @@ func (m *mockListArticleRepo) FindBookmarked(_ context.Context) ([]domain.Articl
 func (m *mockListArticleRepo) FindByID(_ context.Context, _ int64) (*domain.Article, error) {
 	return nil, nil
 }
-func (m *mockListArticleRepo) Update(_ context.Context, a domain.Article) error {
-	m.updated = append(m.updated, a)
-	return m.updateErr
+func (m *mockListArticleRepo) Update(_ context.Context, _ domain.Article) error { return nil }
+func (m *mockListArticleRepo) MarkAsRead(_ context.Context, ids []int64) error {
+	m.markedIDs = append(m.markedIDs, ids...)
+	return m.markErr
 }
 func (m *mockListArticleRepo) DeleteNonBookmarked(_ context.Context) (int64, error) { return 0, nil }
 func (m *mockListArticleRepo) CountNonBookmarked(_ context.Context) (int64, error)  { return 0, nil }
+func (m *mockListArticleRepo) CountBookmarked(_ context.Context) (int64, error)     { return 0, nil }
 
 func TestListUsecase_DefaultMode_ReturnsUnread(t *testing.T) {
 	repo := &mockListArticleRepo{
@@ -98,13 +100,8 @@ func TestListUsecase_MarksUnreadAsRead(t *testing.T) {
 
 	uc.Execute(context.Background(), ListModeUnread)
 
-	if len(repo.updated) != 2 {
-		t.Errorf("updated count: got %d, want 2", len(repo.updated))
-	}
-	for _, a := range repo.updated {
-		if !a.Read {
-			t.Errorf("article %d should be marked as read", a.ID)
-		}
+	if len(repo.markedIDs) != 2 {
+		t.Errorf("markedIDs count: got %d, want 2", len(repo.markedIDs))
 	}
 }
 
@@ -119,11 +116,11 @@ func TestListUsecase_SkipsAlreadyRead(t *testing.T) {
 
 	uc.Execute(context.Background(), ListModeAll)
 
-	if len(repo.updated) != 1 {
-		t.Errorf("updated count: got %d, want 1 (already-read should be skipped)", len(repo.updated))
+	if len(repo.markedIDs) != 1 {
+		t.Errorf("markedIDs count: got %d, want 1 (already-read should be skipped)", len(repo.markedIDs))
 	}
-	if repo.updated[0].ID != 2 {
-		t.Errorf("expected article 2 to be updated, got %d", repo.updated[0].ID)
+	if repo.markedIDs[0] != 2 {
+		t.Errorf("expected article ID 2 to be marked, got %d", repo.markedIDs[0])
 	}
 }
 

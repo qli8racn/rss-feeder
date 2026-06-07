@@ -41,12 +41,14 @@ func (uc *ListUsecase) Execute(ctx context.Context, mode ListMode) ([]domain.Art
 		return nil, err
 	}
 
+	var unreadIDs []int64
 	for _, a := range articles {
-		if a.Read {
-			continue
+		if !a.Read {
+			unreadIDs = append(unreadIDs, a.ID)
 		}
-		a.Read = true
-		if err := uc.articleRepo.Update(ctx, a); err != nil {
+	}
+	if len(unreadIDs) > 0 {
+		if err := uc.articleRepo.MarkAsRead(ctx, unreadIDs); err != nil {
 			return nil, err
 		}
 	}
