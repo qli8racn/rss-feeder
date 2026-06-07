@@ -138,7 +138,7 @@ rss-feeder/
 │       │   └── feed.go                # FeedRepository 実装
 │       └── rss/
 │           └── reader.go              # RSSReader 実装（gofeed による HTTP Fetch）
-├── feeds.txt                          # RSS フィード URL リスト
+├── feeds.txt                          # RSS フィード URL リスト（1行1URL、# コメント・空行スキップ）
 ├── reader.db                          # SQLite データベース（gitignore）
 ├── go.mod
 └── go.sum
@@ -313,9 +313,13 @@ internal/domain/
 func TestArticle_ToggleBookmark(t *testing.T) {
     a := domain.Article{Bookmarked: false}
     a.ToggleBookmark()
-    assert.True(t, a.Bookmarked)
+    if !a.Bookmarked {
+        t.Error("expected Bookmarked to be true after first toggle")
+    }
     a.ToggleBookmark()
-    assert.False(t, a.Bookmarked)
+    if a.Bookmarked {
+        t.Error("expected Bookmarked to be false after second toggle")
+    }
 }
 ```
 
@@ -341,9 +345,15 @@ func TestFetchUsecase_SkipsDuplicates(t *testing.T) {
     uc := usecase.NewFetchUsecase(repo, reader)
 
     result, err := uc.Execute(context.Background(), []string{"https://feed.example.com"})
-    assert.NoError(t, err)
-    assert.Equal(t, 0, result.Saved)
-    assert.Equal(t, 1, result.Skipped)
+    if err != nil {
+        t.Fatalf("unexpected error: %v", err)
+    }
+    if result.Saved != 0 {
+        t.Errorf("Saved: got %d, want 0", result.Saved)
+    }
+    if result.Skipped != 1 {
+        t.Errorf("Skipped: got %d, want 1", result.Skipped)
+    }
 }
 ```
 
@@ -369,10 +379,16 @@ func TestArticleRepository_Save_SkipsDuplicate(t *testing.T) {
     repo := sqlite.NewArticleRepository(db)
 
     article := domain.Article{URL: "https://example.com/1", Title: "Test"}
-    assert.NoError(t, repo.Save(ctx, article))
-    assert.NoError(t, repo.Save(ctx, article)) // 2回目は重複→エラーなしでスキップ
+    if err := repo.Save(ctx, article); err != nil {
+        t.Fatalf("first save failed: %v", err)
+    }
+    if err := repo.Save(ctx, article); err != nil { // 2回目は重複→エラーなしでスキップ
+        t.Fatalf("second save (duplicate) failed: %v", err)
+    }
 
     count, _ := repo.Count(ctx)
-    assert.Equal(t, 1, count)
+    if count != 1 {
+        t.Errorf("Count: got %d, want 1", count)
+    }
 }
 ```
