@@ -11,6 +11,17 @@ import (
 
 var ErrArticleNotFound = errors.New("article not found")
 
+func findArticleByID(ctx context.Context, repo articlerepo.Repository, id int64) (*domain.Article, error) {
+	article, err := repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if article == nil {
+		return nil, fmt.Errorf("ID %d: %w", id, ErrArticleNotFound)
+	}
+	return article, nil
+}
+
 type BookmarkUsecase struct {
 	articleRepo articlerepo.Repository
 }
@@ -20,12 +31,9 @@ func NewBookmarkUsecase(articleRepo articlerepo.Repository) *BookmarkUsecase {
 }
 
 func (uc *BookmarkUsecase) Execute(ctx context.Context, id int64) (*domain.Article, error) {
-	article, err := uc.articleRepo.FindByID(ctx, id)
+	article, err := findArticleByID(ctx, uc.articleRepo, id)
 	if err != nil {
-		return nil, fmt.Errorf("article lookup failed: %w", err)
-	}
-	if article == nil {
-		return nil, fmt.Errorf("ID %d: %w", id, ErrArticleNotFound)
+		return nil, err
 	}
 
 	article.ToggleBookmark()

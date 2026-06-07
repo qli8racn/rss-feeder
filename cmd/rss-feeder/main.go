@@ -10,6 +10,8 @@ import (
 
 	adapterfile "github.com/qli8racn/rss-feeder/internal/adapter/driver/file"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
+	auditlogrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/auditlog"
+	dbmaintrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/dbmaintenance"
 	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/adapter/handler"
@@ -17,6 +19,8 @@ import (
 	driverfile "github.com/qli8racn/rss-feeder/internal/driver/file"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
+	dbrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerdb/auditlog"
+	dbrepodbmaint "github.com/qli8racn/rss-feeder/internal/driver/readerdb/dbmaintenance"
 	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
 	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
@@ -30,6 +34,8 @@ func main() {
 	do.Provide(i, dbrepofeed.NewRepository)
 	do.Provide(i, driverrss.NewReader)
 	do.Provide(i, driverfile.NewFeedsReader)
+	do.Provide(i, dbrepoauditlog.NewRepository)
+	do.Provide(i, dbrepodbmaint.NewMaintainer)
 
 	db := do.MustInvoke[*sql.DB](i)
 	if err := migration.Run(db); err != nil {
@@ -50,6 +56,18 @@ func main() {
 	resetUC := usecase.NewResetUsecase(
 		do.MustInvoke[articlerepo.Repository](i),
 	)
+	checkArticleUC := usecase.NewCheckArticleUsecase(
+		do.MustInvoke[articlerepo.Repository](i),
+	)
+	checkBookmarkedUC := usecase.NewCheckBookmarkedUsecase(
+		do.MustInvoke[articlerepo.Repository](i),
+	)
+	auditUC := usecase.NewAuditUsecase(
+		do.MustInvoke[auditlogrepo.Repository](i),
+	)
+	maintenanceUC := usecase.NewMaintenanceUsecase(
+		do.MustInvoke[dbmaintrepo.Maintainer](i),
+	)
 
 	root := &cobra.Command{
 		Use:   "rss-feeder",
@@ -64,6 +82,10 @@ func main() {
 		handler.NewListCommand(listUC),
 		handler.NewBookmarkCommand(bookmarkUC),
 		handler.NewResetCommand(resetUC),
+		handler.NewCheckArticleCommand(checkArticleUC),
+		handler.NewCheckBookmarkedCommand(checkBookmarkedUC),
+		handler.NewAuditCommand(auditUC),
+		handler.NewMaintenanceCommand(maintenanceUC),
 	)
 
 	if err := root.Execute(); err != nil {
