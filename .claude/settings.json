@@ -2,10 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(go *)",
-      "Bash(bin/rss-feeder *)"
+      "Bash(bin/rss-feeder *)",
+      "Bash(git diff*)",
+      "Bash(git status*)",
+      "Bash(git commit*)",
+      "Bash(git log*)"
     ],
     "deny": [
-      "Bash(git *)",
+      "Bash(git push*)",
+      "Bash(git pull*)",
       "Bash(curl *)",
       "Bash(wget *)",
       "Bash(rm -rf *)",
