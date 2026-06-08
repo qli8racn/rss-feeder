@@ -20,6 +20,10 @@
       }
     }
   },
+  "runArgs": [
+    "--memory=3g",
+    "--memory-swap=6g"
+  ],
   "features": {
     "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
   },

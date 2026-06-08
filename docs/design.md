@@ -2,6 +2,8 @@
 
 ## CLI コマンド一覧
 
+### rss-feeder
+
 ```
 rss-feeder <command> [flags]
 ```
@@ -15,6 +17,32 @@ rss-feeder <command> [flags]
 | `search <keyword>` | キーワードで記事を全文検索 | 7 |
 
 各コマンドの詳細仕様は `docs/steering/` 以下の各フェーズディレクトリを参照。
+
+### rss-agent
+
+```
+rss-agent <command> [flags]
+```
+
+| コマンド | フラグ | 概要 |
+|------------|----------------------------------------|------------------------|
+| `summarize` | `--feed <url>`, `--limit <n>`（デフォルト 10） | 最新記事を AI で要約 |
+| `preference` | — | ブックマーク済み記事から趣向を分析 |
+
+`ANTHROPIC_API_KEY` 環境変数が必要。`cmd/agent/main.go` がエントリポイント。
+
+#### ビルド
+
+```bash
+go build -o bin/rss-agent ./cmd/agent
+```
+
+CGO（mattn/go-sqlite3）と Anthropic SDK を同時にリンクするためメモリ使用量が大きい。
+OOM が発生する場合はパッケージ並列数を制限する：
+
+```bash
+go build -p 1 -o bin/rss-agent ./cmd/agent
+```
 
 ---
 
