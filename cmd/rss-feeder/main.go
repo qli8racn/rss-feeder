@@ -68,6 +68,9 @@ func main() {
 	maintenanceUC := usecase.NewMaintenanceUsecase(
 		do.MustInvoke[dbmaintrepo.Maintainer](i),
 	)
+	searchUC := usecase.NewSearchUsecase(
+		do.MustInvoke[articlerepo.Repository](i),
+	)
 
 	root := &cobra.Command{
 		Use:   "rss-feeder",
@@ -86,6 +89,7 @@ func main() {
 		handler.NewCheckBookmarkedCommand(checkBookmarkedUC),
 		handler.NewAuditCommand(auditUC),
 		handler.NewMaintenanceCommand(maintenanceUC),
+		handler.NewSearchCommand(searchUC),
 	)
 
 	if err := root.Execute(); err != nil {

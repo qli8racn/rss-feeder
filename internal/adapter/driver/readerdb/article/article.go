@@ -21,4 +21,5 @@ type Repository interface {
 	CountNonBookmarked(ctx context.Context) (int64, error)
 	CountBookmarked(ctx context.Context) (int64, error)
 	FetchLatest(ctx context.Context, limit int, feedURL string) ([]domain.Article, error)
+	Search(ctx context.Context, keyword string, bookmarkedOnly bool) ([]domain.Article, error)
 }

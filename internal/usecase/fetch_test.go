@@ -37,6 +37,9 @@ func (m *mockArticleRepo) CountBookmarked(_ context.Context) (int64, error)     
 func (m *mockArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) {
 	return nil, nil
 }
+func (m *mockArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.Article, error) {
+	return nil, nil
+}
 
 type mockFeedRepo struct{}
 

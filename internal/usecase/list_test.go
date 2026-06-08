@@ -40,6 +40,9 @@ func (m *mockListArticleRepo) CountBookmarked(_ context.Context) (int64, error) 
 func (m *mockListArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) {
 	return nil, nil
 }
+func (m *mockListArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.Article, error) {
+	return nil, nil
+}
 
 func TestListUsecase_DefaultMode_ReturnsUnread(t *testing.T) {
 	repo := &mockListArticleRepo{

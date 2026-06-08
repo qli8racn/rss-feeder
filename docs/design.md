@@ -50,6 +50,7 @@ rss-feeder/
 │   │   ├── list.go                              # 記事一覧取得ロジック
 │   │   ├── bookmark.go                          # お気に入りトグルロジック
 │   │   ├── reset.go                             # 非お気に入り記事削除ロジック
+│   │   ├── search.go                            # キーワード全文検索ロジック
 │   │   ├── audit.go                             # audit_log 記録ロジック
 │   │   ├── check_article.go                     # 記事 ID 存在確認ロジック
 │   │   ├── check_bookmarked.go                  # お気に入り件数確認ロジック
@@ -74,6 +75,8 @@ rss-feeder/
 │   │       ├── list.go
 │   │       ├── bookmark.go
 │   │       ├── reset.go
+│   │       ├── search.go                        # search サブコマンド（--bookmarked フラグ）
+│   │       ├── table.go                         # 記事一覧テーブル描画ヘルパー（printArticleTable）
 │   │       ├── audit.go                         # audit サブコマンド（Hook 経由で呼び出し）
 │   │       ├── check_article.go                 # check-article サブコマンド（Hook 経由で呼び出し）
 │   │       ├── check_bookmarked.go              # check-bookmarked サブコマンド（Hook 経由で呼び出し）
@@ -209,13 +212,14 @@ func main() {
         do.MustInvoke[feedrepo.Repository](i),
         do.MustInvoke[adapterrss.RSSReader](i),
     )
-    listUC           := usecase.NewListUsecase(do.MustInvoke[articlerepo.Repository](i))
-    bookmarkUC       := usecase.NewBookmarkUsecase(do.MustInvoke[articlerepo.Repository](i))
-    resetUC          := usecase.NewResetUsecase(do.MustInvoke[articlerepo.Repository](i))
-    checkArticleUC   := usecase.NewCheckArticleUsecase(do.MustInvoke[articlerepo.Repository](i))
+    listUC            := usecase.NewListUsecase(do.MustInvoke[articlerepo.Repository](i))
+    bookmarkUC        := usecase.NewBookmarkUsecase(do.MustInvoke[articlerepo.Repository](i))
+    resetUC           := usecase.NewResetUsecase(do.MustInvoke[articlerepo.Repository](i))
+    searchUC          := usecase.NewSearchUsecase(do.MustInvoke[articlerepo.Repository](i))
+    checkArticleUC    := usecase.NewCheckArticleUsecase(do.MustInvoke[articlerepo.Repository](i))
     checkBookmarkedUC := usecase.NewCheckBookmarkedUsecase(do.MustInvoke[articlerepo.Repository](i))
-    auditUC          := usecase.NewAuditUsecase(do.MustInvoke[auditlogrepo.Repository](i))
-    maintenanceUC    := usecase.NewMaintenanceUsecase(do.MustInvoke[dbmaintrepo.Maintainer](i))
+    auditUC           := usecase.NewAuditUsecase(do.MustInvoke[auditlogrepo.Repository](i))
+    maintenanceUC     := usecase.NewMaintenanceUsecase(do.MustInvoke[dbmaintrepo.Maintainer](i))
 
     // cobra コマンド組み立て
     root := &cobra.Command{Use: "rss-feeder", Short: "RSS フィードを取得・管理する CLI ツール"}
@@ -224,6 +228,7 @@ func main() {
         handler.NewListCommand(listUC),
         handler.NewBookmarkCommand(bookmarkUC),
         handler.NewResetCommand(resetUC),
+        handler.NewSearchCommand(searchUC),
         handler.NewCheckArticleCommand(checkArticleUC),
         handler.NewCheckBookmarkedCommand(checkBookmarkedUC),
         handler.NewAuditCommand(auditUC),
@@ -314,6 +319,7 @@ internal/usecase/
   list_test.go             # 未読フィルタ・全件・お気に入りフィルタが正しく委譲される
   bookmark_test.go         # トグル動作・存在しない ID のエラーハンドリング
   reset_test.go            # お気に入り記事が削除対象に含まれないことの確認
+  search_test.go           # キーワード一致・0件・bookmarked フィルタ・エラーハンドリング
   audit_test.go            # audit_log への記録ロジック
   check_article_test.go    # 記事 ID 存在確認ロジック
   check_bookmarked_test.go # お気に入り件数確認ロジック
@@ -351,7 +357,7 @@ func TestFetchUsecase_SkipsDuplicates(t *testing.T) {
 internal/driver/
   readerdb/
     article/
-      article_test.go  # INSERT・重複スキップ・UPDATE・DELETE の SQL 動作確認
+      article_test.go  # INSERT・重複スキップ・UPDATE・DELETE・LIKE 検索の SQL 動作確認
     feed/
       feed_test.go     # feeds テーブル操作
   rss/

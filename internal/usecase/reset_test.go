@@ -44,6 +44,9 @@ func (m *mockResetArticleRepo) CountBookmarked(_ context.Context) (int64, error)
 func (m *mockResetArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) {
 	return nil, nil
 }
+func (m *mockResetArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.Article, error) {
+	return nil, nil
+}
 
 func TestResetUsecase_Count(t *testing.T) {
 	repo := &mockResetArticleRepo{nonBookmarked: 38}

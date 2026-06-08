@@ -132,6 +132,18 @@ func (r *repository) CountNonBookmarked(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+func (r *repository) Search(ctx context.Context, keyword string, bookmarkedOnly bool) ([]domain.Article, error) {
+	q := `SELECT id, feed_id, url, title, content, published_at, read, bookmarked, fetched_at
+		FROM articles WHERE (title LIKE ? OR content LIKE ?)`
+	like := "%" + keyword + "%"
+	args := []any{like, like}
+	if bookmarkedOnly {
+		q += " AND bookmarked = 1"
+	}
+	q += " ORDER BY published_at DESC"
+	return r.queryArgs(ctx, q, args...)
+}
+
 func (r *repository) CountBookmarked(ctx context.Context) (int64, error) {
 	var count int64
 	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM articles WHERE bookmarked = 1`).Scan(&count)
@@ -139,7 +151,11 @@ func (r *repository) CountBookmarked(ctx context.Context) (int64, error) {
 }
 
 func (r *repository) query(ctx context.Context, q string) ([]domain.Article, error) {
-	rows, err := r.db.QueryContext(ctx, q)
+	return r.queryArgs(ctx, q)
+}
+
+func (r *repository) queryArgs(ctx context.Context, q string, args ...any) ([]domain.Article, error) {
+	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

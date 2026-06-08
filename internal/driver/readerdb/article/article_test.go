@@ -250,3 +250,84 @@ func TestArticleRepository_CountNonBookmarked(t *testing.T) {
 		t.Errorf("count: got %d, want 1", count)
 	}
 }
+
+func TestArticleRepository_Search_TitleMatch(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	a1 := makeArticle("https://example.com/1")
+	a1.Title = "Go言語入門"
+	a2 := makeArticle("https://example.com/2")
+	a2.Title = "Python基礎"
+	r.Save(ctx, a1)
+	r.Save(ctx, a2)
+
+	results, err := r.Search(ctx, "Go", false)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("count: got %d, want 1", len(results))
+	}
+	if results[0].Title != "Go言語入門" {
+		t.Errorf("Title: got %q", results[0].Title)
+	}
+}
+
+func TestArticleRepository_Search_ContentMatch(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	a := makeArticle("https://example.com/1")
+	a.Content = "goroutine を使った並行処理"
+	r.Save(ctx, a)
+
+	results, err := r.Search(ctx, "goroutine", false)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("count: got %d, want 1", len(results))
+	}
+}
+
+func TestArticleRepository_Search_NoMatch(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	r.Save(ctx, makeArticle("https://example.com/1"))
+
+	results, err := r.Search(ctx, "nomatch_xyz", false)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected empty, got %d", len(results))
+	}
+}
+
+func TestArticleRepository_Search_BookmarkedOnly(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	a1 := makeArticle("https://example.com/1")
+	a1.Title = "Go入門"
+	a2 := makeArticle("https://example.com/2")
+	a2.Title = "Go応用"
+	r.Save(ctx, a1)
+	r.Save(ctx, a2)
+	if _, err := r.db.ExecContext(ctx, `UPDATE articles SET bookmarked = 1 WHERE url = 'https://example.com/1'`); err != nil {
+		t.Fatalf("setup bookmarked: %v", err)
+	}
+
+	results, err := r.Search(ctx, "Go", true)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("count: got %d, want 1", len(results))
+	}
+	if !results[0].Bookmarked {
+		t.Error("result should be bookmarked")
+	}
+}
