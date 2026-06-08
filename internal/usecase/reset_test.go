@@ -14,8 +14,8 @@ type mockResetArticleRepo struct {
 	deleteErr     error
 }
 
-func (m *mockResetArticleRepo) Save(_ context.Context, _ domain.Article) error        { return nil }
-func (m *mockResetArticleRepo) FindAll(_ context.Context) ([]domain.Article, error)   { return nil, nil }
+func (m *mockResetArticleRepo) Save(_ context.Context, _ domain.Article) error      { return nil }
+func (m *mockResetArticleRepo) FindAll(_ context.Context) ([]domain.Article, error) { return nil, nil }
 func (m *mockResetArticleRepo) FindUnread(_ context.Context) ([]domain.Article, error) {
 	return nil, nil
 }
@@ -25,8 +25,8 @@ func (m *mockResetArticleRepo) FindBookmarked(_ context.Context) ([]domain.Artic
 func (m *mockResetArticleRepo) FindByID(_ context.Context, _ int64) (*domain.Article, error) {
 	return nil, nil
 }
-func (m *mockResetArticleRepo) Update(_ context.Context, _ domain.Article) error    { return nil }
-func (m *mockResetArticleRepo) MarkAsRead(_ context.Context, _ []int64) error        { return nil }
+func (m *mockResetArticleRepo) Update(_ context.Context, _ domain.Article) error { return nil }
+func (m *mockResetArticleRepo) MarkAsRead(_ context.Context, _ []int64) error    { return nil }
 func (m *mockResetArticleRepo) DeleteNonBookmarked(_ context.Context) (int64, error) {
 	if m.deleteErr != nil {
 		return 0, m.deleteErr

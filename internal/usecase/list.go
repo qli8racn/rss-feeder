@@ -10,7 +10,7 @@ import (
 type ListMode int
 
 const (
-	ListModeUnread    ListMode = iota
+	ListModeUnread ListMode = iota
 	ListModeAll
 	ListModeBookmarked
 )

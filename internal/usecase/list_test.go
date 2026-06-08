@@ -16,8 +16,10 @@ type mockListArticleRepo struct {
 	markErr    error
 }
 
-func (m *mockListArticleRepo) Save(_ context.Context, _ domain.Article) error        { return nil }
-func (m *mockListArticleRepo) FindAll(_ context.Context) ([]domain.Article, error)   { return m.all, m.findErr }
+func (m *mockListArticleRepo) Save(_ context.Context, _ domain.Article) error { return nil }
+func (m *mockListArticleRepo) FindAll(_ context.Context) ([]domain.Article, error) {
+	return m.all, m.findErr
+}
 func (m *mockListArticleRepo) FindUnread(_ context.Context) ([]domain.Article, error) {
 	return m.unread, m.findErr
 }
@@ -33,9 +35,11 @@ func (m *mockListArticleRepo) MarkAsRead(_ context.Context, ids []int64) error {
 	return m.markErr
 }
 func (m *mockListArticleRepo) DeleteNonBookmarked(_ context.Context) (int64, error) { return 0, nil }
-func (m *mockListArticleRepo) CountNonBookmarked(_ context.Context) (int64, error)                      { return 0, nil }
-func (m *mockListArticleRepo) CountBookmarked(_ context.Context) (int64, error)                         { return 0, nil }
-func (m *mockListArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) { return nil, nil }
+func (m *mockListArticleRepo) CountNonBookmarked(_ context.Context) (int64, error)  { return 0, nil }
+func (m *mockListArticleRepo) CountBookmarked(_ context.Context) (int64, error)     { return 0, nil }
+func (m *mockListArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) {
+	return nil, nil
+}
 
 func TestListUsecase_DefaultMode_ReturnsUnread(t *testing.T) {
 	repo := &mockListArticleRepo{

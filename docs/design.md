@@ -180,43 +180,54 @@ Hook スクリプトは `sqlite3` コマンドを直接呼ばず、**Go バイ�
 
 ## DI 構成（samber/do）
 
-`main.go` に 1 つの `do.Injector` を置き、全レイヤーのプロバイダーを登録する。
-各ハンドラーはコンテナから自分が必要な usecase だけを取り出す。
+`main.go` に 1 つの `do.Injector` を置き、driver 層のプロバイダーを登録する。
+usecase 層は `do.MustInvoke` でリポジトリを取り出して直接構築し、handler に渡す。
 
 ```go
 // cmd/rss-feeder/main.go
 func main() {
     i := do.New()
 
-    // driver 層
-    do.Provide(i, readerdb.NewClient)              // *sql.DB
-    do.Provide(i, readerdb.NewArticleRepository)   // adapter.ArticleRepository
-    do.Provide(i, readerdb.NewFeedRepository)      // adapter.FeedRepository
-    do.Provide(i, readerdb.NewAuditLogRepository)  // adapter.AuditLogRepository
-    do.Provide(i, readerdb.NewDBMaintenance)       // adapter.DBMaintenance
-    do.Provide(i, rss.NewReader)                   // adapter.RSSReader
+    // driver 層をコンテナに登録
+    do.Provide(i, readerdb.NewClient)               // *sql.DB
+    do.Provide(i, dbrepoarticle.NewRepository)      // articlerepo.Repository
+    do.Provide(i, dbrepofeed.NewRepository)         // feedrepo.Repository
+    do.Provide(i, driverrss.NewReader)              // adapterrss.RSSReader
+    do.Provide(i, driverfile.NewFeedsReader)        // adapterfile.FeedsReader
+    do.Provide(i, dbrepoauditlog.NewRepository)     // auditlogrepo.Repository
+    do.Provide(i, dbrepodbmaint.NewMaintainer)      // dbmaintrepo.Maintainer
 
-    // usecase 層（依存は do が自動解決）
-    do.Provide(i, usecase.NewFetchUsecase)
-    do.Provide(i, usecase.NewListUsecase)
-    do.Provide(i, usecase.NewBookmarkUsecase)
-    do.Provide(i, usecase.NewResetUsecase)
-    do.Provide(i, usecase.NewAuditUsecase)
-    do.Provide(i, usecase.NewCheckArticleUsecase)
-    do.Provide(i, usecase.NewCheckBookmarkedUsecase)
-    do.Provide(i, usecase.NewMaintenanceUsecase)
+    // migration
+    db := do.MustInvoke[*sql.DB](i)
+    if err := migration.Run(db); err != nil {
+        log.Fatalf("migration failed: %v", err)
+    }
+
+    // usecase 層を直接構築（依存はコンテナから取り出す）
+    fetchUC := usecase.NewFetchUsecase(
+        do.MustInvoke[articlerepo.Repository](i),
+        do.MustInvoke[feedrepo.Repository](i),
+        do.MustInvoke[adapterrss.RSSReader](i),
+    )
+    listUC           := usecase.NewListUsecase(do.MustInvoke[articlerepo.Repository](i))
+    bookmarkUC       := usecase.NewBookmarkUsecase(do.MustInvoke[articlerepo.Repository](i))
+    resetUC          := usecase.NewResetUsecase(do.MustInvoke[articlerepo.Repository](i))
+    checkArticleUC   := usecase.NewCheckArticleUsecase(do.MustInvoke[articlerepo.Repository](i))
+    checkBookmarkedUC := usecase.NewCheckBookmarkedUsecase(do.MustInvoke[articlerepo.Repository](i))
+    auditUC          := usecase.NewAuditUsecase(do.MustInvoke[auditlogrepo.Repository](i))
+    maintenanceUC    := usecase.NewMaintenanceUsecase(do.MustInvoke[dbmaintrepo.Maintainer](i))
 
     // cobra コマンド組み立て
-    root := &cobra.Command{Use: "rss-feeder"}
+    root := &cobra.Command{Use: "rss-feeder", Short: "RSS フィードを取得・管理する CLI ツール"}
     root.AddCommand(
-        handler.NewFetchCommand(do.MustInvoke[*usecase.FetchUsecase](i)),
-        handler.NewListCommand(do.MustInvoke[*usecase.ListUsecase](i)),
-        handler.NewBookmarkCommand(do.MustInvoke[*usecase.BookmarkUsecase](i)),
-        handler.NewResetCommand(do.MustInvoke[*usecase.ResetUsecase](i)),
-        handler.NewAuditCommand(do.MustInvoke[*usecase.AuditUsecase](i)),
-        handler.NewCheckArticleCommand(do.MustInvoke[*usecase.CheckArticleUsecase](i)),
-        handler.NewCheckBookmarkedCommand(do.MustInvoke[*usecase.CheckBookmarkedUsecase](i)),
-        handler.NewMaintenanceCommand(do.MustInvoke[*usecase.MaintenanceUsecase](i)),
+        handler.NewFetchCommand(do.MustInvoke[adapterfile.FeedsReader](i), fetchUC),
+        handler.NewListCommand(listUC),
+        handler.NewBookmarkCommand(bookmarkUC),
+        handler.NewResetCommand(resetUC),
+        handler.NewCheckArticleCommand(checkArticleUC),
+        handler.NewCheckBookmarkedCommand(checkBookmarkedUC),
+        handler.NewAuditCommand(auditUC),
+        handler.NewMaintenanceCommand(maintenanceUC),
     )
 
     if err := root.Execute(); err != nil {
@@ -225,16 +236,16 @@ func main() {
 }
 ```
 
-### プロバイダーの書き方（例: readerdb.NewArticleRepository）
+### プロバイダーの書き方（例: dbrepoarticle.NewRepository）
 
 `do.Provide` に渡す関数は `(do.Injector, error)` を返す形にする。
-依存は `do.Invoke[T]` で取り出す。
+依存は `do.MustInvoke[T]` で取り出す。
 
 ```go
 // internal/driver/readerdb/article/article.go
-func NewArticleRepository(i do.Injector) (adapter.ArticleRepository, error) {
+func NewRepository(i do.Injector) (articlerepo.Repository, error) {
     db := do.MustInvoke[*sql.DB](i)
-    return &articleRepository{db: db}, nil
+    return &repository{db: db}, nil
 }
 ```
 
@@ -312,19 +323,20 @@ internal/usecase/
 ```go
 // 例: fetch_test.go（モック使用）
 func TestFetchUsecase_SkipsDuplicates(t *testing.T) {
-    repo := &mockArticleRepository{existing: []string{"https://example.com/1"}}
-    reader := &mockRSSReader{articles: []domain.Article{{URL: "https://example.com/1"}}}
-    uc := usecase.NewFetchUsecase(repo, reader)
+    repo := &mockArticleRepo{existing: map[string]bool{"https://example.com/1": true}}
+    uc := NewFetchUsecase(repo, &mockFeedRepo{}, &mockRSSReader{
+        articles: []domain.Article{{URL: "https://example.com/1", Title: "Test"}},
+    })
 
     result, err := uc.Execute(context.Background(), []string{"https://feed.example.com"})
     if err != nil {
         t.Fatalf("unexpected error: %v", err)
     }
-    if result.Saved != 0 {
-        t.Errorf("Saved: got %d, want 0", result.Saved)
+    if result.TotalSaved() != 0 {
+        t.Errorf("Saved: got %d, want 0", result.TotalSaved())
     }
-    if result.Skipped != 1 {
-        t.Errorf("Skipped: got %d, want 1", result.Skipped)
+    if result.TotalSkipped() != 1 {
+        t.Errorf("Skipped: got %d, want 1", result.TotalSkipped())
     }
 }
 ```
@@ -348,21 +360,14 @@ internal/driver/
 
 ```go
 // 例: article_test.go（インメモリ SQLite）
-func TestArticleRepository_Save_SkipsDuplicate(t *testing.T) {
-    db := readerdb.NewInMemoryClient(t)
-    repo := readerdb.NewArticleRepository(db)
+func TestArticleRepository_Save_Duplicate(t *testing.T) {
+    ctx := context.Background()
+    r := newRepo(t)
 
-    article := domain.Article{URL: "https://example.com/1", Title: "Test"}
-    if err := repo.Save(ctx, article); err != nil {
-        t.Fatalf("first save failed: %v", err)
-    }
-    if err := repo.Save(ctx, article); err != nil { // 2回目は重複→エラーなしでスキップ
-        t.Fatalf("second save (duplicate) failed: %v", err)
-    }
-
-    count, _ := repo.Count(ctx)
-    if count != 1 {
-        t.Errorf("Count: got %d, want 1", count)
+    r.Save(ctx, makeArticle("https://example.com/1"))
+    err := r.Save(ctx, makeArticle("https://example.com/1"))
+    if !errors.Is(err, articlerepo.ErrDuplicate) {
+        t.Errorf("expected ErrDuplicate, got %v", err)
     }
 }
 ```

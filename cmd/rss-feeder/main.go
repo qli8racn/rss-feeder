@@ -15,7 +15,6 @@ import (
 	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/adapter/handler"
-	"github.com/qli8racn/rss-feeder/internal/migration"
 	driverfile "github.com/qli8racn/rss-feeder/internal/driver/file"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
@@ -23,6 +22,7 @@ import (
 	dbrepodbmaint "github.com/qli8racn/rss-feeder/internal/driver/readerdb/dbmaintenance"
 	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
 	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
+	"github.com/qli8racn/rss-feeder/internal/migration"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
 
