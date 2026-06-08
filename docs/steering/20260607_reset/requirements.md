@@ -8,5 +8,5 @@
 
 - `bookmarked = 0` の記事のみを削除する
 - 実行前に削除件数を表示し、確認を求める（`-y` フラグで確認をスキップ可能）
-- Claude Code が `rss-feeder reset` を Bash ツールで実行する前、**PreToolUse Hook** が Go バイナリ経由でお気に入り記事が削除対象に含まれないことを保証する
+- Claude Code が `rss-feeder reset` を Bash ツールで実行する前、**PreToolUse Hook** が Go バイナリ経由でお気に入り記事の件数を表示する（情報提供のみ・実行はブロックしない）
 - 削除後に残件数を表示する

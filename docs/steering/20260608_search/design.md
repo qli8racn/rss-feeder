@@ -40,5 +40,5 @@ ID   タイトル                          公開日時              既読  お
 |---------|------|
 | `internal/usecase/search.go` | 検索ロジック |
 | `internal/adapter/handler/search.go` | cobra コマンド |
-| `internal/adapter/repository/article/article.go` | Search() メソッド追加 |
+| `internal/adapter/driver/readerdb/article/article.go` | Search() メソッド追加 |
 | `cmd/rss-feeder/main.go` | search コマンド登録 |

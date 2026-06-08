@@ -9,7 +9,7 @@
 
 ## テスト
 
-- [x] ユニットテスト作成（`internal/driver/file/feeds_reader_test.go`）
+- [ ] ユニットテスト作成（`internal/driver/file/feeds_reader_test.go`）
   - 正常系: 複数 URL の読み込み
   - コメント行・空行のスキップ確認
   - 0件時の挙動確認

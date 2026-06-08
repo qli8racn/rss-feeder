@@ -3,7 +3,7 @@
 ## 実装タスク
 
 - [ ] ArticleRepository に `Search(keyword string, bookmarkedOnly bool) ([]Article, error)` 追加
-  - `internal/adapter/repository/article/article.go`（interface）
+  - `internal/adapter/driver/readerdb/article/article.go`（interface）
   - `internal/driver/readerdb/article/article.go`（SQL 実装）
 - [ ] search usecase 実装（`internal/usecase/search.go`）
 - [ ] search handler 実装（`internal/adapter/handler/search.go`）
