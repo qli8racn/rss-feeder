@@ -20,4 +20,5 @@ type Repository interface {
 	DeleteNonBookmarked(ctx context.Context) (int64, error)
 	CountNonBookmarked(ctx context.Context) (int64, error)
 	CountBookmarked(ctx context.Context) (int64, error)
+	FetchLatest(ctx context.Context, limit int, feedURL string) ([]domain.Article, error)
 }

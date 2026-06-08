@@ -33,8 +33,9 @@ func (m *mockListArticleRepo) MarkAsRead(_ context.Context, ids []int64) error {
 	return m.markErr
 }
 func (m *mockListArticleRepo) DeleteNonBookmarked(_ context.Context) (int64, error) { return 0, nil }
-func (m *mockListArticleRepo) CountNonBookmarked(_ context.Context) (int64, error)  { return 0, nil }
-func (m *mockListArticleRepo) CountBookmarked(_ context.Context) (int64, error)     { return 0, nil }
+func (m *mockListArticleRepo) CountNonBookmarked(_ context.Context) (int64, error)                      { return 0, nil }
+func (m *mockListArticleRepo) CountBookmarked(_ context.Context) (int64, error)                         { return 0, nil }
+func (m *mockListArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) { return nil, nil }
 
 func TestListUsecase_DefaultMode_ReturnsUnread(t *testing.T) {
 	repo := &mockListArticleRepo{

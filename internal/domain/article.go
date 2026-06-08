@@ -12,6 +12,7 @@ type Article struct {
 	Read        bool
 	Bookmarked  bool
 	FetchedAt   time.Time
+	FeedURL     string
 }
 
 func (a *Article) ToggleBookmark() {

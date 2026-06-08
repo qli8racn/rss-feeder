@@ -48,8 +48,36 @@ func (r *repository) FindUnread(ctx context.Context) ([]domain.Article, error) {
 }
 
 func (r *repository) FindBookmarked(ctx context.Context) ([]domain.Article, error) {
-	return r.query(ctx, `SELECT id, feed_id, url, title, content, published_at, read, bookmarked, fetched_at
-		FROM articles WHERE bookmarked = 1 ORDER BY published_at DESC`)
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT a.id, a.feed_id, a.url, a.title, a.content, a.published_at, a.read, a.bookmarked, a.fetched_at,
+		       COALESCE(f.feed_url, '')
+		FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id
+		WHERE a.bookmarked = 1 ORDER BY a.published_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanArticlesWithFeed(rows)
+}
+
+func (r *repository) FetchLatest(ctx context.Context, limit int, feedURL string) ([]domain.Article, error) {
+	q := `SELECT a.id, a.feed_id, a.url, a.title, a.content, a.published_at, a.read, a.bookmarked, a.fetched_at,
+	             COALESCE(f.feed_url, '')
+	      FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id`
+	args := []any{}
+	if feedURL != "" {
+		q += " WHERE f.feed_url = ?"
+		args = append(args, feedURL)
+	}
+	q += " ORDER BY a.published_at DESC LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanArticlesWithFeed(rows)
 }
 
 func (r *repository) FindByID(ctx context.Context, id int64) (*domain.Article, error) {
@@ -128,11 +156,40 @@ func (r *repository) query(ctx context.Context, q string) ([]domain.Article, err
 	return articles, rows.Err()
 }
 
+func scanArticlesWithFeed(rows *sql.Rows) ([]domain.Article, error) {
+	var articles []domain.Article
+	for rows.Next() {
+		a, err := scanArticleWithFeed(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		articles = append(articles, *a)
+	}
+	return articles, rows.Err()
+}
+
 func scanArticle(scan func(dest ...any) error) (*domain.Article, error) {
 	var a domain.Article
 	var publishedAt, fetchedAt sql.NullTime
 	err := scan(&a.ID, &a.FeedID, &a.URL, &a.Title, &a.Content,
 		&publishedAt, &a.Read, &a.Bookmarked, &fetchedAt)
+	if err != nil {
+		return nil, err
+	}
+	if publishedAt.Valid {
+		a.PublishedAt = publishedAt.Time
+	}
+	if fetchedAt.Valid {
+		a.FetchedAt = fetchedAt.Time
+	}
+	return &a, nil
+}
+
+func scanArticleWithFeed(scan func(dest ...any) error) (*domain.Article, error) {
+	var a domain.Article
+	var publishedAt, fetchedAt sql.NullTime
+	err := scan(&a.ID, &a.FeedID, &a.URL, &a.Title, &a.Content,
+		&publishedAt, &a.Read, &a.Bookmarked, &fetchedAt, &a.FeedURL)
 	if err != nil {
 		return nil, err
 	}

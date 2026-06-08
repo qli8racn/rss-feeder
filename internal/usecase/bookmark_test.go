@@ -45,6 +45,9 @@ func (m *mockBookmarkArticleRepo) CountNonBookmarked(_ context.Context) (int64, 
 func (m *mockBookmarkArticleRepo) CountBookmarked(_ context.Context) (int64, error) {
 	return 0, nil
 }
+func (m *mockBookmarkArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) {
+	return nil, nil
+}
 
 func TestBookmarkUsecase_Toggle_FalseToTrue(t *testing.T) {
 	repo := &mockBookmarkArticleRepo{

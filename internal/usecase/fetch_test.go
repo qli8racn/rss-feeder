@@ -28,8 +28,9 @@ func (m *mockArticleRepo) FindByID(_ context.Context, _ int64) (*domain.Article,
 func (m *mockArticleRepo) Update(_ context.Context, _ domain.Article) error              { return nil }
 func (m *mockArticleRepo) MarkAsRead(_ context.Context, _ []int64) error                 { return nil }
 func (m *mockArticleRepo) DeleteNonBookmarked(_ context.Context) (int64, error)          { return 0, nil }
-func (m *mockArticleRepo) CountNonBookmarked(_ context.Context) (int64, error)           { return 0, nil }
-func (m *mockArticleRepo) CountBookmarked(_ context.Context) (int64, error)              { return 0, nil }
+func (m *mockArticleRepo) CountNonBookmarked(_ context.Context) (int64, error)                      { return 0, nil }
+func (m *mockArticleRepo) CountBookmarked(_ context.Context) (int64, error)                         { return 0, nil }
+func (m *mockArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) { return nil, nil }
 
 type mockFeedRepo struct{}
 
