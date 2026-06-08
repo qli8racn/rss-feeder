@@ -31,7 +31,10 @@ DB 初期化は初回起動時に自動実行される。
 ### rss-feeder
 
 ```bash
-bin/rss-feeder fetch
+bin/rss-feeder add-feed <url>             # RSS フィードを DB に登録
+bin/rss-feeder list-feeds                 # 登録済みフィード一覧
+bin/rss-feeder remove-feed <id>           # フィードを削除（記事も連動削除）
+bin/rss-feeder fetch                      # 登録済みフィードを取得して DB に保存
 bin/rss-feeder list [--all | --bookmarked]
 bin/rss-feeder bookmark <id>
 bin/rss-feeder reset [-y]

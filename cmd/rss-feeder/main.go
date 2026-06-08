@@ -8,14 +8,12 @@ import (
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
 
-	adapterfile "github.com/qli8racn/rss-feeder/internal/adapter/driver/file"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	auditlogrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/auditlog"
 	dbmaintrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/dbmaintenance"
 	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/adapter/handler"
-	driverfile "github.com/qli8racn/rss-feeder/internal/driver/file"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerdb/auditlog"
@@ -33,7 +31,6 @@ func main() {
 	do.Provide(i, dbrepoarticle.NewRepository)
 	do.Provide(i, dbrepofeed.NewRepository)
 	do.Provide(i, driverrss.NewReader)
-	do.Provide(i, driverfile.NewFeedsReader)
 	do.Provide(i, dbrepoauditlog.NewRepository)
 	do.Provide(i, dbrepodbmaint.NewMaintainer)
 
@@ -71,6 +68,15 @@ func main() {
 	searchUC := usecase.NewSearchUsecase(
 		do.MustInvoke[articlerepo.Repository](i),
 	)
+	addFeedUC := usecase.NewAddFeedUsecase(
+		do.MustInvoke[feedrepo.Repository](i),
+	)
+	listFeedsUC := usecase.NewListFeedsUsecase(
+		do.MustInvoke[feedrepo.Repository](i),
+	)
+	removeFeedUC := usecase.NewRemoveFeedUsecase(
+		do.MustInvoke[feedrepo.Repository](i),
+	)
 
 	root := &cobra.Command{
 		Use:   "rss-feeder",
@@ -78,10 +84,7 @@ func main() {
 	}
 
 	root.AddCommand(
-		handler.NewFetchCommand(
-			do.MustInvoke[adapterfile.FeedsReader](i),
-			fetchUC,
-		),
+		handler.NewFetchCommand(listFeedsUC, fetchUC),
 		handler.NewListCommand(listUC),
 		handler.NewBookmarkCommand(bookmarkUC),
 		handler.NewResetCommand(resetUC),
@@ -90,6 +93,9 @@ func main() {
 		handler.NewAuditCommand(auditUC),
 		handler.NewMaintenanceCommand(maintenanceUC),
 		handler.NewSearchCommand(searchUC),
+		handler.NewAddFeedCommand(addFeedUC),
+		handler.NewListFeedsCommand(listFeedsUC),
+		handler.NewRemoveFeedCommand(removeFeedUC),
 	)
 
 	if err := root.Execute(); err != nil {

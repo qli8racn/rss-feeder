@@ -6,25 +6,29 @@ import (
 
 	"github.com/spf13/cobra"
 
-	adapterfile "github.com/qli8racn/rss-feeder/internal/adapter/driver/file"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
 
-func NewFetchCommand(feedsReader adapterfile.FeedsReader, uc *usecase.FetchUsecase) *cobra.Command {
+func NewFetchCommand(listFeedsUC *usecase.ListFeedsUsecase, fetchUC *usecase.FetchUsecase) *cobra.Command {
 	return &cobra.Command{
 		Use:   "fetch",
-		Short: "feeds.txt からフィードを取得して DB に保存する",
+		Short: "登録済みフィードを取得して DB に保存する",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			urls, err := feedsReader.Load()
+			feeds, err := listFeedsUC.Execute(cmd.Context())
 			if err != nil {
-				return fmt.Errorf("feeds.txt の読み込みに失敗: %w", err)
+				return fmt.Errorf("フィード一覧の取得に失敗: %w", err)
 			}
-			if len(urls) == 0 {
-				fmt.Fprintln(os.Stderr, "警告: feeds.txt に有効な URL が見つかりませんでした")
+			if len(feeds) == 0 {
+				fmt.Fprintln(os.Stderr, msgNoFeeds)
 				return nil
 			}
 
-			result, err := uc.Execute(cmd.Context(), urls)
+			urls := make([]string, len(feeds))
+			for i, f := range feeds {
+				urls[i] = f.FeedURL
+			}
+
+			result, err := fetchUC.Execute(cmd.Context(), urls)
 
 			for i, fr := range result.Feeds {
 				fmt.Printf("[%d/%d] %s\n", i+1, len(urls), urls[i])

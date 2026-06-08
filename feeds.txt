@@ -1,3 +1,0 @@
-# RSS フィード URL リスト（1行1URL、# はコメント、空行はスキップ）
-http://qiita.com/popular-items/feed
-https://zenn.dev/feed

@@ -41,10 +41,32 @@ func (m *mockArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.
 	return nil, nil
 }
 
-type mockFeedRepo struct{}
+type mockFeedRepo struct {
+	registerFn func(ctx context.Context, url string) error
+	listAllFn  func(ctx context.Context) ([]domain.Feed, error)
+	removeFn   func(ctx context.Context, id int64) error
+}
 
 func (m *mockFeedRepo) Save(_ context.Context, _ domain.Feed) (int64, error)        { return 1, nil }
 func (m *mockFeedRepo) FindByURL(_ context.Context, _ string) (*domain.Feed, error) { return nil, nil }
+func (m *mockFeedRepo) Register(ctx context.Context, url string) error {
+	if m.registerFn != nil {
+		return m.registerFn(ctx, url)
+	}
+	return nil
+}
+func (m *mockFeedRepo) ListAll(ctx context.Context) ([]domain.Feed, error) {
+	if m.listAllFn != nil {
+		return m.listAllFn(ctx)
+	}
+	return nil, nil
+}
+func (m *mockFeedRepo) Remove(ctx context.Context, id int64) error {
+	if m.removeFn != nil {
+		return m.removeFn(ctx, id)
+	}
+	return nil
+}
 
 type mockRSSReader struct {
 	articles []domain.Article
