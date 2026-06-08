@@ -4,7 +4,7 @@ Go 製 RSS リーダー CLI。Claude Code のエージェント・Hooks・SQLite
 
 ## 概要
 
-`feeds.txt` に登録した RSS フィードから記事を取得・保存し、一覧表示・検索・ブックマーク管理を行う CLI ツール。
+DB に登録した RSS フィードから記事を取得・保存し、一覧表示・検索・ブックマーク管理を行う CLI ツール。
 AI エージェント機能（`rss-agent`）で記事要約や読書傾向の分析も可能。
 
 ## 要件
@@ -25,12 +25,11 @@ DB（`reader.db`）は初回起動時に自動作成される。
 
 ## RSS フィードの登録
 
-`feeds.txt` に RSS フィード URL を 1 行 1 URL で記述する。`#` 始まりの行と空行はスキップされる。
+`add-feed` コマンドでフィード URL を DB に登録する。
 
-```
-# テックブログ
-https://example.com/feed.xml
-https://another.example.com/rss
+```bash
+bin/rss-feeder add-feed https://example.com/feed.xml
+bin/rss-feeder add-feed https://another.example.com/rss
 ```
 
 ## コマンド
@@ -39,7 +38,10 @@ https://another.example.com/rss
 
 | コマンド | 説明 |
 |---------|------|
-| `bin/rss-feeder fetch` | `feeds.txt` を読み込み、記事を取得して DB に保存 |
+| `bin/rss-feeder add-feed <url>` | RSS フィード URL を DB に登録 |
+| `bin/rss-feeder list-feeds` | 登録済みフィードの一覧を表示 |
+| `bin/rss-feeder remove-feed <id>` | フィードを削除（関連記事も連動削除） |
+| `bin/rss-feeder fetch` | 登録済みフィードを取得して DB に保存 |
 | `bin/rss-feeder list` | 未読記事の一覧を表示 |
 | `bin/rss-feeder list --all` | すべての記事を表示 |
 | `bin/rss-feeder list --bookmarked` | ブックマーク済み記事を表示 |

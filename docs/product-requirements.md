@@ -35,13 +35,14 @@ Claude Code のエージェント・Hooks・SQLite の連携を段階的な機�
 
 | フェーズ | 概要 | ディレクトリ |
 |---------|------|-------------|
-| 1 | RSS リンクの読み込み | [20260607_feed_loading](steering/20260607_feed_loading/) |
+| 1 | RSS リンクの読み込み（`feeds.txt` ベース、フェーズ 8 で SQLite 移行済み） | [20260607_feed_loading](steering/20260607_feed_loading/) |
 | 2 | 記事の取得と標準出力 | [20260607_article_fetch](steering/20260607_article_fetch/) |
 | 3 | 記事の SQLite 保存 | [20260607_sqlite_save](steering/20260607_sqlite_save/) |
 | 4 | 取得済み記事の一覧表示 | [20260607_article_list](steering/20260607_article_list/) |
 | 5 | お気に入り登録 | [20260607_bookmark](steering/20260607_bookmark/) |
 | 6 | 記事のリセット | [20260607_reset](steering/20260607_reset/) |
 | 7 | 記事の検索 | [20260608_search](steering/20260608_search/) |
+| 8 | フィード管理の SQLite 移行（add-feed / list-feeds / remove-feed） | [20260608_feed_management](steering/20260608_feed_management/) |
 
 ---
 

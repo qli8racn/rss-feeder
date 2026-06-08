@@ -10,7 +10,10 @@ rss-feeder <command> [flags]
 
 | コマンド | 概要 | フェーズ |
 |--------|------|---------|
-| `fetch` | feeds.txt を読み込み、記事を取得して DB に保存 | 1・2・3 |
+| `add-feed <url>` | RSS フィード URL を DB に登録 | 8 |
+| `list-feeds` | 登録済みフィード一覧を表示 | 8 |
+| `remove-feed <id>` | フィードを削除（関連記事も連動削除） | 8 |
+| `fetch` | 登録済みフィードを DB から読み込み、記事を取得して DB に保存 | 2・3 |
 | `list` | DB 保存済みの記事を一覧表示 | 4 |
 | `bookmark <id>` | 記事のお気に入りをトグル（登録/解除） | 5 |
 | `reset` | お気に入り以外の記事を削除 | 6 |
@@ -79,14 +82,15 @@ rss-feeder/
 │   │   ├── bookmark.go                          # お気に入りトグルロジック
 │   │   ├── reset.go                             # 非お気に入り記事削除ロジック
 │   │   ├── search.go                            # キーワード全文検索ロジック
+│   │   ├── add_feed.go                          # フィード登録ロジック
+│   │   ├── list_feeds.go                        # フィード一覧取得ロジック
+│   │   ├── remove_feed.go                       # フィード削除ロジック
 │   │   ├── audit.go                             # audit_log 記録ロジック
 │   │   ├── check_article.go                     # 記事 ID 存在確認ロジック
 │   │   ├── check_bookmarked.go                  # お気に入り件数確認ロジック
 │   │   └── maintenance.go                       # DB VACUUM・整合性チェック
 │   ├── adapter/
 │   │   ├── driver/
-│   │   │   ├── file/
-│   │   │   │   └── feeds_reader.go              # FeedsReader interface
 │   │   │   ├── readerdb/
 │   │   │   │   ├── article/
 │   │   │   │   │   └── article.go              # ArticleRepository interface
@@ -95,15 +99,18 @@ rss-feeder/
 │   │   │   │   ├── dbmaintenance/
 │   │   │   │   │   └── dbmaintenance.go        # DBMaintenance interface
 │   │   │   │   └── feed/
-│   │   │   │       └── feed.go                 # FeedRepository interface
+│   │   │   │       └── feed.go                 # FeedRepository interface（ErrAlreadyExists・ErrNotFound 定義）
 │   │   │   └── rss/
 │   │   │       └── rss_reader.go               # RSSReader interface
 │   │   └── handler/
-│   │       ├── fetch.go                         # cobra コマンド → FetchUsecase 呼び出し
+│   │       ├── fetch.go                         # cobra コマンド → ListFeedsUsecase + FetchUsecase 呼び出し
 │   │       ├── list.go
 │   │       ├── bookmark.go
 │   │       ├── reset.go
 │   │       ├── search.go                        # search サブコマンド（--bookmarked フラグ）
+│   │       ├── add_feed.go                      # add-feed サブコマンド
+│   │       ├── list_feeds.go                    # list-feeds サブコマンド（msgNoFeeds 定数定義）
+│   │       ├── remove_feed.go                   # remove-feed サブコマンド
 │   │       ├── table.go                         # 記事一覧テーブル描画ヘルパー（printArticleTable）
 │   │       ├── audit.go                         # audit サブコマンド（Hook 経由で呼び出し）
 │   │       ├── check_article.go                 # check-article サブコマンド（Hook 経由で呼び出し）
@@ -120,15 +127,12 @@ rss-feeder/
 │       │   │   └── dbmaintenance.go            # DBMaintenance 実装（VACUUM・整合性チェック）
 │       │   └── feed/
 │       │       └── feed.go                     # FeedRepository 実装
-│       ├── file/
-│       │   └── feeds_reader.go                 # FeedsReader 実装（feeds.txt 読み込み）
 │       ├── rss/
 │       │   └── reader.go                       # RSSReader 実装（gofeed による HTTP Fetch）
 │       └── anthropic/                           # Claude API 連携（エージェント機能）
 │           ├── loop.go                          # エージェントループ
 │           ├── preference.go                    # 嗜好・設定管理
 │           └── summarize.go                    # 記事要約
-├── feeds.txt                                    # RSS フィード URL リスト（1行1URL、# コメント・空行スキップ）
 ├── reader.db                                    # SQLite データベース（gitignore）
 ├── go.mod
 └── go.sum
@@ -224,7 +228,6 @@ func main() {
     do.Provide(i, dbrepoarticle.NewRepository)      // articlerepo.Repository
     do.Provide(i, dbrepofeed.NewRepository)         // feedrepo.Repository
     do.Provide(i, driverrss.NewReader)              // adapterrss.RSSReader
-    do.Provide(i, driverfile.NewFeedsReader)        // adapterfile.FeedsReader
     do.Provide(i, dbrepoauditlog.NewRepository)     // auditlogrepo.Repository
     do.Provide(i, dbrepodbmaint.NewMaintainer)      // dbmaintrepo.Maintainer
 
@@ -235,7 +238,7 @@ func main() {
     }
 
     // usecase 層を直接構築（依存はコンテナから取り出す）
-    fetchUC := usecase.NewFetchUsecase(
+    fetchUC           := usecase.NewFetchUsecase(
         do.MustInvoke[articlerepo.Repository](i),
         do.MustInvoke[feedrepo.Repository](i),
         do.MustInvoke[adapterrss.RSSReader](i),
@@ -248,11 +251,14 @@ func main() {
     checkBookmarkedUC := usecase.NewCheckBookmarkedUsecase(do.MustInvoke[articlerepo.Repository](i))
     auditUC           := usecase.NewAuditUsecase(do.MustInvoke[auditlogrepo.Repository](i))
     maintenanceUC     := usecase.NewMaintenanceUsecase(do.MustInvoke[dbmaintrepo.Maintainer](i))
+    addFeedUC         := usecase.NewAddFeedUsecase(do.MustInvoke[feedrepo.Repository](i))
+    listFeedsUC       := usecase.NewListFeedsUsecase(do.MustInvoke[feedrepo.Repository](i))
+    removeFeedUC      := usecase.NewRemoveFeedUsecase(do.MustInvoke[feedrepo.Repository](i))
 
     // cobra コマンド組み立て
     root := &cobra.Command{Use: "rss-feeder", Short: "RSS フィードを取得・管理する CLI ツール"}
     root.AddCommand(
-        handler.NewFetchCommand(do.MustInvoke[adapterfile.FeedsReader](i), fetchUC),
+        handler.NewFetchCommand(listFeedsUC, fetchUC),
         handler.NewListCommand(listUC),
         handler.NewBookmarkCommand(bookmarkUC),
         handler.NewResetCommand(resetUC),
@@ -261,6 +267,9 @@ func main() {
         handler.NewCheckBookmarkedCommand(checkBookmarkedUC),
         handler.NewAuditCommand(auditUC),
         handler.NewMaintenanceCommand(maintenanceUC),
+        handler.NewAddFeedCommand(addFeedUC),
+        handler.NewListFeedsCommand(listFeedsUC),
+        handler.NewRemoveFeedCommand(removeFeedUC),
     )
 
     if err := root.Execute(); err != nil {
@@ -297,7 +306,8 @@ Claude Code が Bash ツールで "rss-feeder fetch" を実行
   │
   ├─ rss-feeder fetch（Go バイナリ実行）
   │    └─ adapter/handler/fetch.go
-  │         └─ usecase/fetch.go     # feeds.txt 読み込み・重複チェック・保存指示
+  │         ├─ usecase/list_feeds.go  # DB からフィード URL 取得
+  │         └─ usecase/fetch.go       # 重複チェック・保存指示
   │              ├─ driver/rss/reader.go               # HTTP GET → gofeed パース
   │              └─ driver/readerdb/article/article.go # INSERT OR IGNORE
   │
