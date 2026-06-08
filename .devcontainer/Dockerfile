@@ -6,4 +6,5 @@ RUN rm -rf /etc/apt/sources.list.d/* && \
     curl \
     gcc \
     libsqlite3-dev \
+    sqlite3 \
     && rm -rf /var/lib/apt/lists/*
