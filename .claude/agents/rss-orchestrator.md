@@ -13,23 +13,28 @@ model: opus
 
 ## 手順
 
-1. RSSフィードを取得する
+1. バイナリが存在するか確認し、なければビルドする
+   ```bash
+   test -f bin/rss-feeder || go build -o bin/rss-feeder ./cmd/rss-feeder
+   test -f bin/rss-agent  || go build -o bin/rss-agent  ./cmd/agent
+   ```
+
+2. RSSフィードを取得する
    ```bash
    bin/rss-feeder fetch
    ```
 
-2. 取得結果を確認する
+3. 取得結果を確認する
    ```bash
    bin/rss-feeder list
    ```
 
-3. 要約を実行する
+4. 要約を実行する
    - 最新記事の要約: `bin/rss-agent summarize`
    - 特定フィードの要約: `bin/rss-agent summarize --feed <url>`
 
-4. 要約結果をユーザーに報告する
+5. 要約結果をユーザーに報告する
 
 ## 注意
 
-- コマンドが存在しない場合は `go build -o bin/rss-feeder ./cmd/rss-feeder` でビルドを促す
 - エラーが発生した場合はエラー内容をそのまま報告する
