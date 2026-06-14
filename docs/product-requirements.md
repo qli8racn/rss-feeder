@@ -43,6 +43,7 @@ Claude Code のエージェント・Hooks・SQLite の連携を段階的な機�
 | 6 | 記事のリセット | [20260607_reset](steering/20260607_reset/) |
 | 7 | 記事の検索 | [20260608_search](steering/20260608_search/) |
 | 8 | フィード管理の SQLite 移行（add-feed / list-feeds / remove-feed） | [20260608_feed_management](steering/20260608_feed_management/) |
+| 9 | Web ブラウザでの記事閲覧（JSON API + 静的フロントエンド配信） | [20260614_web_view](steering/20260614_web_view/) |
 
 ---
 
@@ -61,10 +62,10 @@ Claude Code のエージェント・Hooks・SQLite の連携を段階的な機�
 
 ## スコープ外
 
-- Web UI・API サーバー
 - プッシュ通知・定期自動取得（cron 等）
 - 複数ユーザーの管理
 - RSS 以外のフォーマット（JSON Feed 等）
+- 認証・認可（Web ビューはローカル利用のみを想定）
 
 ---
 
