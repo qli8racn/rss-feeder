@@ -6,6 +6,8 @@ toolchain go1.24.2
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.48.0
+	github.com/go-chi/chi/v5 v5.3.0
+	github.com/go-chi/cors v1.2.2
 	github.com/mattn/go-sqlite3 v1.14.45
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/samber/do/v2 v2.0.0
@@ -17,8 +19,6 @@ require (
 	github.com/andybalholm/cascadia v1.3.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
-	github.com/go-chi/chi/v5 v5.3.0 // indirect
-	github.com/go-chi/cors v1.2.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
