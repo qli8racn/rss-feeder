@@ -26,6 +26,9 @@ DB 初期化は初回起動時に自動実行される。
 >
 > **必須:** `internal/driver/anthropic` を使用するビルド・テスト（`rss-agent` 関連）では、必ず上記の環境変数と `-p 1` オプションを指定すること。
 > `go build ./...` のような全パッケージ一括ビルドは禁止。対象パッケージを明示すること。
+>
+> 同様に `go test ./...` も `internal/driver/anthropic` を含む場合 OOM するため、
+> `go test $(go list ./... | grep -v internal/driver/anthropic)` のように除外して実行すること。
 
 ---
 
