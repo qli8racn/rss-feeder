@@ -48,6 +48,12 @@ func (m *mockBookmarkArticleRepo) CountBookmarked(_ context.Context) (int64, err
 func (m *mockBookmarkArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) {
 	return nil, nil
 }
+func (m *mockBookmarkArticleRepo) UpdateEnrichment(_ context.Context, _ int64, _, _ string) error {
+	return nil
+}
+func (m *mockBookmarkArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {
+	return nil, nil
+}
 func (m *mockBookmarkArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.Article, error) {
 	return nil, nil
 }

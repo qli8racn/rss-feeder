@@ -1,6 +1,9 @@
 package migration
 
-import "database/sql"
+import (
+	"database/sql"
+	"strings"
+)
 
 func Run(db *sql.DB) error {
 	_, err := db.Exec(`
@@ -21,6 +24,10 @@ func Run(db *sql.DB) error {
 			read         BOOLEAN DEFAULT 0,
 			bookmarked   BOOLEAN DEFAULT 0,
 			fetched_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+			publisher     TEXT,
+			thumbnail_url TEXT,
+			summary       TEXT,
+			category      TEXT,
 			FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
 		);
 		CREATE TABLE IF NOT EXISTS audit_log (
@@ -33,5 +40,26 @@ func Run(db *sql.DB) error {
 			FOREIGN KEY(article_id) REFERENCES articles(id)
 		);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	return addArticleColumns(db)
+}
+
+// addArticleColumns は既存DBに対して articles テーブルへ新規カラムを追加する。
+// SQLite は ADD COLUMN IF NOT EXISTS をサポートしないため、
+// 既にカラムが存在する場合のエラー（duplicate column name）は無視する。
+func addArticleColumns(db *sql.DB) error {
+	columns := []string{
+		"ALTER TABLE articles ADD COLUMN publisher TEXT",
+		"ALTER TABLE articles ADD COLUMN thumbnail_url TEXT",
+		"ALTER TABLE articles ADD COLUMN summary TEXT",
+		"ALTER TABLE articles ADD COLUMN category TEXT",
+	}
+	for _, stmt := range columns {
+		if _, err := db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			return err
+		}
+	}
+	return nil
 }

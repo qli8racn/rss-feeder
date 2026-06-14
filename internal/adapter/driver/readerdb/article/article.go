@@ -22,4 +22,6 @@ type Repository interface {
 	CountBookmarked(ctx context.Context) (int64, error)
 	FetchLatest(ctx context.Context, limit int, feedURL string) ([]domain.Article, error)
 	Search(ctx context.Context, keyword string, bookmarkedOnly bool) ([]domain.Article, error)
+	UpdateEnrichment(ctx context.Context, id int64, summary, category string) error
+	FindWithoutSummary(ctx context.Context, limit int) ([]domain.Article, error)
 }

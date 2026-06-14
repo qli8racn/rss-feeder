@@ -21,9 +21,9 @@ func NewRepository(i do.Injector) (articlerepo.Repository, error) {
 
 func (r *repository) Save(ctx context.Context, a domain.Article) error {
 	res, err := r.db.ExecContext(ctx, `
-		INSERT OR IGNORE INTO articles (feed_id, url, title, content, published_at, fetched_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, a.FeedID, a.URL, a.Title, a.Content, a.PublishedAt, time.Now())
+		INSERT OR IGNORE INTO articles (feed_id, url, title, content, published_at, fetched_at, publisher, thumbnail_url)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, a.FeedID, a.URL, a.Title, a.Content, a.PublishedAt, time.Now(), a.Publisher, a.ThumbnailURL)
 	if err != nil {
 		return err
 	}
@@ -38,18 +38,21 @@ func (r *repository) Save(ctx context.Context, a domain.Article) error {
 }
 
 func (r *repository) FindAll(ctx context.Context) ([]domain.Article, error) {
-	return r.query(ctx, `SELECT id, feed_id, url, title, content, published_at, read, bookmarked, fetched_at
+	return r.query(ctx, `SELECT id, feed_id, url, title, content, published_at, read, bookmarked, fetched_at,
+		publisher, thumbnail_url, summary, category
 		FROM articles ORDER BY published_at DESC`)
 }
 
 func (r *repository) FindUnread(ctx context.Context) ([]domain.Article, error) {
-	return r.query(ctx, `SELECT id, feed_id, url, title, content, published_at, read, bookmarked, fetched_at
+	return r.query(ctx, `SELECT id, feed_id, url, title, content, published_at, read, bookmarked, fetched_at,
+		publisher, thumbnail_url, summary, category
 		FROM articles WHERE read = 0 ORDER BY published_at DESC`)
 }
 
 func (r *repository) FindBookmarked(ctx context.Context) ([]domain.Article, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT a.id, a.feed_id, a.url, a.title, a.content, a.published_at, a.read, a.bookmarked, a.fetched_at,
+		       a.publisher, a.thumbnail_url, a.summary, a.category,
 		       COALESCE(f.feed_url, '')
 		FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id
 		WHERE a.bookmarked = 1 ORDER BY a.published_at DESC`)
@@ -62,6 +65,7 @@ func (r *repository) FindBookmarked(ctx context.Context) ([]domain.Article, erro
 
 func (r *repository) FetchLatest(ctx context.Context, limit int, feedURL string) ([]domain.Article, error) {
 	q := `SELECT a.id, a.feed_id, a.url, a.title, a.content, a.published_at, a.read, a.bookmarked, a.fetched_at,
+	             a.publisher, a.thumbnail_url, a.summary, a.category,
 	             COALESCE(f.feed_url, '')
 	      FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id`
 	args := []any{}
@@ -82,7 +86,8 @@ func (r *repository) FetchLatest(ctx context.Context, limit int, feedURL string)
 
 func (r *repository) FindByID(ctx context.Context, id int64) (*domain.Article, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, feed_id, url, title, content, published_at, read, bookmarked, fetched_at
+		SELECT id, feed_id, url, title, content, published_at, read, bookmarked, fetched_at,
+		       publisher, thumbnail_url, summary, category
 		FROM articles WHERE id = ?
 	`, id)
 	a, err := scanArticle(row.Scan)
@@ -133,7 +138,8 @@ func (r *repository) CountNonBookmarked(ctx context.Context) (int64, error) {
 }
 
 func (r *repository) Search(ctx context.Context, keyword string, bookmarkedOnly bool) ([]domain.Article, error) {
-	q := `SELECT id, feed_id, url, title, content, published_at, read, bookmarked, fetched_at
+	q := `SELECT id, feed_id, url, title, content, published_at, read, bookmarked, fetched_at,
+		publisher, thumbnail_url, summary, category
 		FROM articles WHERE (title LIKE ? OR content LIKE ?)`
 	like := "%" + keyword + "%"
 	args := []any{like, like}
@@ -142,6 +148,20 @@ func (r *repository) Search(ctx context.Context, keyword string, bookmarkedOnly 
 	}
 	q += " ORDER BY published_at DESC"
 	return r.queryArgs(ctx, q, args...)
+}
+
+func (r *repository) UpdateEnrichment(ctx context.Context, id int64, summary, category string) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE articles SET summary = ?, category = ? WHERE id = ?
+	`, summary, category, id)
+	return err
+}
+
+func (r *repository) FindWithoutSummary(ctx context.Context, limit int) ([]domain.Article, error) {
+	return r.queryArgs(ctx, `SELECT id, feed_id, url, title, content, published_at, read, bookmarked, fetched_at,
+		publisher, thumbnail_url, summary, category
+		FROM articles WHERE summary IS NULL OR summary = ''
+		ORDER BY published_at DESC LIMIT ?`, limit)
 }
 
 func (r *repository) CountBookmarked(ctx context.Context) (int64, error) {
@@ -187,8 +207,10 @@ func scanArticlesWithFeed(rows *sql.Rows) ([]domain.Article, error) {
 func scanArticle(scan func(dest ...any) error) (*domain.Article, error) {
 	var a domain.Article
 	var publishedAt, fetchedAt sql.NullTime
+	var publisher, thumbnailURL, summary, category sql.NullString
 	err := scan(&a.ID, &a.FeedID, &a.URL, &a.Title, &a.Content,
-		&publishedAt, &a.Read, &a.Bookmarked, &fetchedAt)
+		&publishedAt, &a.Read, &a.Bookmarked, &fetchedAt,
+		&publisher, &thumbnailURL, &summary, &category)
 	if err != nil {
 		return nil, err
 	}
@@ -198,14 +220,20 @@ func scanArticle(scan func(dest ...any) error) (*domain.Article, error) {
 	if fetchedAt.Valid {
 		a.FetchedAt = fetchedAt.Time
 	}
+	a.Publisher = publisher.String
+	a.ThumbnailURL = thumbnailURL.String
+	a.Summary = summary.String
+	a.Category = category.String
 	return &a, nil
 }
 
 func scanArticleWithFeed(scan func(dest ...any) error) (*domain.Article, error) {
 	var a domain.Article
 	var publishedAt, fetchedAt sql.NullTime
+	var publisher, thumbnailURL, summary, category sql.NullString
 	err := scan(&a.ID, &a.FeedID, &a.URL, &a.Title, &a.Content,
-		&publishedAt, &a.Read, &a.Bookmarked, &fetchedAt, &a.FeedURL)
+		&publishedAt, &a.Read, &a.Bookmarked, &fetchedAt,
+		&publisher, &thumbnailURL, &summary, &category, &a.FeedURL)
 	if err != nil {
 		return nil, err
 	}
@@ -215,5 +243,9 @@ func scanArticleWithFeed(scan func(dest ...any) error) (*domain.Article, error) 
 	if fetchedAt.Valid {
 		a.FetchedAt = fetchedAt.Time
 	}
+	a.Publisher = publisher.String
+	a.ThumbnailURL = thumbnailURL.String
+	a.Summary = summary.String
+	a.Category = category.String
 	return &a, nil
 }

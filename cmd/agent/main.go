@@ -59,7 +59,28 @@ func main() {
 		},
 	}
 
-	root.AddCommand(summarizeCmd, preferenceCmd)
+	var enrichLimit int
+	var enrichForce bool
+	enrichCmd := &cobra.Command{
+		Use:   "enrich",
+		Short: "記事に要約・カテゴリを付与してDBに保存する",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r := do.MustInvoke[articlerepo.Repository](i)
+			n, err := driveranthropic.NewEnrichAgent(r).Run(
+				context.Background(),
+				driveranthropic.EnrichOptions{Limit: enrichLimit, Force: enrichForce},
+			)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%d 件の記事を要約・分類しました\n", n)
+			return nil
+		},
+	}
+	enrichCmd.Flags().IntVar(&enrichLimit, "limit", 10, "処理件数")
+	enrichCmd.Flags().BoolVar(&enrichForce, "force", false, "要約済みの記事も含め、最新記事を対象に再処理する")
+
+	root.AddCommand(summarizeCmd, preferenceCmd, enrichCmd)
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)

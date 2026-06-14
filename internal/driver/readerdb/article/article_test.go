@@ -306,6 +306,70 @@ func TestArticleRepository_Search_NoMatch(t *testing.T) {
 	}
 }
 
+func TestArticleRepository_Save_PublisherAndThumbnail(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	a := makeArticle("https://example.com/1")
+	a.Publisher = "Example Tech Blog"
+	a.ThumbnailURL = "https://example.com/thumb.jpg"
+	if err := r.Save(ctx, a); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	all, _ := r.FindAll(ctx)
+	if all[0].Publisher != "Example Tech Blog" {
+		t.Errorf("Publisher: got %q", all[0].Publisher)
+	}
+	if all[0].ThumbnailURL != "https://example.com/thumb.jpg" {
+		t.Errorf("ThumbnailURL: got %q", all[0].ThumbnailURL)
+	}
+}
+
+func TestArticleRepository_UpdateEnrichment(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	r.Save(ctx, makeArticle("https://example.com/1"))
+	all, _ := r.FindAll(ctx)
+	id := all[0].ID
+
+	if err := r.UpdateEnrichment(ctx, id, "要約テキスト", "Tech"); err != nil {
+		t.Fatalf("UpdateEnrichment: %v", err)
+	}
+
+	found, _ := r.FindByID(ctx, id)
+	if found.Summary != "要約テキスト" {
+		t.Errorf("Summary: got %q", found.Summary)
+	}
+	if found.Category != "Tech" {
+		t.Errorf("Category: got %q", found.Category)
+	}
+}
+
+func TestArticleRepository_FindWithoutSummary(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	r.Save(ctx, makeArticle("https://example.com/1"))
+	r.Save(ctx, makeArticle("https://example.com/2"))
+	all, _ := r.FindAll(ctx)
+	if err := r.UpdateEnrichment(ctx, all[0].ID, "要約", "Tech"); err != nil {
+		t.Fatalf("UpdateEnrichment: %v", err)
+	}
+
+	results, err := r.FindWithoutSummary(ctx, 10)
+	if err != nil {
+		t.Fatalf("FindWithoutSummary: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("count: got %d, want 1", len(results))
+	}
+	if results[0].Summary != "" {
+		t.Errorf("Summary should be empty, got %q", results[0].Summary)
+	}
+}
+
 func TestArticleRepository_Search_BookmarkedOnly(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)

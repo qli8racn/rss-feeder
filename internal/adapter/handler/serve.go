@@ -18,30 +18,38 @@ import (
 
 // articleDTO は記事を JSON で表現するための DTO。
 type articleDTO struct {
-	ID          int64     `json:"id"`
-	FeedID      int64     `json:"feed_id"`
-	FeedURL     string    `json:"feed_url"`
-	URL         string    `json:"url"`
-	Title       string    `json:"title"`
-	Content     string    `json:"content"`
-	PublishedAt time.Time `json:"published_at"`
-	Read        bool      `json:"read"`
-	Bookmarked  bool      `json:"bookmarked"`
-	FetchedAt   time.Time `json:"fetched_at"`
+	ID           int64     `json:"id"`
+	FeedID       int64     `json:"feed_id"`
+	FeedURL      string    `json:"feed_url"`
+	URL          string    `json:"url"`
+	Title        string    `json:"title"`
+	Content      string    `json:"content"`
+	PublishedAt  time.Time `json:"published_at"`
+	Read         bool      `json:"read"`
+	Bookmarked   bool      `json:"bookmarked"`
+	FetchedAt    time.Time `json:"fetched_at"`
+	Publisher    string    `json:"publisher"`
+	ThumbnailURL string    `json:"thumbnail_url"`
+	Summary      string    `json:"summary"`
+	Category     string    `json:"category"`
 }
 
 func toArticleDTO(a domain.Article) articleDTO {
 	return articleDTO{
-		ID:          a.ID,
-		FeedID:      a.FeedID,
-		FeedURL:     a.FeedURL,
-		URL:         a.URL,
-		Title:       a.Title,
-		Content:     a.Content,
-		PublishedAt: a.PublishedAt,
-		Read:        a.Read,
-		Bookmarked:  a.Bookmarked,
-		FetchedAt:   a.FetchedAt,
+		ID:           a.ID,
+		FeedID:       a.FeedID,
+		FeedURL:      a.FeedURL,
+		URL:          a.URL,
+		Title:        a.Title,
+		Content:      a.Content,
+		PublishedAt:  a.PublishedAt,
+		Read:         a.Read,
+		Bookmarked:   a.Bookmarked,
+		FetchedAt:    a.FetchedAt,
+		Publisher:    a.Publisher,
+		ThumbnailURL: a.ThumbnailURL,
+		Summary:      a.Summary,
+		Category:     a.Category,
 	}
 }
 

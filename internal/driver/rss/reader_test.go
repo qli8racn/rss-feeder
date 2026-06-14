@@ -27,6 +27,31 @@ const rss20XML = `<?xml version="1.0" encoding="UTF-8"?>
   </channel>
 </rss>`
 
+const rss20WithThumbnailXML = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>Test RSS Feed</title>
+    <link>https://example.com</link>
+    <item>
+      <title>Article With Media Thumbnail</title>
+      <link>https://example.com/media-thumb</link>
+      <description>Content</description>
+      <media:thumbnail url="https://example.com/media-thumb.jpg"/>
+    </item>
+    <item>
+      <title>Article With Enclosure</title>
+      <link>https://example.com/enclosure</link>
+      <description>Content</description>
+      <enclosure url="https://example.com/enclosure.jpg" type="image/jpeg" length="1234"/>
+    </item>
+    <item>
+      <title>Article Without Thumbnail</title>
+      <link>https://example.com/none</link>
+      <description>Content</description>
+    </item>
+  </channel>
+</rss>`
+
 const atomXML = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>Test Atom Feed</title>
@@ -98,6 +123,37 @@ func TestFetch_Atom(t *testing.T) {
 	}
 	if articles[0].PublishedAt.IsZero() {
 		t.Error("articles[0].PublishedAt should not be zero")
+	}
+}
+
+func TestFetch_Thumbnail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		w.Write([]byte(rss20WithThumbnailXML))
+	}))
+	defer srv.Close()
+
+	r := newTestReader()
+	title, articles, err := r.Fetch(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(articles) != 3 {
+		t.Fatalf("articles count: got %d, want 3", len(articles))
+	}
+
+	if articles[0].Publisher != title {
+		t.Errorf("Publisher: got %q, want %q", articles[0].Publisher, title)
+	}
+
+	if got := articles[0].ThumbnailURL; got != "https://example.com/media-thumb.jpg" {
+		t.Errorf("media:thumbnail: got %q", got)
+	}
+	if got := articles[1].ThumbnailURL; got != "https://example.com/enclosure.jpg" {
+		t.Errorf("enclosure: got %q", got)
+	}
+	if got := articles[2].ThumbnailURL; got != "" {
+		t.Errorf("no thumbnail: got %q, want empty", got)
 	}
 }
 

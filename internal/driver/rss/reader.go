@@ -3,6 +3,7 @@ package rss
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/mmcdole/gofeed"
@@ -44,12 +45,38 @@ func (r *reader) Fetch(ctx context.Context, feedURL string) (string, []domain.Ar
 		}
 
 		articles = append(articles, domain.Article{
-			URL:         item.Link,
-			Title:       item.Title,
-			Content:     content,
-			PublishedAt: publishedAt,
+			URL:          item.Link,
+			Title:        item.Title,
+			Content:      content,
+			PublishedAt:  publishedAt,
+			Publisher:    feed.Title,
+			ThumbnailURL: extractThumbnail(item),
 		})
 	}
 
 	return feed.Title, articles, nil
+}
+
+// extractThumbnail は記事のサムネイル画像URLを優先順位（media:thumbnail → enclosure(image/*) → itunes:image）で探索する。
+// いずれも見つからない場合は空文字を返す。
+func extractThumbnail(item *gofeed.Item) string {
+	if media, ok := item.Extensions["media"]; ok {
+		if thumbnails, ok := media["thumbnail"]; ok && len(thumbnails) > 0 {
+			if url, ok := thumbnails[0].Attrs["url"]; ok && url != "" {
+				return url
+			}
+		}
+	}
+
+	for _, enclosure := range item.Enclosures {
+		if strings.HasPrefix(enclosure.Type, "image/") {
+			return enclosure.URL
+		}
+	}
+
+	if item.Image != nil {
+		return item.Image.URL
+	}
+
+	return ""
 }
