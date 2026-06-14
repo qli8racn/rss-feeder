@@ -36,15 +36,11 @@ rss-agent <command> [flags]
 
 #### ビルド
 
-```bash
-go build -o bin/rss-agent ./cmd/agent
-```
-
 CGO（mattn/go-sqlite3）と Anthropic SDK を同時にリンクするためメモリ使用量が大きい。
 OOM が発生する場合はパッケージ並列数を制限する：
 
 ```bash
-go build -p 1 -o bin/rss-agent ./cmd/agent
+GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -p 1 -o bin/rss-agent ./cmd/agent
 ```
 
 ---

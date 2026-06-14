@@ -2,6 +2,7 @@
   "permissions": {
     "allow": [
       "Bash(go *)",
+      "Bash(GOMAXPROCS=* GOFLAGS=* go *)",
       "Bash(bin/rss-feeder *)",
       "Bash(bin/rss-agent *)",
       "Bash(git diff*)",

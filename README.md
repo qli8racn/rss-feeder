@@ -18,7 +18,7 @@ AI エージェント機能（`rss-agent`）で記事要約や読書傾向の分
 ```bash
 go mod tidy
 go build -o bin/rss-feeder ./cmd/rss-feeder
-go build -o bin/rss-agent  ./cmd/agent   # メモリ不足時は -p 1 を追加
+GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -o bin/rss-agent -p 1 ./cmd/agent
 ```
 
 DB（`reader.db`）は初回起動時に自動作成される。

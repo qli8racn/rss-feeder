@@ -16,7 +16,7 @@ model: opus
 1. バイナリが存在するか確認し、なければビルドする
    ```bash
    test -f bin/rss-feeder || go build -o bin/rss-feeder ./cmd/rss-feeder
-   test -f bin/rss-agent  || go build -p 1 -o bin/rss-agent ./cmd/agent
+   test -f bin/rss-agent  || GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -p 1 -o bin/rss-agent ./cmd/agent
    ```
 
 2. RSSフィードを取得する

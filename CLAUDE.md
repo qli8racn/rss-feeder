@@ -18,10 +18,10 @@ go build -o bin/rss-agent  ./cmd/agent
 DB 初期化は初回起動時に自動実行される。
 
 > **Note:** メモリが少ない環境では `rss-agent` のビルドで OOM が発生することがある。
-> devcontainer.json に `--memory=3g --memory-swap=6g` を設定済み（OOM 対策）。
+> devcontainer.json に `--memory=6g --memory-swap=12g` を設定済み（OOM 対策）。
 > それでも失敗する場合は並列数を制限する（詳細は `docs/design.md` 参照）：
 > ```bash
-> go build -p 1 -o bin/rss-agent ./cmd/agent
+> GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -p 1 -o bin/rss-agent ./cmd/agent
 > ```
 
 ---
