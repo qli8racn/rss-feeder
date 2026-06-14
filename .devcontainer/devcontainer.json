@@ -10,7 +10,9 @@
     "vscode": {
       "extensions": [
         "anthropic.claude-code",
-        "golang.go"
+        "golang.go",
+        "github.copilot",
+        "github.copilot-chat"
       ],
       "settings": {
         "go.toolsManagement.autoUpdate": true,
