@@ -123,7 +123,7 @@ func (a *EnrichAgent) summarizeAndCategorize(ctx context.Context, articles []dom
 		}
 	}
 
-	return nil, fmt.Errorf("Claude からのテキスト応答が見つかりませんでした")
+	return nil, fmt.Errorf("テキスト応答が見つかりませんでした")
 }
 
 // extractJSON はテキストから最初の JSON 配列部分のみを取り出す（前後の説明文を除去する）。

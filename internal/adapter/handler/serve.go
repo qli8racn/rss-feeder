@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,9 +63,14 @@ func toArticleDTOs(articles []domain.Article) []articleDTO {
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(body); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
+	_, _ = w.Write(buf.Bytes())
 }
 
 func writeJSONError(w http.ResponseWriter, status int, message string) {
@@ -91,7 +97,7 @@ func NewMux(listUC *usecase.ListUsecase, searchUC *usecase.SearchUsecase, bookma
 
 func handleListArticles(uc *usecase.ListUsecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		mode := usecase.ListModeAll
+		var mode usecase.ListMode
 		switch r.URL.Query().Get("mode") {
 		case "unread":
 			mode = usecase.ListModeUnread

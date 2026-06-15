@@ -71,7 +71,9 @@ func newTestReader() *reader {
 func TestFetch_RSS20(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		w.Write([]byte(rss20XML))
+		if _, err := w.Write([]byte(rss20XML)); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -100,7 +102,9 @@ func TestFetch_RSS20(t *testing.T) {
 func TestFetch_Atom(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/atom+xml")
-		w.Write([]byte(atomXML))
+		if _, err := w.Write([]byte(atomXML)); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -129,7 +133,9 @@ func TestFetch_Atom(t *testing.T) {
 func TestFetch_Thumbnail(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		w.Write([]byte(rss20WithThumbnailXML))
+		if _, err := w.Write([]byte(rss20WithThumbnailXML)); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -172,7 +178,9 @@ func TestFetch_ServerError(t *testing.T) {
 
 func TestFetch_InvalidXML(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("this is not xml"))
+		if _, err := w.Write([]byte("this is not xml")); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
 	}))
 	defer srv.Close()
 

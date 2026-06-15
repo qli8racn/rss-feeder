@@ -26,7 +26,7 @@ func (m *maintainer) IntegrityCheck(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var results []string
 	for rows.Next() {
 		var s string

@@ -22,8 +22,14 @@ func newTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("migration: %v", err)
 	}
 	// insert a feed so articles can reference it
-	db.Exec(`INSERT INTO feeds (id, feed_url, title) VALUES (1, 'https://example.com/feed', 'Test')`)
-	t.Cleanup(func() { db.Close() })
+	if _, err := db.Exec(`INSERT INTO feeds (id, feed_url, title) VALUES (1, 'https://example.com/feed', 'Test')`); err != nil {
+		t.Fatalf("setup feed: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Fatalf("close db: %v", err)
+		}
+	})
 	return db
 }
 
@@ -48,7 +54,9 @@ func TestArticleRepository_Save_Duplicate(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	r.Save(ctx, makeArticle("https://example.com/1"))
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
 	err := r.Save(ctx, makeArticle("https://example.com/1"))
 	if !errors.Is(err, articlerepo.ErrDuplicate) {
 		t.Errorf("expected ErrDuplicate, got %v", err)
@@ -59,8 +67,12 @@ func TestArticleRepository_FindAll(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	r.Save(ctx, makeArticle("https://example.com/1"))
-	r.Save(ctx, makeArticle("https://example.com/2"))
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeArticle("https://example.com/2")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
 
 	articles, err := r.FindAll(ctx)
 	if err != nil {
@@ -75,9 +87,15 @@ func TestArticleRepository_FindUnread(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	r.Save(ctx, makeArticle("https://example.com/1"))
-	r.Save(ctx, makeArticle("https://example.com/2"))
-	r.db.Exec(`UPDATE articles SET read = 1 WHERE url = 'https://example.com/1'`)
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeArticle("https://example.com/2")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := r.db.Exec(`UPDATE articles SET read = 1 WHERE url = 'https://example.com/1'`); err != nil {
+		t.Fatalf("setup read: %v", err)
+	}
 
 	articles, err := r.FindUnread(ctx)
 	if err != nil {
@@ -95,9 +113,15 @@ func TestArticleRepository_FindBookmarked(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	r.Save(ctx, makeArticle("https://example.com/1"))
-	r.Save(ctx, makeArticle("https://example.com/2"))
-	r.db.Exec(`UPDATE articles SET bookmarked = 1 WHERE url = 'https://example.com/2'`)
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeArticle("https://example.com/2")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := r.db.Exec(`UPDATE articles SET bookmarked = 1 WHERE url = 'https://example.com/2'`); err != nil {
+		t.Fatalf("setup bookmarked: %v", err)
+	}
 
 	articles, err := r.FindBookmarked(ctx)
 	if err != nil {
@@ -115,7 +139,9 @@ func TestArticleRepository_FindByID(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	r.Save(ctx, makeArticle("https://example.com/1"))
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
 	all, _ := r.FindAll(ctx)
 	id := all[0].ID
 
@@ -148,7 +174,9 @@ func TestArticleRepository_Update(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	r.Save(ctx, makeArticle("https://example.com/1"))
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
 	all, _ := r.FindAll(ctx)
 	a := all[0]
 
@@ -171,9 +199,15 @@ func TestArticleRepository_DeleteNonBookmarked(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	r.Save(ctx, makeArticle("https://example.com/1"))
-	r.Save(ctx, makeArticle("https://example.com/2"))
-	r.db.Exec(`UPDATE articles SET bookmarked = 1 WHERE url = 'https://example.com/1'`)
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeArticle("https://example.com/2")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := r.db.Exec(`UPDATE articles SET bookmarked = 1 WHERE url = 'https://example.com/1'`); err != nil {
+		t.Fatalf("setup bookmarked: %v", err)
+	}
 
 	n, err := r.DeleteNonBookmarked(ctx)
 	if err != nil {
@@ -193,9 +227,15 @@ func TestArticleRepository_MarkAsRead(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	r.Save(ctx, makeArticle("https://example.com/1"))
-	r.Save(ctx, makeArticle("https://example.com/2"))
-	r.Save(ctx, makeArticle("https://example.com/3"))
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeArticle("https://example.com/2")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeArticle("https://example.com/3")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
 
 	all, _ := r.FindAll(ctx)
 	ids := []int64{all[0].ID, all[1].ID}
@@ -221,9 +261,15 @@ func TestArticleRepository_CountBookmarked(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	r.Save(ctx, makeArticle("https://example.com/1"))
-	r.Save(ctx, makeArticle("https://example.com/2"))
-	r.db.Exec(`UPDATE articles SET bookmarked = 1 WHERE url = 'https://example.com/1'`)
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeArticle("https://example.com/2")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := r.db.Exec(`UPDATE articles SET bookmarked = 1 WHERE url = 'https://example.com/1'`); err != nil {
+		t.Fatalf("setup bookmarked: %v", err)
+	}
 
 	count, err := r.CountBookmarked(ctx)
 	if err != nil {
@@ -238,9 +284,15 @@ func TestArticleRepository_CountNonBookmarked(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	r.Save(ctx, makeArticle("https://example.com/1"))
-	r.Save(ctx, makeArticle("https://example.com/2"))
-	r.db.Exec(`UPDATE articles SET bookmarked = 1 WHERE url = 'https://example.com/1'`)
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeArticle("https://example.com/2")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := r.db.Exec(`UPDATE articles SET bookmarked = 1 WHERE url = 'https://example.com/1'`); err != nil {
+		t.Fatalf("setup bookmarked: %v", err)
+	}
 
 	count, err := r.CountNonBookmarked(ctx)
 	if err != nil {
@@ -259,8 +311,12 @@ func TestArticleRepository_Search_TitleMatch(t *testing.T) {
 	a1.Title = "Go言語入門"
 	a2 := makeArticle("https://example.com/2")
 	a2.Title = "Python基礎"
-	r.Save(ctx, a1)
-	r.Save(ctx, a2)
+	if err := r.Save(ctx, a1); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, a2); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
 
 	results, err := r.Search(ctx, "Go", false)
 	if err != nil {
@@ -280,7 +336,9 @@ func TestArticleRepository_Search_ContentMatch(t *testing.T) {
 
 	a := makeArticle("https://example.com/1")
 	a.Content = "goroutine を使った並行処理"
-	r.Save(ctx, a)
+	if err := r.Save(ctx, a); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
 
 	results, err := r.Search(ctx, "goroutine", false)
 	if err != nil {
@@ -295,7 +353,9 @@ func TestArticleRepository_Search_NoMatch(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	r.Save(ctx, makeArticle("https://example.com/1"))
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
 
 	results, err := r.Search(ctx, "nomatch_xyz", false)
 	if err != nil {
@@ -330,7 +390,9 @@ func TestArticleRepository_UpdateEnrichment(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	r.Save(ctx, makeArticle("https://example.com/1"))
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
 	all, _ := r.FindAll(ctx)
 	id := all[0].ID
 
@@ -350,9 +412,12 @@ func TestArticleRepository_UpdateEnrichment(t *testing.T) {
 func TestArticleRepository_FindWithoutSummary(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
-
-	r.Save(ctx, makeArticle("https://example.com/1"))
-	r.Save(ctx, makeArticle("https://example.com/2"))
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeArticle("https://example.com/2")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
 	all, _ := r.FindAll(ctx)
 	if err := r.UpdateEnrichment(ctx, all[0].ID, "要約", "Tech"); err != nil {
 		t.Fatalf("UpdateEnrichment: %v", err)
@@ -378,8 +443,12 @@ func TestArticleRepository_Search_BookmarkedOnly(t *testing.T) {
 	a1.Title = "Go入門"
 	a2 := makeArticle("https://example.com/2")
 	a2.Title = "Go応用"
-	r.Save(ctx, a1)
-	r.Save(ctx, a2)
+	if err := r.Save(ctx, a1); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, a2); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
 	if _, err := r.db.ExecContext(ctx, `UPDATE articles SET bookmarked = 1 WHERE url = 'https://example.com/1'`); err != nil {
 		t.Fatalf("setup bookmarked: %v", err)
 	}

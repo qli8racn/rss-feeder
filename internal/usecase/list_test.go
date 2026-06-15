@@ -112,7 +112,9 @@ func TestListUsecase_MarksUnreadAsRead(t *testing.T) {
 	}
 	uc := NewListUsecase(repo)
 
-	uc.Execute(context.Background(), ListModeUnread)
+	if _, err := uc.Execute(context.Background(), ListModeUnread); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
 
 	if len(repo.markedIDs) != 2 {
 		t.Errorf("markedIDs count: got %d, want 2", len(repo.markedIDs))
@@ -128,7 +130,9 @@ func TestListUsecase_SkipsAlreadyRead(t *testing.T) {
 	}
 	uc := NewListUsecase(repo)
 
-	uc.Execute(context.Background(), ListModeAll)
+	if _, err := uc.Execute(context.Background(), ListModeAll); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
 
 	if len(repo.markedIDs) != 1 {
 		t.Errorf("markedIDs count: got %d, want 1 (already-read should be skipped)", len(repo.markedIDs))

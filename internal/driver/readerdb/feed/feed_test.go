@@ -21,7 +21,11 @@ func newTestDB(t *testing.T) *sql.DB {
 	if err := migration.Run(db); err != nil {
 		t.Fatalf("migration: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Fatalf("close db: %v", err)
+		}
+	})
 	return db
 }
 
@@ -73,7 +77,9 @@ func TestFeedRepository_FindByURL_Exists(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	r.Save(ctx, domain.Feed{FeedURL: "https://example.com/feed", Title: "My Feed"})
+	if _, err := r.Save(ctx, domain.Feed{FeedURL: "https://example.com/feed", Title: "My Feed"}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
 
 	found, err := r.FindByURL(ctx, "https://example.com/feed")
 	if err != nil {
