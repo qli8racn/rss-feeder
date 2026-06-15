@@ -9,12 +9,25 @@ import (
 	"github.com/spf13/cobra"
 
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
+	"github.com/qli8racn/rss-feeder/internal/config"
 	driveranthropic "github.com/qli8racn/rss-feeder/internal/driver/anthropic"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 )
 
 func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if cfg.AnthropicAPIKey != "" {
+		if err := os.Setenv("ANTHROPIC_API_KEY", cfg.AnthropicAPIKey); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+
 	i := do.New()
 	do.Provide(i, readerdb.NewClient)
 	do.Provide(i, dbrepoarticle.NewRepository)

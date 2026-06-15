@@ -13,3 +13,6 @@ bin/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local config (contains secrets)
+/internal/config/config.yml

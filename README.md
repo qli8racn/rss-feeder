@@ -11,7 +11,7 @@ AI エージェント機能（`rss-agent`）で記事要約や読書傾向の分
 
 - Go 1.24 以上
 - GCC（`mattn/go-sqlite3` の CGO ビルドに必要）
-- `ANTHROPIC_API_KEY`（`rss-agent` 使用時のみ）
+- `ANTHROPIC_API_KEY`（`rss-agent` 使用時のみ。`config.yml` または環境変数で設定）
 
 ## セットアップ
 
@@ -22,6 +22,15 @@ GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -o bin/rss-agent -p 1 ./cmd/ag
 ```
 
 DB（`reader.db`）は初回起動時に自動作成される。
+
+`rss-agent` を使う場合は `internal/config/config.yml` を作成し、`ANTHROPIC_API_KEY` を設定する。
+
+```bash
+cp internal/config/config.example.yml internal/config/config.yml
+# internal/config/config.yml の anthropic_api_key に API キーを設定する
+```
+
+`internal/config/config.yml` は `.gitignore` 対象（機密情報を含むため Git 管理対象外）。
 
 ## RSS フィードの登録
 
@@ -92,6 +101,7 @@ DI には `samber/do` を使用。`cmd/rss-feeder/main.go` が Composition Root�
 | `github.com/mattn/go-sqlite3` | SQLite ドライバ（CGO） |
 | `github.com/samber/do/v2` | DI コンテナ |
 | `github.com/anthropics/anthropic-sdk-go` | Claude API クライアント |
+| `github.com/spf13/viper` | `config.yml` の読み込み（`ANTHROPIC_API_KEY` 等） |
 
 ## Hooks
 

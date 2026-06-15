@@ -17,6 +17,14 @@ go build -o bin/rss-agent  ./cmd/agent
 
 DB 初期化は初回起動時に自動実行される。
 
+`rss-agent` 用の `ANTHROPIC_API_KEY` は `internal/config/config.yml` で管理する。
+`config.yml` が無い場合は `internal/config/config.example.yml` をコピーして作成し、
+`anthropic_api_key` に値を設定する（`config.yml` は Git 管理対象外）。
+
+```bash
+cp internal/config/config.example.yml internal/config/config.yml
+```
+
 > **Note:** メモリが少ない環境では `rss-agent` のビルドで OOM が発生することがある。
 > devcontainer.json に `--memory=6g --memory-swap=12g` を設定済み（OOM 対策）。
 > それでも失敗する場合は並列数を制限する（詳細は `docs/design.md` 参照）：
@@ -52,9 +60,10 @@ bin/rss-feeder search <keyword>
 ```bash
 bin/rss-agent summarize [--feed <url>] [--limit <n>]  # 最新記事を AI で要約
 bin/rss-agent preference                               # ブックマークから趣向を分析
+bin/rss-agent enrich [--limit <n>] [--force]           # 記事に要約・カテゴリを付与してDBに保存
 ```
 
-`ANTHROPIC_API_KEY` 環境変数が必要。
+`ANTHROPIC_API_KEY` が必要（`config.yml` の `anthropic_api_key` または環境変数で設定）。
 
 ---
 
