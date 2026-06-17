@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { ChevronDownIcon, SearchIcon } from './icons'
 import type { SortField, SortOrder } from '../types'
 
@@ -22,7 +22,7 @@ interface SearchFilterBarProps {
   onSortOrderChange: (sort: SortField, order: SortOrder) => void
 }
 
-export default function SearchFilterBar({
+function SearchFilterBar({
   initialKeyword,
   onKeywordCommit,
   category,
@@ -101,3 +101,5 @@ export default function SearchFilterBar({
     </form>
   )
 }
+
+export default memo(SearchFilterBar)

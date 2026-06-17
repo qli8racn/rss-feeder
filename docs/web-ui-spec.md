@@ -16,6 +16,49 @@ Figma デザイン（RSS-Feeder）を元にした、ブラウザでの記事一�
 - ルーティングなし（単一画面）。状態管理は `useState` / `useEffect` で十分とする
 - ビルド成果物は `web/static/` に出力し、既存の `cmd/web --static-dir` 配信をそのまま利用する（バックエンド変更不要）
 
+## アーキテクチャ・コード規約
+
+### ディレクトリ構成
+
+```
+web/frontend/src/
+  api.ts              バックエンド API への HTTP 呼び出し（fetchArticles, searchArticles, fetchCategories, toggleBookmark）
+  types.ts            ドメインの型定義（Article, ArticlesResponse, SortField, SortOrder, SORT_FIELDS）
+  domain/             副作用を持たない純粋なビジネスロジック・型
+    date.ts             formatDate（日時の相対/絶対表示切り替え）
+    category.ts          categoryStyle（カテゴリ → 配色マッピング）
+    filter.ts             FilterState 型、parseFilterState / buildFilterQuery（クエリ文字列とのパース/構築。window には依存しない）
+  usecase/            domain + ブラウザ API 等の外部依存を組み合わせた処理
+    syncFilterStateToURL.ts   FilterState を URL へ反映する（window.history.replaceState を呼ぶ唯一の場所）
+  components/         UI コンポーネント（React のみに依存し、domain/usecase の関数を呼び出す）
+  App.tsx             状態管理・データ取得のオーケストレーション
+```
+
+### 依存方向
+
+バックエンド（`docs/design.md` の `adapter(handler) → usecase → domain`）に倣い、フロントエンドも以下の方向を守る。
+
+```
+components / App.tsx → usecase → domain
+components / App.tsx → domain（直接呼んでもよい。例: ArticleTable が formatDate / categoryStyle を直接呼ぶ）
+```
+
+- `domain/` は副作用を持たない（`window` / `fetch` 等のブラウザ API に依存しない）。テストしやすい純粋関数・型のみを置く
+- `usecase/` は `domain/` の関数を使い、ブラウザ API 等の外部依存を伴う処理を担う（例: `syncFilterStateToURL` は URL 書き込みという副作用を持つ）
+- API 呼び出し（`api.ts`）は現状 `domain` / `usecase` に分類せず独立したモジュールとして扱う。バックエンドの `driver` 相当に切り出すかは将来的な検討課題（`tasklist.md` 参照）
+
+### 状態管理
+
+- ルーティングライブラリは導入しない（単一画面のため）。検索条件は `App.tsx` の `useState` で保持し、`usecase/syncFilterStateToURL` で副作用として URL に同期する
+- `history.replaceState` を使い、ブラウザ履歴は積まない（フィルター操作ごとに戻るボタンの履歴が増えるのを避けるため）。`popstate` 相当の URL 変更検知は実装しない。URL 同期はリロード/共有時の状態復元のみを目的とする
+- 検索キーワードの生入力・デバウンス処理は `SearchFilterBar` に閉じ込め、確定値のみを親（`App.tsx`）へコールバックで伝播する。`sort` / `order` のように複数コンポーネント（`SearchFilterBar` のドロップダウンと `ArticleTable` のカラムヘッダクリック）から変更される状態は、共通の親（`App.tsx`）が単一の真実の源として保持する
+
+### テスト
+
+- Vitest + jsdom を使用する（`npm run test`）
+- `domain/` ・`usecase/` の関数は新規追加時にユニットテストを必須とする
+- React コンポーネントの結合テストは現時点では導入しない（必要になった場合に検討）
+
 ## 実装の進め方（figma-mcp 活用）
 
 1. `web/frontend/`（Vite + React + TypeScript + Tailwind）の雛形を作成する

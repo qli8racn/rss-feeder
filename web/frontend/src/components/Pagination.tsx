@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from './icons'
 
 interface PaginationProps {
@@ -17,7 +18,7 @@ function getPageNumbers(current: number, total: number, maxVisible = 7): number[
   return Array.from({ length: end - start + 1 }, (_, i) => start + i)
 }
 
-export default function Pagination({ page, totalPages, onPageChange }: PaginationProps) {
+function Pagination({ page, totalPages, onPageChange }: PaginationProps) {
   if (totalPages <= 1) return null
 
   return (
@@ -57,3 +58,5 @@ export default function Pagination({ page, totalPages, onPageChange }: Paginatio
     </div>
   )
 }
+
+export default memo(Pagination)

@@ -83,22 +83,32 @@ function App() {
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / perPage)), [total, perPage])
 
-  const handleToggleBookmark = async (id: number) => {
-    try {
-      const updated = await toggleBookmark(id)
-      setArticles((prev) => prev.map((a) => (a.id === id ? updated : a)))
-      refreshBookmarkedTotal()
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }
+  const handleSortChange = useCallback((s: SortField, o: SortOrder) => {
+    setSort(s)
+    setOrder(o)
+  }, [])
+
+  const handleToggleBookmarkedOnly = useCallback(() => setBookmarkedOnly((v) => !v), [])
+
+  const handleToggleBookmark = useCallback(
+    async (id: number) => {
+      try {
+        const updated = await toggleBookmark(id)
+        setArticles((prev) => prev.map((a) => (a.id === id ? updated : a)))
+        refreshBookmarkedTotal()
+      } catch (err) {
+        setError((err as Error).message)
+      }
+    },
+    [refreshBookmarkedTotal],
+  )
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-slate-200">
       <Header
         bookmarkedCount={bookmarkedTotal}
         bookmarkedOnly={bookmarkedOnly}
-        onToggleBookmarkedOnly={() => setBookmarkedOnly((v) => !v)}
+        onToggleBookmarkedOnly={handleToggleBookmarkedOnly}
       />
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <SearchFilterBar
@@ -109,10 +119,7 @@ function App() {
           categories={categories}
           sort={sort}
           order={order}
-          onSortOrderChange={(s, o) => {
-            setSort(s)
-            setOrder(o)
-          }}
+          onSortOrderChange={handleSortChange}
         />
         <div className="mt-4 flex items-center justify-between text-[12px] text-slate-500">
           <span>{total} 件</span>
@@ -130,10 +137,7 @@ function App() {
               perPage={perPage}
               sort={sort}
               order={order}
-              onSortChange={(s, o) => {
-                setSort(s)
-                setOrder(o)
-              }}
+              onSortChange={handleSortChange}
               onToggleBookmark={handleToggleBookmark}
             />
           )}

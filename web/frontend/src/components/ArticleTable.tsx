@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import type { Article, SortField, SortOrder } from '../types'
 import { BookmarkIcon } from './icons'
 import { formatDate } from '../domain/date'
@@ -20,7 +21,7 @@ const COLUMNS: { field: SortField; label: string }[] = [
   { field: 'published_at', label: '日時' },
 ]
 
-export default function ArticleTable({
+function ArticleTable({
   articles,
   page,
   perPage,
@@ -136,3 +137,5 @@ export default function ArticleTable({
     </div>
   )
 }
+
+export default memo(ArticleTable)

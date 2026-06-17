@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { BookmarkIcon, RssIcon } from './icons'
 
 interface HeaderProps {
@@ -6,7 +7,7 @@ interface HeaderProps {
   onToggleBookmarkedOnly: () => void
 }
 
-export default function Header({ bookmarkedCount, bookmarkedOnly, onToggleBookmarkedOnly }: HeaderProps) {
+function Header({ bookmarkedCount, bookmarkedOnly, onToggleBookmarkedOnly }: HeaderProps) {
   return (
     <header className="flex items-center justify-between border-b border-slate-400/10 bg-[#0d1117]/95 px-6 py-4">
       <div className="flex items-center gap-3">
@@ -32,3 +33,5 @@ export default function Header({ bookmarkedCount, bookmarkedOnly, onToggleBookma
     </header>
   )
 }
+
+export default memo(Header)
