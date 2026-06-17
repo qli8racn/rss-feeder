@@ -1,8 +1,8 @@
 # 設計書（機能設計 + 技術仕様）
 
-## CLI コマンド一覧
+## コマンド・API 一覧
 
-### rss-feeder
+### rss-feeder（CLI）
 
 ```
 rss-feeder <command> [flags]
@@ -21,7 +21,28 @@ rss-feeder <command> [flags]
 
 各コマンドの詳細仕様は `docs/steering/` 以下の各フェーズディレクトリを参照。
 
-### rss-agent
+### cmd/web（Web API）
+
+```bash
+go build -o bin/web ./cmd/web
+./bin/web [--port <port>] [--static-dir <dir>]
+```
+
+| メソッド・パス | 概要 | フェーズ |
+|--------------|------|---------|
+| `GET /api/articles` | 記事一覧（`mode`/`category`/`sort`/`order`/`page`/`per_page` クエリ対応） | 9 |
+| `GET /api/articles/search` | キーワード全文検索（`q`/`bookmarked`/`category`/`sort`/`order`/`page`/`per_page` クエリ対応） | 9 |
+| `POST /api/articles/{id}/bookmark` | 記事のお気に入りをトグル（`audit_log` 記録含む） | 9 |
+| `GET /api/categories` | 設定済みカテゴリの一覧（DISTINCT） | 9 |
+| `POST /api/articles/fetch` | 登録済み全フィードを取得して DB に保存（CLI の `fetch` と同じ `FetchUsecase.ExecuteAll` を呼び出す） | 9 |
+| `/*`（メソッド不問） | `--static-dir` で指定したディレクトリ配下の静的ファイル配信（フロントエンドビルド成果物。`r.Handle` で登録） | 9 |
+
+詳細仕様は `docs/steering/20260614_web_view/` を参照（`POST /api/articles/fetch` はフェーズ完了後に追加されたため当該ドキュメントには未記載）。
+ハンドラの実体は `internal/adapter/handler/web/`（`ListArticlesHandler` 等）で、ルート登録自体は `cmd/web/main.go` が行う。
+
+フロントエンド（`web/frontend/`、Vite + React + TypeScript）は `npm run build` で `web/static/` に出力する。
+
+### rss-agent（CLI）
 
 ```
 rss-agent <command> [flags]
@@ -54,8 +75,8 @@ GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -p 1 -o bin/rss-agent ./cmd/ag
 ### 層の依存方向
 
 ```
-adapter(handler) → usecase → domain
-driver           → adapter(interface)
+adapter(handler/cli, handler/web, handler/agent) → usecase → domain
+driver                                            → adapter(interface)
 ```
 
 `usecase` と `domain` は外側の実装（SQL・HTTP）を知らない。`driver` が `adapter` のインターフェースを実装することで依存を逆転させる。
@@ -67,8 +88,10 @@ rss-feeder/
 ├── cmd/
 │   ├── rss-feeder/
 │   │   └── main.go                              # Composition Root・samber/do コンテナ構築・サブコマンド登録
+│   ├── web/
+│   │   └── main.go                              # Composition Root・samber/do コンテナ構築・chi router 構築（ルート定義）
 │   └── agent/
-│       └── main.go                              # Claude エージェント用エントリポイント
+│       └── main.go                              # Composition Root・samber/do コンテナ構築・サブコマンド登録（rss-agent）
 ├── internal/
 │   ├── domain/
 │   │   ├── article.go                           # Article エンティティ・ToggleBookmark() など
@@ -92,7 +115,10 @@ rss-feeder/
 │   │   ├── audit.go                             # audit_log 記録ロジック
 │   │   ├── check_article.go                     # 記事 ID 存在確認ロジック
 │   │   ├── check_bookmarked.go                  # お気に入り件数確認ロジック
-│   │   └── maintenance.go                       # DB VACUUM・整合性チェック
+│   │   ├── maintenance.go                       # DB VACUUM・整合性チェック
+│   │   ├── summarize.go                         # 記事要約（SummarizeAgent への薄いラッパー）
+│   │   ├── preference.go                        # 趣向分析（PreferenceAgent への薄いラッパー）
+│   │   └── enrich.go                            # 要約・カテゴリ付与（EnrichAgent への薄いラッパー）
 │   ├── adapter/
 │   │   ├── driver/
 │   │   │   ├── readerdb/
@@ -104,22 +130,36 @@ rss-feeder/
 │   │   │   │   │   └── dbmaintenance.go        # DBMaintenance interface
 │   │   │   │   └── feed/
 │   │   │   │       └── feed.go                 # FeedRepository interface（ErrAlreadyExists・ErrNotFound 定義）
-│   │   │   └── rss/
-│   │   │       └── rss_reader.go               # RSSReader interface
+│   │   │   ├── rss/
+│   │   │   │   └── rss_reader.go               # RSSReader interface
+│   │   │   └── anthropic/
+│   │   │       ├── summarize.go                # SummarizeAgent interface・SummarizeOptions
+│   │   │       ├── preference.go                # PreferenceAgent interface
+│   │   │       └── enrich.go                    # EnrichAgent interface・EnrichOptions
 │   │   └── handler/
-│   │       ├── fetch.go                         # cobra コマンド → ListFeedsUsecase + FetchUsecase 呼び出し
-│   │       ├── list.go
-│   │       ├── bookmark.go
-│   │       ├── reset.go
-│   │       ├── search.go                        # search サブコマンド（--bookmarked フラグ）
-│   │       ├── add_feed.go                      # add-feed サブコマンド
-│   │       ├── list_feeds.go                    # list-feeds サブコマンド（msgNoFeeds 定数定義）
-│   │       ├── remove_feed.go                   # remove-feed サブコマンド
-│   │       ├── table.go                         # 記事一覧テーブル描画ヘルパー（printArticleTable）
-│   │       ├── audit.go                         # audit サブコマンド（Hook 経由で呼び出し）
-│   │       ├── check_article.go                 # check-article サブコマンド（Hook 経由で呼び出し）
-│   │       ├── check_bookmarked.go              # check-bookmarked サブコマンド（Hook 経由で呼び出し）
-│   │       └── maintenance.go                   # maintenance サブコマンド（Hook 経由で呼び出し）
+│   │       ├── cli/                             # rss-feeder（cobra）向けハンドラ
+│   │       │   ├── fetch.go                     # cobra コマンド → ListFeedsUsecase + FetchUsecase 呼び出し
+│   │       │   ├── list.go
+│   │       │   ├── bookmark.go
+│   │       │   ├── reset.go
+│   │       │   ├── search.go                    # search サブコマンド（--bookmarked フラグ）
+│   │       │   ├── add_feed.go                  # add-feed サブコマンド
+│   │       │   ├── list_feeds.go                # list-feeds サブコマンド（msgNoFeeds 定数定義）
+│   │       │   ├── remove_feed.go                # remove-feed サブコマンド
+│   │       │   ├── table.go                      # 記事一覧テーブル描画ヘルパー（printArticleTable）
+│   │       │   ├── audit.go                      # audit サブコマンド（Hook 経由で呼び出し）
+│   │       │   ├── check_article.go              # check-article サブコマンド（Hook 経由で呼び出し）
+│   │       │   ├── check_bookmarked.go          # check-bookmarked サブコマンド（Hook 経由で呼び出し）
+│   │       │   └── maintenance.go                # maintenance サブコマンド（Hook 経由で呼び出し）
+│   │       ├── web/                             # cmd/web（HTTP JSON API）向けハンドラ（ルート定義自体は cmd/web/main.go が持つ）
+│   │       │   ├── response.go                   # writeJSON・writeJSONError 共通ヘルパー
+│   │       │   ├── article.go                    # articleDTO・ListArticlesHandler・SearchArticlesHandler・BookmarkArticleHandler
+│   │       │   ├── category.go                   # ListCategoriesHandler
+│   │       │   └── fetch.go                       # FetchLatestHandler（最新フィード取得）
+│   │       └── agent/                            # rss-agent（cobra）向けハンドラ
+│   │           ├── summarize.go                   # summarize サブコマンド（--feed/--limit フラグ）
+│   │           ├── preference.go                  # preference サブコマンド
+│   │           └── enrich.go                      # enrich サブコマンド（--limit/--force フラグ）
 │   └── driver/
 │       ├── readerdb/                            # reader.db への接続・リポジトリ実装
 │       │   ├── client.go                        # DB 接続（sql.Open のみ）
@@ -133,11 +173,11 @@ rss-feeder/
 │       │       └── feed.go                     # FeedRepository 実装
 │       ├── rss/
 │       │   └── reader.go                       # RSSReader 実装（gofeed による HTTP Fetch）
-│       └── anthropic/                           # Claude API 連携（エージェント機能）
-│           ├── loop.go                          # エージェントループ
-│           ├── preference.go                    # 嗜好・設定管理
-│           ├── summarize.go                     # 記事要約
-│           └── enrich.go                        # 記事への要約・カテゴリ付与（DB保存）
+│       └── anthropic/                           # Claude API 連携（エージェント機能。adapter/driver/anthropic の各 interface を実装）
+│           ├── loop.go                          # エージェントループ（runAgentLoop・toArticleJSONList）
+│           ├── preference.go                    # preferenceAgent（PreferenceAgent 実装）
+│           ├── summarize.go                     # summarizeAgent（SummarizeAgent 実装）
+│           └── enrich.go                        # enrichAgent（EnrichAgent 実装、DB保存）
 ├── reader.db                                    # SQLite データベース（gitignore）
 ├── go.mod
 └── go.sum
@@ -224,7 +264,8 @@ Hook スクリプトは `sqlite3` コマンドを直接呼ばず、**Go バイ�
 ## DI 構成（samber/do）
 
 `main.go` に 1 つの `do.Injector` を置き、driver 層のプロバイダーを登録する。
-usecase 層は `do.MustInvoke` でリポジトリを取り出して直接構築し、handler に渡す。
+usecase 層は `do.MustInvoke` でリポジトリを取り出して直接構築し、handler/cli・handler/web・handler/agent に渡す。
+`cmd/agent/main.go` も同じ構造で、`internal/driver/anthropic` の各 Agent を `do.Provide` で登録し、`internal/usecase/{summarize,preference,enrich}.go` 経由で `handler/agent` のコマンドに渡す。
 
 ```go
 // cmd/rss-feeder/main.go
@@ -266,18 +307,18 @@ func main() {
     // cobra コマンド組み立て
     root := &cobra.Command{Use: "rss-feeder", Short: "RSS フィードを取得・管理する CLI ツール"}
     root.AddCommand(
-        handler.NewFetchCommand(listFeedsUC, fetchUC),
-        handler.NewListCommand(listUC),
-        handler.NewBookmarkCommand(bookmarkUC),
-        handler.NewResetCommand(resetUC),
-        handler.NewSearchCommand(searchUC),
-        handler.NewCheckArticleCommand(checkArticleUC),
-        handler.NewCheckBookmarkedCommand(checkBookmarkedUC),
-        handler.NewAuditCommand(auditUC),
-        handler.NewMaintenanceCommand(maintenanceUC),
-        handler.NewAddFeedCommand(addFeedUC),
-        handler.NewListFeedsCommand(listFeedsUC),
-        handler.NewRemoveFeedCommand(removeFeedUC),
+        cli.NewFetchCommand(fetchUC),
+        cli.NewListCommand(listUC),
+        cli.NewBookmarkCommand(bookmarkUC),
+        cli.NewResetCommand(resetUC),
+        cli.NewSearchCommand(searchUC),
+        cli.NewCheckArticleCommand(checkArticleUC),
+        cli.NewCheckBookmarkedCommand(checkBookmarkedUC),
+        cli.NewAuditCommand(auditUC),
+        cli.NewMaintenanceCommand(maintenanceUC),
+        cli.NewAddFeedCommand(addFeedUC),
+        cli.NewListFeedsCommand(listFeedsUC),
+        cli.NewRemoveFeedCommand(removeFeedUC),
     )
 
     if err := root.Execute(); err != nil {
@@ -313,7 +354,7 @@ Claude Code が Bash ツールで "rss-feeder fetch" を実行
   │    └─ fetch はスキップ（bookmark / reset のみ検証対象）
   │
   ├─ rss-feeder fetch（Go バイナリ実行）
-  │    └─ adapter/handler/fetch.go
+  │    └─ adapter/handler/cli/fetch.go
   │         ├─ usecase/list_feeds.go  # DB からフィード URL 取得
   │         └─ usecase/fetch.go       # 重複チェック・保存指示
   │              ├─ driver/rss/reader.go               # HTTP GET → gofeed パース
@@ -363,13 +404,20 @@ func TestArticle_ToggleBookmark(t *testing.T) {
 internal/usecase/
   fetch_test.go            # 新規記事のみ保存される・重複はスキップされる
   list_test.go             # 未読フィルタ・全件・お気に入りフィルタが正しく委譲される
+  list_categories_test.go  # カテゴリ一覧（DISTINCT）取得ロジック
   bookmark_test.go         # トグル動作・存在しない ID のエラーハンドリング
   reset_test.go            # お気に入り記事が削除対象に含まれないことの確認
   search_test.go           # キーワード一致・0件・bookmarked フィルタ・エラーハンドリング
+  add_feed_test.go         # フィード登録ロジック
+  list_feeds_test.go       # フィード一覧取得ロジック
+  remove_feed_test.go      # フィード削除ロジック
   audit_test.go            # audit_log への記録ロジック
   check_article_test.go    # 記事 ID 存在確認ロジック
   check_bookmarked_test.go # お気に入り件数確認ロジック
   maintenance_test.go      # VACUUM・整合性チェックロジック
+  summarize_test.go        # SummarizeAgent への委譲・エラー伝播
+  preference_test.go       # PreferenceAgent への委譲・エラー伝播
+  enrich_test.go           # EnrichAgent への委譲・エラー伝播
 ```
 
 ```go

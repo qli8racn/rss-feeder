@@ -6,27 +6,25 @@ import (
 	"fmt"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/samber/do/v2"
+
+	adapteranthropic "github.com/qli8racn/rss-feeder/internal/adapter/driver/anthropic"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 )
 
-type SummarizeAgent struct {
+type summarizeAgent struct {
 	client anthropic.Client
 	reader articlerepo.Repository
 }
 
-func NewSummarizeAgent(r articlerepo.Repository) *SummarizeAgent {
-	return &SummarizeAgent{
+func NewSummarizeAgent(i do.Injector) (adapteranthropic.SummarizeAgent, error) {
+	return &summarizeAgent{
 		client: anthropic.NewClient(),
-		reader: r,
-	}
+		reader: do.MustInvoke[articlerepo.Repository](i),
+	}, nil
 }
 
-type SummarizeOptions struct {
-	FeedURL string
-	Limit   int
-}
-
-func (a *SummarizeAgent) Run(ctx context.Context, opts SummarizeOptions) (string, error) {
+func (a *summarizeAgent) Run(ctx context.Context, opts adapteranthropic.SummarizeOptions) (string, error) {
 	if opts.Limit == 0 {
 		opts.Limit = 10
 	}

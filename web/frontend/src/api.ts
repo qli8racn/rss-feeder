@@ -66,7 +66,7 @@ export interface FetchLatestResult {
 }
 
 export async function fetchLatestArticles(): Promise<FetchLatestResult> {
-  const res = await fetch('/api/fetch', { method: 'POST' })
+  const res = await fetch('/api/articles/fetch', { method: 'POST' })
   if (!res.ok) throw new Error(`最新フィードの取得に失敗しました (${res.status})`)
   return res.json()
 }

@@ -13,7 +13,7 @@ import (
 	dbmaintrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/dbmaintenance"
 	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
-	"github.com/qli8racn/rss-feeder/internal/adapter/handler"
+	"github.com/qli8racn/rss-feeder/internal/adapter/handler/cli"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerdb/auditlog"
@@ -84,18 +84,18 @@ func main() {
 	}
 
 	root.AddCommand(
-		handler.NewFetchCommand(fetchUC),
-		handler.NewListCommand(listUC),
-		handler.NewBookmarkCommand(bookmarkUC),
-		handler.NewResetCommand(resetUC),
-		handler.NewCheckArticleCommand(checkArticleUC),
-		handler.NewCheckBookmarkedCommand(checkBookmarkedUC),
-		handler.NewAuditCommand(auditUC),
-		handler.NewMaintenanceCommand(maintenanceUC),
-		handler.NewSearchCommand(searchUC),
-		handler.NewAddFeedCommand(addFeedUC),
-		handler.NewListFeedsCommand(listFeedsUC),
-		handler.NewRemoveFeedCommand(removeFeedUC),
+		cli.NewFetchCommand(fetchUC),
+		cli.NewListCommand(listUC),
+		cli.NewBookmarkCommand(bookmarkUC),
+		cli.NewResetCommand(resetUC),
+		cli.NewCheckArticleCommand(checkArticleUC),
+		cli.NewCheckBookmarkedCommand(checkBookmarkedUC),
+		cli.NewAuditCommand(auditUC),
+		cli.NewMaintenanceCommand(maintenanceUC),
+		cli.NewSearchCommand(searchUC),
+		cli.NewAddFeedCommand(addFeedUC),
+		cli.NewListFeedsCommand(listFeedsUC),
+		cli.NewRemoveFeedCommand(removeFeedUC),
 	)
 
 	if err := root.Execute(); err != nil {

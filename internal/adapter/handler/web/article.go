@@ -1,8 +1,6 @@
-package handler
+package web
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,8 +8,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
 
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	"github.com/qli8racn/rss-feeder/internal/domain"
@@ -112,42 +108,8 @@ func parseListQuery(r *http.Request) (category, sort, order string, page, perPag
 	return category, sort, order, page, perPage, nil
 }
 
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(body); err != nil {
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_, _ = w.Write(buf.Bytes())
-}
-
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
-}
-
-// NewMux は Web ブラウザから記事を閲覧するための HTTP ハンドラ（JSON API + 静的ファイル配信）を構築する。
-func NewMux(listUC *usecase.ListUsecase, searchUC *usecase.SearchUsecase, bookmarkUC *usecase.BookmarkUsecase, auditUC *usecase.AuditUsecase, categoriesUC *usecase.ListCategoriesUsecase, fetchUC *usecase.FetchUsecase, staticDir string) http.Handler {
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{"GET", "POST"},
-	}))
-
-	r.Get("/api/articles", handleListArticles(listUC))
-	r.Get("/api/articles/search", handleSearchArticles(searchUC))
-	r.Get("/api/categories", handleListCategories(categoriesUC))
-	r.Post("/api/articles/{id}/bookmark", handleBookmarkArticle(bookmarkUC, auditUC))
-	r.Post("/api/fetch", handleFetchLatest(fetchUC))
-	r.Handle("/*", http.FileServer(http.Dir(staticDir)))
-
-	return r
-}
-
-func handleListArticles(uc *usecase.ListUsecase) http.HandlerFunc {
+// ListArticlesHandler は GET /api/articles を処理する。
+func ListArticlesHandler(uc *usecase.ListUsecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var mode usecase.ListMode
 		switch r.URL.Query().Get("mode") {
@@ -190,7 +152,8 @@ func handleListArticles(uc *usecase.ListUsecase) http.HandlerFunc {
 	}
 }
 
-func handleSearchArticles(uc *usecase.SearchUsecase) http.HandlerFunc {
+// SearchArticlesHandler は GET /api/articles/search を処理する。
+func SearchArticlesHandler(uc *usecase.SearchUsecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		keyword := r.URL.Query().Get("q")
 		if keyword == "" {
@@ -228,47 +191,8 @@ func handleSearchArticles(uc *usecase.SearchUsecase) http.HandlerFunc {
 	}
 }
 
-func handleListCategories(uc *usecase.ListCategoriesUsecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		categories, err := uc.Execute(r.Context())
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		if categories == nil {
-			categories = []string{}
-		}
-		writeJSON(w, http.StatusOK, categories)
-	}
-}
-
-// fetchResultDTO は最新フィード取得結果を JSON で表現するための DTO。
-type fetchResultDTO struct {
-	Saved   int `json:"saved"`
-	Skipped int `json:"skipped"`
-	Errors  int `json:"errors"`
-}
-
-func handleFetchLatest(fetchUC *usecase.FetchUsecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		result, err := fetchUC.ExecuteAll(r.Context())
-		if err != nil && len(result.Feeds) == 0 {
-			// フィード一覧の取得自体に失敗した場合のみ 500 として返す。
-			// 個々のフィード取得の失敗は saved/skipped/errors の件数で表現するため、
-			// その場合の err（ExecuteAll が TotalErrors()>0 のとき返す err）は無視してよい。
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-
-		writeJSON(w, http.StatusOK, fetchResultDTO{
-			Saved:   result.TotalSaved(),
-			Skipped: result.TotalSkipped(),
-			Errors:  result.TotalErrors(),
-		})
-	}
-}
-
-func handleBookmarkArticle(bookmarkUC *usecase.BookmarkUsecase, auditUC *usecase.AuditUsecase) http.HandlerFunc {
+// BookmarkArticleHandler は POST /api/articles/{id}/bookmark を処理する。
+func BookmarkArticleHandler(bookmarkUC *usecase.BookmarkUsecase, auditUC *usecase.AuditUsecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 		if err != nil {

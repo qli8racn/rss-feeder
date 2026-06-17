@@ -5,22 +5,25 @@ import (
 	"encoding/json"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/samber/do/v2"
+
+	adapteranthropic "github.com/qli8racn/rss-feeder/internal/adapter/driver/anthropic"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 )
 
-type PreferenceAgent struct {
+type preferenceAgent struct {
 	client anthropic.Client
 	reader articlerepo.Repository
 }
 
-func NewPreferenceAgent(r articlerepo.Repository) *PreferenceAgent {
-	return &PreferenceAgent{
+func NewPreferenceAgent(i do.Injector) (adapteranthropic.PreferenceAgent, error) {
+	return &preferenceAgent{
 		client: anthropic.NewClient(),
-		reader: r,
-	}
+		reader: do.MustInvoke[articlerepo.Repository](i),
+	}, nil
 }
 
-func (a *PreferenceAgent) Run(ctx context.Context) (string, error) {
+func (a *preferenceAgent) Run(ctx context.Context) (string, error) {
 	tools := []anthropic.ToolUnionParam{
 		{OfTool: &anthropic.ToolParam{
 			Name:        "fetch_bookmarked",
