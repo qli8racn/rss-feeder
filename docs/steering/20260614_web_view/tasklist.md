@@ -15,10 +15,6 @@
 - [x] `GET /api/articles` / `GET /api/articles/search` に `category` / `sort` / `order` / `page` / `per_page` 対応を追加し、レスポンスを `{articles, total, page, per_page}` 形式に変更する
 - [x] `GET /api/categories`（DISTINCT カテゴリ一覧）を新規実装する
 
-## テスト
-
-- [ ] serve ハンドラの統合テスト（任意・フェーズ外でも可）
-
 ## フォローアップ（このフェーズ外）
 
 - [x] `web/frontend/`（Vite + React + TypeScript + Tailwind CSS）の雛形を作成する
