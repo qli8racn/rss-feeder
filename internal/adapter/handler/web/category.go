@@ -6,7 +6,8 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
 
-func handleListCategories(uc *usecase.ListCategoriesUsecase) http.HandlerFunc {
+// ListCategoriesHandler は GET /api/categories を処理する。
+func ListCategoriesHandler(uc *usecase.ListCategoriesUsecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		categories, err := uc.Execute(r.Context())
 		if err != nil {

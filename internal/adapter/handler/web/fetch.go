@@ -13,7 +13,8 @@ type fetchResultDTO struct {
 	Errors  int `json:"errors"`
 }
 
-func handleFetchLatest(fetchUC *usecase.FetchUsecase) http.HandlerFunc {
+// FetchLatestHandler は POST /api/articles/fetch を処理する。
+func FetchLatestHandler(fetchUC *usecase.FetchUsecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		result, err := fetchUC.ExecuteAll(r.Context())
 		if err != nil && len(result.Feeds) == 0 {

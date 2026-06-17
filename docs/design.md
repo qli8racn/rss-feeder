@@ -67,6 +67,8 @@ rss-feeder/
 ├── cmd/
 │   ├── rss-feeder/
 │   │   └── main.go                              # Composition Root・samber/do コンテナ構築・サブコマンド登録
+│   ├── web/
+│   │   └── main.go                              # Composition Root・samber/do コンテナ構築・chi router 構築（ルート定義）
 │   └── agent/
 │       └── main.go                              # Claude エージェント用エントリポイント
 ├── internal/
@@ -121,12 +123,11 @@ rss-feeder/
 │   │       │   ├── check_article.go              # check-article サブコマンド（Hook 経由で呼び出し）
 │   │       │   ├── check_bookmarked.go          # check-bookmarked サブコマンド（Hook 経由で呼び出し）
 │   │       │   └── maintenance.go                # maintenance サブコマンド（Hook 経由で呼び出し）
-│   │       └── web/                             # cmd/web（HTTP JSON API）向けハンドラ
-│   │           ├── routes.go                     # NewMux（chi router 構築・ルート定義）
+│   │       └── web/                             # cmd/web（HTTP JSON API）向けハンドラ（ルート定義自体は cmd/web/main.go が持つ）
 │   │           ├── response.go                   # writeJSON・writeJSONError 共通ヘルパー
-│   │           ├── article.go                    # articleDTO・GET /api/articles・GET /api/articles/search・POST /api/articles/{id}/bookmark
-│   │           ├── category.go                   # GET /api/categories
-│   │           └── fetch.go                      # POST /api/articles/fetch（最新フィード取得）
+│   │           ├── article.go                    # articleDTO・ListArticlesHandler・SearchArticlesHandler・BookmarkArticleHandler
+│   │           ├── category.go                   # ListCategoriesHandler
+│   │           └── fetch.go                      # FetchLatestHandler（最新フィード取得）
 │   └── driver/
 │       ├── readerdb/                            # reader.db への接続・リポジトリ実装
 │       │   ├── client.go                        # DB 接続（sql.Open のみ）

@@ -108,7 +108,8 @@ func parseListQuery(r *http.Request) (category, sort, order string, page, perPag
 	return category, sort, order, page, perPage, nil
 }
 
-func handleListArticles(uc *usecase.ListUsecase) http.HandlerFunc {
+// ListArticlesHandler は GET /api/articles を処理する。
+func ListArticlesHandler(uc *usecase.ListUsecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var mode usecase.ListMode
 		switch r.URL.Query().Get("mode") {
@@ -151,7 +152,8 @@ func handleListArticles(uc *usecase.ListUsecase) http.HandlerFunc {
 	}
 }
 
-func handleSearchArticles(uc *usecase.SearchUsecase) http.HandlerFunc {
+// SearchArticlesHandler は GET /api/articles/search を処理する。
+func SearchArticlesHandler(uc *usecase.SearchUsecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		keyword := r.URL.Query().Get("q")
 		if keyword == "" {
@@ -189,7 +191,8 @@ func handleSearchArticles(uc *usecase.SearchUsecase) http.HandlerFunc {
 	}
 }
 
-func handleBookmarkArticle(bookmarkUC *usecase.BookmarkUsecase, auditUC *usecase.AuditUsecase) http.HandlerFunc {
+// BookmarkArticleHandler は POST /api/articles/{id}/bookmark を処理する。
+func BookmarkArticleHandler(bookmarkUC *usecase.BookmarkUsecase, auditUC *usecase.AuditUsecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 		if err != nil {
