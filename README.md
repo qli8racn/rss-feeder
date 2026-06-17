@@ -66,6 +66,7 @@ bin/rss-feeder add-feed https://another.example.com/rss
 | `bin/rss-agent summarize` | 最新 10 件の記事を AI で要約 |
 | `bin/rss-agent summarize --feed <url> --limit <n>` | 特定フィード・件数指定で要約 |
 | `bin/rss-agent preference` | ブックマーク済み記事から読書傾向を分析 |
+| `bin/rss-agent enrich [--limit <n>] [--force]` | 記事に要約・カテゴリを付与してDBに保存 |
 
 ## Web UI
 
