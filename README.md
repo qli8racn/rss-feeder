@@ -18,6 +18,7 @@ AI エージェント機能（`rss-agent`）で記事要約や読書傾向の分
 ```bash
 go mod tidy
 go build -o bin/rss-feeder ./cmd/rss-feeder
+go build -o bin/web        ./cmd/web
 GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -o bin/rss-agent -p 1 ./cmd/agent
 ```
 
@@ -66,12 +67,23 @@ bin/rss-feeder add-feed https://another.example.com/rss
 | `bin/rss-agent summarize --feed <url> --limit <n>` | 特定フィード・件数指定で要約 |
 | `bin/rss-agent preference` | ブックマーク済み記事から読書傾向を分析 |
 
+## Web UI
+
+ブラウザで記事を閲覧するための JSON API + フロントエンドを `cmd/web` で提供する（CLI とは別バイナリ）。
+
+```bash
+cd web/frontend && npm ci && npm run build  # web/static/ にビルド成果物を出力
+bin/web [--port 8080] [--static-dir web/static]
+```
+
+`GET /api/articles`・`GET /api/articles/search`・`POST /api/articles/{id}/bookmark`・`GET /api/categories`・`POST /api/articles/fetch` を提供する。API の詳細は [機能設計・技術仕様](docs/design.md) を参照。
+
 ## テスト
 
 ```bash
 go test ./internal/domain/...
 go test ./internal/usecase/...
-go test ./internal/driver/...
+go test $(go list ./internal/driver/... | grep -v internal/driver/anthropic)
 ```
 
 ## アーキテクチャ
@@ -79,18 +91,18 @@ go test ./internal/driver/...
 クリーンアーキテクチャ風の層構造で、依存方向は外側から内側への一方向。
 
 ```
-adapter(handler) -> usecase -> domain
-driver           -> adapter(interface)
+adapter(handler/cli, handler/web) -> usecase -> domain
+driver                            -> adapter(interface)
 ```
 
 | 層 | 役割 |
 |----|------|
 | `domain` | エンティティ（Article・Feed・AuditLog） |
 | `usecase` | ビジネスロジック（重複チェック・ブックマークトグルなど） |
-| `adapter` | usecase インターフェース定義・cobra ハンドラー |
+| `adapter` | usecase インターフェース定義・cobra ハンドラー（`handler/cli`）・HTTP ハンドラー（`handler/web`） |
 | `driver` | SQLite・HTTP・ファイル・Anthropic API の実装 |
 
-DI には `samber/do` を使用。`cmd/rss-feeder/main.go` が Composition Root。
+DI には `samber/do` を使用。`cmd/rss-feeder/main.go`・`cmd/web/main.go`・`cmd/agent/main.go` がそれぞれ独立した Composition Root。
 
 ## 主な依存ライブラリ
 
@@ -102,6 +114,8 @@ DI には `samber/do` を使用。`cmd/rss-feeder/main.go` が Composition Root�
 | `github.com/samber/do/v2` | DI コンテナ |
 | `github.com/anthropics/anthropic-sdk-go` | Claude API クライアント |
 | `github.com/spf13/viper` | `config.yml` の読み込み（`ANTHROPIC_API_KEY` 等） |
+| `github.com/go-chi/chi/v5` | Web UI（`cmd/web`）の HTTP ルーター |
+| `github.com/go-chi/cors` | Web UI の CORS ミドルウェア |
 
 ## Hooks
 

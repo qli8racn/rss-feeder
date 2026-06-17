@@ -12,6 +12,7 @@ Go 製 RSS リーダー CLI。
 ```bash
 go mod tidy
 go build -o bin/rss-feeder ./cmd/rss-feeder
+go build -o bin/web        ./cmd/web
 go build -o bin/rss-agent  ./cmd/agent
 ```
 
@@ -65,6 +66,16 @@ bin/rss-agent enrich [--limit <n>] [--force]           # 記事に要約・カ�
 
 `ANTHROPIC_API_KEY` が必要（`config.yml` の `anthropic_api_key` または環境変数で設定）。
 
+### Web UI（cmd/web）
+
+```bash
+cd web/frontend && npm ci && npm run build  # web/static/ にビルド成果物を出力
+bin/web [--port 8080] [--static-dir web/static]
+```
+
+`GET /api/articles`・`GET /api/articles/search`・`POST /api/articles/{id}/bookmark`・`GET /api/categories`・`POST /api/articles/fetch` を提供する（詳細は `docs/design.md`）。
+フロントエンドの動作確認方針（型チェック・ユニットテスト・ビルド確認のみ、ブラウザ目視確認はしない）は `CLAUDE.md` を参照。
+
 ---
 
 ## Test
@@ -72,7 +83,7 @@ bin/rss-agent enrich [--limit <n>] [--force]           # 記事に要約・カ�
 ```bash
 go test ./internal/domain/...
 go test ./internal/usecase/...
-go test ./internal/driver/...
+go test $(go list ./internal/driver/... | grep -v internal/driver/anthropic)
 ```
 
 ---

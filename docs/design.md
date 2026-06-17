@@ -1,8 +1,8 @@
 # 設計書（機能設計 + 技術仕様）
 
-## CLI コマンド一覧
+## コマンド・API 一覧
 
-### rss-feeder
+### rss-feeder（CLI）
 
 ```
 rss-feeder <command> [flags]
@@ -21,7 +21,28 @@ rss-feeder <command> [flags]
 
 各コマンドの詳細仕様は `docs/steering/` 以下の各フェーズディレクトリを参照。
 
-### rss-agent
+### cmd/web（Web API）
+
+```bash
+go build -o bin/web ./cmd/web
+./bin/web [--port <port>] [--static-dir <dir>]
+```
+
+| メソッド・パス | 概要 | フェーズ |
+|--------------|------|---------|
+| `GET /api/articles` | 記事一覧（`mode`/`category`/`sort`/`order`/`page`/`per_page` クエリ対応） | 9 |
+| `GET /api/articles/search` | キーワード全文検索（`q`/`bookmarked`/`category`/`sort`/`order`/`page`/`per_page` クエリ対応） | 9 |
+| `POST /api/articles/{id}/bookmark` | 記事のお気に入りをトグル（`audit_log` 記録含む） | 9 |
+| `GET /api/categories` | 設定済みカテゴリの一覧（DISTINCT） | 9 |
+| `POST /api/articles/fetch` | 登録済み全フィードを取得して DB に保存（CLI の `fetch` と同じ `FetchUsecase.ExecuteAll` を呼び出す） | 9 |
+| `/*`（メソッド不問） | `--static-dir` で指定したディレクトリ配下の静的ファイル配信（フロントエンドビルド成果物。`r.Handle` で登録） | 9 |
+
+詳細仕様は `docs/steering/20260614_web_view/` を参照（`POST /api/articles/fetch` はフェーズ完了後に追加されたため当該ドキュメントには未記載）。
+ハンドラの実体は `internal/adapter/handler/web/`（`ListArticlesHandler` 等）で、ルート登録自体は `cmd/web/main.go` が行う。
+
+フロントエンド（`web/frontend/`、Vite + React + TypeScript）は `npm run build` で `web/static/` に出力する。
+
+### rss-agent（CLI）
 
 ```
 rss-agent <command> [flags]
@@ -274,7 +295,7 @@ func main() {
     // cobra コマンド組み立て
     root := &cobra.Command{Use: "rss-feeder", Short: "RSS フィードを取得・管理する CLI ツール"}
     root.AddCommand(
-        cli.NewFetchCommand(listFeedsUC, fetchUC),
+        cli.NewFetchCommand(fetchUC),
         cli.NewListCommand(listUC),
         cli.NewBookmarkCommand(bookmarkUC),
         cli.NewResetCommand(resetUC),
@@ -371,9 +392,13 @@ func TestArticle_ToggleBookmark(t *testing.T) {
 internal/usecase/
   fetch_test.go            # 新規記事のみ保存される・重複はスキップされる
   list_test.go             # 未読フィルタ・全件・お気に入りフィルタが正しく委譲される
+  list_categories_test.go  # カテゴリ一覧（DISTINCT）取得ロジック
   bookmark_test.go         # トグル動作・存在しない ID のエラーハンドリング
   reset_test.go            # お気に入り記事が削除対象に含まれないことの確認
   search_test.go           # キーワード一致・0件・bookmarked フィルタ・エラーハンドリング
+  add_feed_test.go         # フィード登録ロジック
+  list_feeds_test.go       # フィード一覧取得ロジック
+  remove_feed_test.go      # フィード削除ロジック
   audit_test.go            # audit_log への記録ロジック
   check_article_test.go    # 記事 ID 存在確認ロジック
   check_bookmarked_test.go # お気に入り件数確認ロジック

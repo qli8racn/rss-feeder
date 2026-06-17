@@ -5,6 +5,7 @@
       "Bash(GOMAXPROCS=* GOFLAGS=* go *)",
       "Bash(bin/rss-feeder *)",
       "Bash(bin/rss-agent *)",
+      "Bash(bin/web *)",
       "Bash(git diff*)",
       "Bash(git status*)",
       "Bash(git commit*)",
