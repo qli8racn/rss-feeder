@@ -1,12 +1,24 @@
-name: CI
+name: CI (Go)
 
 on:
   push:
     branches-ignore:
       - main
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/ci-go.yml"
   pull_request:
     branches:
       - main
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/ci-go.yml"
 
 jobs:
   build-and-test:
