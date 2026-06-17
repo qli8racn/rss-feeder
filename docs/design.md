@@ -75,8 +75,8 @@ GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -p 1 -o bin/rss-agent ./cmd/ag
 ### 層の依存方向
 
 ```
-adapter(handler/cli, handler/web) → usecase → domain
-driver                            → adapter(interface)
+adapter(handler/cli, handler/web, handler/agent) → usecase → domain
+driver                                            → adapter(interface)
 ```
 
 `usecase` と `domain` は外側の実装（SQL・HTTP）を知らない。`driver` が `adapter` のインターフェースを実装することで依存を逆転させる。
@@ -91,7 +91,7 @@ rss-feeder/
 │   ├── web/
 │   │   └── main.go                              # Composition Root・samber/do コンテナ構築・chi router 構築（ルート定義）
 │   └── agent/
-│       └── main.go                              # Claude エージェント用エントリポイント
+│       └── main.go                              # Composition Root・samber/do コンテナ構築・サブコマンド登録（rss-agent）
 ├── internal/
 │   ├── domain/
 │   │   ├── article.go                           # Article エンティティ・ToggleBookmark() など
@@ -115,7 +115,10 @@ rss-feeder/
 │   │   ├── audit.go                             # audit_log 記録ロジック
 │   │   ├── check_article.go                     # 記事 ID 存在確認ロジック
 │   │   ├── check_bookmarked.go                  # お気に入り件数確認ロジック
-│   │   └── maintenance.go                       # DB VACUUM・整合性チェック
+│   │   ├── maintenance.go                       # DB VACUUM・整合性チェック
+│   │   ├── summarize.go                         # 記事要約（SummarizeAgent への薄いラッパー）
+│   │   ├── preference.go                        # 趣向分析（PreferenceAgent への薄いラッパー）
+│   │   └── enrich.go                            # 要約・カテゴリ付与（EnrichAgent への薄いラッパー）
 │   ├── adapter/
 │   │   ├── driver/
 │   │   │   ├── readerdb/
@@ -127,8 +130,12 @@ rss-feeder/
 │   │   │   │   │   └── dbmaintenance.go        # DBMaintenance interface
 │   │   │   │   └── feed/
 │   │   │   │       └── feed.go                 # FeedRepository interface（ErrAlreadyExists・ErrNotFound 定義）
-│   │   │   └── rss/
-│   │   │       └── rss_reader.go               # RSSReader interface
+│   │   │   ├── rss/
+│   │   │   │   └── rss_reader.go               # RSSReader interface
+│   │   │   └── anthropic/
+│   │   │       ├── summarize.go                # SummarizeAgent interface・SummarizeOptions
+│   │   │       ├── preference.go                # PreferenceAgent interface
+│   │   │       └── enrich.go                    # EnrichAgent interface・EnrichOptions
 │   │   └── handler/
 │   │       ├── cli/                             # rss-feeder（cobra）向けハンドラ
 │   │       │   ├── fetch.go                     # cobra コマンド → ListFeedsUsecase + FetchUsecase 呼び出し
@@ -144,11 +151,15 @@ rss-feeder/
 │   │       │   ├── check_article.go              # check-article サブコマンド（Hook 経由で呼び出し）
 │   │       │   ├── check_bookmarked.go          # check-bookmarked サブコマンド（Hook 経由で呼び出し）
 │   │       │   └── maintenance.go                # maintenance サブコマンド（Hook 経由で呼び出し）
-│   │       └── web/                             # cmd/web（HTTP JSON API）向けハンドラ（ルート定義自体は cmd/web/main.go が持つ）
-│   │           ├── response.go                   # writeJSON・writeJSONError 共通ヘルパー
-│   │           ├── article.go                    # articleDTO・ListArticlesHandler・SearchArticlesHandler・BookmarkArticleHandler
-│   │           ├── category.go                   # ListCategoriesHandler
-│   │           └── fetch.go                      # FetchLatestHandler（最新フィード取得）
+│   │       ├── web/                             # cmd/web（HTTP JSON API）向けハンドラ（ルート定義自体は cmd/web/main.go が持つ）
+│   │       │   ├── response.go                   # writeJSON・writeJSONError 共通ヘルパー
+│   │       │   ├── article.go                    # articleDTO・ListArticlesHandler・SearchArticlesHandler・BookmarkArticleHandler
+│   │       │   ├── category.go                   # ListCategoriesHandler
+│   │       │   └── fetch.go                       # FetchLatestHandler（最新フィード取得）
+│   │       └── agent/                            # rss-agent（cobra）向けハンドラ
+│   │           ├── summarize.go                   # summarize サブコマンド（--feed/--limit フラグ）
+│   │           ├── preference.go                  # preference サブコマンド
+│   │           └── enrich.go                      # enrich サブコマンド（--limit/--force フラグ）
 │   └── driver/
 │       ├── readerdb/                            # reader.db への接続・リポジトリ実装
 │       │   ├── client.go                        # DB 接続（sql.Open のみ）
@@ -162,11 +173,11 @@ rss-feeder/
 │       │       └── feed.go                     # FeedRepository 実装
 │       ├── rss/
 │       │   └── reader.go                       # RSSReader 実装（gofeed による HTTP Fetch）
-│       └── anthropic/                           # Claude API 連携（エージェント機能）
-│           ├── loop.go                          # エージェントループ
-│           ├── preference.go                    # 嗜好・設定管理
-│           ├── summarize.go                     # 記事要約
-│           └── enrich.go                        # 記事への要約・カテゴリ付与（DB保存）
+│       └── anthropic/                           # Claude API 連携（エージェント機能。adapter/driver/anthropic の各 interface を実装）
+│           ├── loop.go                          # エージェントループ（runAgentLoop・toArticleJSONList）
+│           ├── preference.go                    # preferenceAgent（PreferenceAgent 実装）
+│           ├── summarize.go                     # summarizeAgent（SummarizeAgent 実装）
+│           └── enrich.go                        # enrichAgent（EnrichAgent 実装、DB保存）
 ├── reader.db                                    # SQLite データベース（gitignore）
 ├── go.mod
 └── go.sum
@@ -253,7 +264,8 @@ Hook スクリプトは `sqlite3` コマンドを直接呼ばず、**Go バイ�
 ## DI 構成（samber/do）
 
 `main.go` に 1 つの `do.Injector` を置き、driver 層のプロバイダーを登録する。
-usecase 層は `do.MustInvoke` でリポジトリを取り出して直接構築し、handler/cli（または handler/web）に渡す。
+usecase 層は `do.MustInvoke` でリポジトリを取り出して直接構築し、handler/cli・handler/web・handler/agent に渡す。
+`cmd/agent/main.go` も同じ構造で、`internal/driver/anthropic` の各 Agent を `do.Provide` で登録し、`internal/usecase/{summarize,preference,enrich}.go` 経由で `handler/agent` のコマンドに渡す。
 
 ```go
 // cmd/rss-feeder/main.go
@@ -403,6 +415,9 @@ internal/usecase/
   check_article_test.go    # 記事 ID 存在確認ロジック
   check_bookmarked_test.go # お気に入り件数確認ロジック
   maintenance_test.go      # VACUUM・整合性チェックロジック
+  summarize_test.go        # SummarizeAgent への委譲・エラー伝播
+  preference_test.go       # PreferenceAgent への委譲・エラー伝播
+  enrich_test.go           # EnrichAgent への委譲・エラー伝播
 ```
 
 ```go

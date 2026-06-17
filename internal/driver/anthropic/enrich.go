@@ -7,25 +7,23 @@ import (
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/samber/do/v2"
+
+	adapteranthropic "github.com/qli8racn/rss-feeder/internal/adapter/driver/anthropic"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
-type EnrichAgent struct {
+type enrichAgent struct {
 	client anthropic.Client
 	repo   articlerepo.Repository
 }
 
-func NewEnrichAgent(r articlerepo.Repository) *EnrichAgent {
-	return &EnrichAgent{
+func NewEnrichAgent(i do.Injector) (adapteranthropic.EnrichAgent, error) {
+	return &enrichAgent{
 		client: anthropic.NewClient(),
-		repo:   r,
-	}
-}
-
-type EnrichOptions struct {
-	Limit int
-	Force bool
+		repo:   do.MustInvoke[articlerepo.Repository](i),
+	}, nil
 }
 
 type enrichResult struct {
@@ -37,7 +35,7 @@ type enrichResult struct {
 // Run は要約・カテゴリが未設定の記事に対して Claude に要約・カテゴリ分類させ、結果を DB に保存する。
 // Force が true の場合は要約済みの記事も含めた最新記事を対象に再処理する。
 // 処理した記事数を返す。
-func (a *EnrichAgent) Run(ctx context.Context, opts EnrichOptions) (int, error) {
+func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptions) (int, error) {
 	if opts.Limit == 0 {
 		opts.Limit = 10
 	}
@@ -80,7 +78,7 @@ func (a *EnrichAgent) Run(ctx context.Context, opts EnrichOptions) (int, error) 
 	return n, nil
 }
 
-func (a *EnrichAgent) summarizeAndCategorize(ctx context.Context, articles []domain.Article) ([]enrichResult, error) {
+func (a *enrichAgent) summarizeAndCategorize(ctx context.Context, articles []domain.Article) ([]enrichResult, error) {
 	type articleInput struct {
 		ID      int64  `json:"id"`
 		Title   string `json:"title"`
