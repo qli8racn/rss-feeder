@@ -10,11 +10,18 @@
 - [x] `web/static/index.html` プレースホルダー作成
 - [x] Web API エントリーポイント `cmd/web/main.go` を新規作成（CLIとは別バイナリ）
 
+## 実装タスク（追加・Figma デザイン反映、2026-06-17）
+
+- [ ] `GET /api/articles` / `GET /api/articles/search` に `category` / `sort` / `order` / `page` / `per_page` 対応を追加し、レスポンスを `{articles, total, page, per_page}` 形式に変更する
+- [ ] `GET /api/categories`（DISTINCT カテゴリ一覧）を新規実装する
+
 ## テスト
 
 - [ ] serve ハンドラの統合テスト（任意・フェーズ外でも可）
 
 ## フォローアップ（このフェーズ外）
 
-- [ ] figma-mcp でフロントエンド（HTML/CSS/JS）を生成し `web/static/` に配置
+- [ ] `web/frontend/`（Vite + React + TypeScript + Tailwind CSS）の雛形を作成する
+- [ ] figma-mcp で Figma デザインから React コンポーネントの初期コードを生成し、API 連携・状態管理を実装する（詳細は `docs/web-ui-spec.md` の「実装の進め方」参照）
+- [ ] `npm run build` の出力を `web/static/` に配置する
 - [ ] GitHub Copilot によるローカル / PR レビューの実践

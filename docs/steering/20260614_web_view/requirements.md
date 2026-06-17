@@ -26,8 +26,21 @@
 - 静的ファイル（フロントエンド）は `web/static/` 配下から配信される
 - 認証・認可は行わない（ローカル利用のみを想定）
 
+## 追加要件（Figma デザイン反映、2026-06-17）
+
+フロントエンドの記事一覧画面を Figma デザインに合わせて実装するため、API に以下を追加する。
+詳細な画面仕様は `docs/web-ui-spec.md` を参照。
+
+- `GET /api/articles` / `GET /api/articles/search` に以下のクエリパラメータを追加する
+  - `category`: カテゴリで絞り込み
+  - `sort`: `title` / `publisher` / `category` / `published_at`
+  - `order`: `asc` / `desc`
+  - `page`, `per_page`: ページネーション（デフォルト `per_page=25`）
+- 上記2エンドポイントのレスポンスを `{"articles": [...], "total": <int>, "page": <int>, "per_page": <int>}` の形式に変更する
+- カテゴリドロップダウンの選択肢生成用に `GET /api/categories`（DISTINCT な `category` 一覧を返す）を追加する
+
 ## スコープ外（このフェーズ）
 
-- フロントエンドの実装（figma-mcp で別途生成）
+- フロントエンドの実装（React + TypeScript（Vite + Tailwind CSS）。figma-mcp でコンポーネント初期コードを生成し別途実装する。詳細は `docs/web-ui-spec.md` 参照）
 - フィード管理（add-feed 等）の Web UI 化
 - リセット・要約などのその他コマンドの Web 化
