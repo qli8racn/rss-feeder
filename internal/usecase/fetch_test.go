@@ -40,6 +40,18 @@ func (m *mockArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]dom
 func (m *mockArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.Article, error) {
 	return nil, nil
 }
+func (m *mockArticleRepo) UpdateEnrichment(_ context.Context, _ int64, _, _ string) error {
+	return nil
+}
+func (m *mockArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {
+	return nil, nil
+}
+func (m *mockArticleRepo) FindFiltered(_ context.Context, _ articlerepo.ListFilter) ([]domain.Article, int64, error) {
+	return nil, 0, nil
+}
+func (m *mockArticleRepo) DistinctCategories(_ context.Context) ([]string, error) {
+	return nil, nil
+}
 
 type mockFeedRepo struct {
 	registerFn func(ctx context.Context, url string) error
@@ -148,4 +160,56 @@ type mockSaveErrRepo struct{ mockArticleRepo }
 
 func (m *mockSaveErrRepo) Save(_ context.Context, _ domain.Article) error {
 	return errors.New("disk full")
+}
+
+func TestFetchUsecase_ExecuteAll_NoFeeds(t *testing.T) {
+	uc := NewFetchUsecase(&mockArticleRepo{}, &mockFeedRepo{}, &mockRSSReader{})
+
+	result, err := uc.ExecuteAll(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Feeds) != 0 {
+		t.Errorf("Feeds: got %d, want 0", len(result.Feeds))
+	}
+}
+
+func TestFetchUsecase_ExecuteAll_ListFeedsError(t *testing.T) {
+	uc := NewFetchUsecase(&mockArticleRepo{}, &mockFeedRepo{
+		listAllFn: func(_ context.Context) ([]domain.Feed, error) {
+			return nil, errors.New("db unavailable")
+		},
+	}, &mockRSSReader{})
+
+	result, err := uc.ExecuteAll(context.Background())
+	if err == nil {
+		t.Error("expected error when listing feeds fails, got nil")
+	}
+	if len(result.Feeds) != 0 {
+		t.Errorf("Feeds: got %d, want 0", len(result.Feeds))
+	}
+}
+
+func TestFetchUsecase_ExecuteAll_FetchesRegisteredFeeds(t *testing.T) {
+	uc := NewFetchUsecase(&mockArticleRepo{}, &mockFeedRepo{
+		listAllFn: func(_ context.Context) ([]domain.Feed, error) {
+			return []domain.Feed{{FeedURL: "https://feed.example.com"}}, nil
+		},
+	}, &mockRSSReader{
+		articles: []domain.Article{{URL: "https://example.com/1", Title: "A"}},
+	})
+
+	result, err := uc.ExecuteAll(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Feeds) != 1 {
+		t.Fatalf("Feeds: got %d, want 1", len(result.Feeds))
+	}
+	if result.Feeds[0].FeedURL != "https://feed.example.com" {
+		t.Errorf("FeedURL: got %q, want %q", result.Feeds[0].FeedURL, "https://feed.example.com")
+	}
+	if result.TotalSaved() != 1 {
+		t.Errorf("Saved: got %d, want 1", result.TotalSaved())
+	}
 }

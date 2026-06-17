@@ -58,16 +58,70 @@ go build -o bin/rss-feeder-web ./cmd/web
   "published_at": "2026-06-14T00:00:00Z",
   "read": true,
   "bookmarked": false,
-  "fetched_at": "2026-06-14T01:00:00Z"
+  "fetched_at": "2026-06-14T01:00:00Z",
+  "publisher": "Example Times",
+  "thumbnail_url": "https://example.com/thumb.jpg",
+  "summary": "記事の要約",
+  "category": "Tech"
 }
 ```
+
+`publisher` / `thumbnail_url` / `summary` / `category` はフェーズ10（`docs/steering/20260614_article_metadata/`）で追加されたフィールド。未設定の記事では空文字になる。
 
 `domain.Article` に JSON タグを付与せず、`adapter/handler` 層で DTO に変換して返す（domain を外側の表現に依存させない）。
 
 ### 静的ファイル配信
 
 - `--static-dir` で指定したディレクトリを `/` 以下にそのまま配信する（`http.FileServer`）
-- フロントエンド（HTML/CSS/JS）は figma-mcp で別途生成し、このディレクトリに配置する
+- フロントエンドは React + TypeScript（Vite）で実装し、ビルド成果物をこのディレクトリに配置する（詳細は下記「フロントエンド構成」参照）
+
+### フロントエンド構成（React + TypeScript）
+
+```
+web/
+├── frontend/   # 開発で使うソースコード（Vite + React + TypeScript + Tailwind CSS、Git管理対象）
+│   ├── src/
+│   ├── package.json
+│   └── vite.config.ts
+└── static/     # ビルド成果物（npm run build の出力先。.gitignore 対象に変更予定）
+```
+
+- ソース: `web/frontend/`。コンポーネント初期コードは figma-mcp（`get_design_context`）で生成し、API連携・状態管理を手動で配線する（詳細は `docs/web-ui-spec.md` 参照）
+- ビルド: `npm run build`（Vite の `build.outDir` を `../static` に向け、`web/static/` に直接出力する）
+- 配信側（`cmd/web` / `--static-dir`）の変更は不要。ビルド済み静的アセットを配信するのみ
+- ルーティング不要（単一画面のため React Router 等は導入しない）。状態管理は `useState` / `useEffect` で十分とする
+- `web/static/` はビルド生成物のため `.gitignore` 対象とし、現行のプレースホルダー `index.html` は削除する
+- Go バイナリの成果物（`bin/`）とは別管理とする。`bin/` はルート直下のまま変更しない（既存の `.gitignore` で除外済み、`AGENTS.md` / `README.md` の既存ビルド手順とも整合させるため統合しない）
+
+## API 仕様（追加分・Figma デザイン反映）
+
+詳細な画面仕様は `docs/web-ui-spec.md` を参照。
+
+### `GET /api/articles` / `GET /api/articles/search`（拡張）
+
+| クエリパラメータ | 説明 |
+|------|------|
+| `category` | カテゴリで絞り込み |
+| `sort` | `title` / `publisher` / `category` / `published_at` |
+| `order` | `asc` / `desc`（デフォルト。既存 `FindAll` 等と同じ新着順） |
+| `page` | ページ番号（デフォルト 1） |
+| `per_page` | 1ページあたり件数（デフォルト 25） |
+
+レスポンス形式を配列から以下のオブジェクトに変更する：
+
+```json
+{
+  "articles": [ ... ],
+  "total": 55,
+  "page": 1,
+  "per_page": 25
+}
+```
+
+### `GET /api/categories`（新規）
+
+- 記事に設定済みの `category` を DISTINCT で取得し、JSON 配列で返す（カテゴリドロップダウンの選択肢生成用）
+- レスポンス例: `["AI", "Design", "Finance", "Science", "Tech", "Work"]`
 
 ## 実装方針
 

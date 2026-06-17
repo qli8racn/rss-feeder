@@ -31,8 +31,12 @@ rss-agent <command> [flags]
 |------------|----------------------------------------|------------------------|
 | `summarize` | `--feed <url>`, `--limit <n>`（デフォルト 10） | 最新記事を AI で要約 |
 | `preference` | — | ブックマーク済み記事から趣向を分析 |
+| `enrich` | `--limit <n>`（デフォルト 10）, `--force` | 記事に要約・カテゴリを付与してDBに保存 |
 
-`ANTHROPIC_API_KEY` 環境変数が必要。`cmd/agent/main.go` がエントリポイント。
+`ANTHROPIC_API_KEY` が必要（`internal/config/config.yml` の `anthropic_api_key` または環境変数）。
+`cmd/agent/main.go` がエントリポイントで、起動時に `internal/config.Load()` を呼び、
+`config.yml` に値があれば `ANTHROPIC_API_KEY` 環境変数にセットする。詳細は
+`docs/steering/20260615_config_apikey/` を参照。
 
 #### ビルド
 
@@ -70,6 +74,10 @@ rss-feeder/
 │   │   ├── article.go                           # Article エンティティ・ToggleBookmark() など
 │   │   ├── audit_log.go                         # AuditLog エンティティ
 │   │   └── feed.go                              # Feed エンティティ
+│   ├── config/
+│   │   ├── config.go                            # config.yml 読み込み（viper, ANTHROPIC_API_KEY 等）
+│   │   ├── config.example.yml                   # config.yml のテンプレート
+│   │   └── config.yml                           # API キー等のローカル設定（gitignore）
 │   ├── migration/
 │   │   └── migration.go                         # DB スキーマ作成（Run(*sql.DB) error）
 │   ├── usecase/
@@ -128,7 +136,8 @@ rss-feeder/
 │       └── anthropic/                           # Claude API 連携（エージェント機能）
 │           ├── loop.go                          # エージェントループ
 │           ├── preference.go                    # 嗜好・設定管理
-│           └── summarize.go                    # 記事要約
+│           ├── summarize.go                     # 記事要約
+│           └── enrich.go                        # 記事への要約・カテゴリ付与（DB保存）
 ├── reader.db                                    # SQLite データベース（gitignore）
 ├── go.mod
 └── go.sum
@@ -147,6 +156,7 @@ rss-feeder/
 | `github.com/anthropics/anthropic-sdk-go` | Claude API クライアント | エージェント機能・記事要約で使用 |
 | `github.com/go-chi/chi/v5` | HTTP ルーター | Web ビュー（`cmd/web`）のルーティング・ミドルウェア |
 | `github.com/go-chi/cors` | CORS ミドルウェア | figma-mcp 製フロントエンドを別ポートで開発する際の CORS 対応 |
+| `github.com/spf13/viper` | 設定ファイル読み込み | `config.yml` から `ANTHROPIC_API_KEY` 等を読み込む |
 
 ---
 

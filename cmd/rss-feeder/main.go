@@ -84,7 +84,7 @@ func main() {
 	}
 
 	root.AddCommand(
-		handler.NewFetchCommand(listFeedsUC, fetchUC),
+		handler.NewFetchCommand(fetchUC),
 		handler.NewListCommand(listUC),
 		handler.NewBookmarkCommand(bookmarkUC),
 		handler.NewResetCommand(resetUC),

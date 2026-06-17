@@ -18,3 +18,26 @@ func NewSearchUsecase(articleRepo articlerepo.Repository) *SearchUsecase {
 func (uc *SearchUsecase) Execute(ctx context.Context, keyword string, bookmarkedOnly bool) ([]domain.Article, error) {
 	return uc.articleRepo.Search(ctx, keyword, bookmarkedOnly)
 }
+
+// SearchFilterOptions は Web API（検索）向けのカテゴリ・並び替え・ページネーション条件を表す。
+type SearchFilterOptions struct {
+	Keyword        string
+	BookmarkedOnly bool
+	Category       string
+	Sort           string
+	Order          string
+	Page           int
+	PerPage        int
+}
+
+func (uc *SearchUsecase) ExecuteFiltered(ctx context.Context, opts SearchFilterOptions) ([]domain.Article, int64, error) {
+	return uc.articleRepo.FindFiltered(ctx, articlerepo.ListFilter{
+		Keyword:        opts.Keyword,
+		BookmarkedOnly: opts.BookmarkedOnly,
+		Category:       opts.Category,
+		Sort:           opts.Sort,
+		Order:          opts.Order,
+		Page:           opts.Page,
+		PerPage:        opts.PerPage,
+	})
+}

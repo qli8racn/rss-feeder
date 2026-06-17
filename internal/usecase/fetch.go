@@ -12,6 +12,7 @@ import (
 )
 
 type FeedFetchResult struct {
+	FeedURL string
 	Saved   []domain.Article
 	Skipped int
 	Err     error
@@ -78,15 +79,32 @@ func (uc *FetchUsecase) Execute(ctx context.Context, feedURLs []string) (FetchRe
 	return result, nil
 }
 
+// ExecuteAll は登録済みの全フィードを取得して DB に保存する。
+// CLI（fetch コマンド）と Web API（POST /api/fetch）はともに「登録済み全フィードの取得」を
+// 行うため、フィード一覧の取得から URL 抽出までをここに集約する。
+func (uc *FetchUsecase) ExecuteAll(ctx context.Context) (FetchResult, error) {
+	feeds, err := uc.feedRepo.ListAll(ctx)
+	if err != nil {
+		return FetchResult{}, fmt.Errorf("フィード一覧の取得に失敗: %w", err)
+	}
+
+	urls := make([]string, len(feeds))
+	for i, f := range feeds {
+		urls[i] = f.FeedURL
+	}
+
+	return uc.Execute(ctx, urls)
+}
+
 func (uc *FetchUsecase) fetchFeed(ctx context.Context, feedURL string) FeedFetchResult {
 	feedTitle, articles, err := uc.rssReader.Fetch(ctx, feedURL)
 	if err != nil {
-		return FeedFetchResult{Err: fmt.Errorf("フェッチ失敗: %w", err)}
+		return FeedFetchResult{FeedURL: feedURL, Err: fmt.Errorf("フェッチ失敗: %w", err)}
 	}
 
 	feedID, err := uc.feedRepo.Save(ctx, domain.Feed{FeedURL: feedURL, Title: feedTitle})
 	if err != nil {
-		return FeedFetchResult{Err: fmt.Errorf("フィード保存失敗: %w", err)}
+		return FeedFetchResult{FeedURL: feedURL, Err: fmt.Errorf("フィード保存失敗: %w", err)}
 	}
 
 	var saved []domain.Article
@@ -99,10 +117,10 @@ func (uc *FetchUsecase) fetchFeed(ctx context.Context, feedURL string) FeedFetch
 				skipped++
 				continue
 			}
-			return FeedFetchResult{Saved: saved, Skipped: skipped, Err: fmt.Errorf("記事保存失敗: %w", err)}
+			return FeedFetchResult{FeedURL: feedURL, Saved: saved, Skipped: skipped, Err: fmt.Errorf("記事保存失敗: %w", err)}
 		}
 		saved = append(saved, article)
 	}
 
-	return FeedFetchResult{Saved: saved, Skipped: skipped}
+	return FeedFetchResult{FeedURL: feedURL, Saved: saved, Skipped: skipped}
 }

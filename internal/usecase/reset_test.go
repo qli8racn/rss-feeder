@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
@@ -45,6 +46,18 @@ func (m *mockResetArticleRepo) FetchLatest(_ context.Context, _ int, _ string) (
 	return nil, nil
 }
 func (m *mockResetArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.Article, error) {
+	return nil, nil
+}
+func (m *mockResetArticleRepo) UpdateEnrichment(_ context.Context, _ int64, _, _ string) error {
+	return nil
+}
+func (m *mockResetArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {
+	return nil, nil
+}
+func (m *mockResetArticleRepo) FindFiltered(_ context.Context, _ articlerepo.ListFilter) ([]domain.Article, int64, error) {
+	return nil, 0, nil
+}
+func (m *mockResetArticleRepo) DistinctCategories(_ context.Context) ([]string, error) {
 	return nil, nil
 }
 

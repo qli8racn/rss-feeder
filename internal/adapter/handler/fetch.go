@@ -9,29 +9,22 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
 
-func NewFetchCommand(listFeedsUC *usecase.ListFeedsUsecase, fetchUC *usecase.FetchUsecase) *cobra.Command {
+func NewFetchCommand(fetchUC *usecase.FetchUsecase) *cobra.Command {
 	return &cobra.Command{
 		Use:   "fetch",
 		Short: "登録済みフィードを取得して DB に保存する",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			feeds, err := listFeedsUC.Execute(cmd.Context())
-			if err != nil {
-				return fmt.Errorf("フィード一覧の取得に失敗: %w", err)
+			result, err := fetchUC.ExecuteAll(cmd.Context())
+			if err != nil && len(result.Feeds) == 0 {
+				return err
 			}
-			if len(feeds) == 0 {
+			if len(result.Feeds) == 0 {
 				fmt.Fprintln(os.Stderr, msgNoFeeds)
 				return nil
 			}
 
-			urls := make([]string, len(feeds))
-			for i, f := range feeds {
-				urls[i] = f.FeedURL
-			}
-
-			result, err := fetchUC.Execute(cmd.Context(), urls)
-
 			for i, fr := range result.Feeds {
-				fmt.Printf("[%d/%d] %s\n", i+1, len(urls), urls[i])
+				fmt.Printf("[%d/%d] %s\n", i+1, len(result.Feeds), fr.FeedURL)
 				if fr.Err != nil {
 					fmt.Printf("  エラー: %v\n", fr.Err)
 					continue

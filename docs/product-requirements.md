@@ -44,6 +44,7 @@ Claude Code のエージェント・Hooks・SQLite の連携を段階的な機�
 | 7 | 記事の検索 | [20260608_search](steering/20260608_search/) |
 | 8 | フィード管理の SQLite 移行（add-feed / list-feeds / remove-feed） | [20260608_feed_management](steering/20260608_feed_management/) |
 | 9 | Web ブラウザでの記事閲覧（JSON API + 静的フロントエンド配信） | [20260614_web_view](steering/20260614_web_view/) |
+| 10 | 記事メタデータ拡充（出版元・サムネイル・要約・カテゴリ） | [20260614_article_metadata](steering/20260614_article_metadata/) |
 
 ---
 
@@ -90,6 +91,10 @@ CREATE TABLE articles (
   read         BOOLEAN DEFAULT 0,
   bookmarked   BOOLEAN DEFAULT 0,
   fetched_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  publisher    TEXT,
+  thumbnail_url TEXT,
+  summary      TEXT,
+  category     TEXT,
   FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
 );
 

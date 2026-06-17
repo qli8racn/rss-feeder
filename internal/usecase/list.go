@@ -7,6 +7,16 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
+// ListFilterOptions は Web API（記事一覧）向けの絞り込み・並び替え・ページネーション条件を表す。
+type ListFilterOptions struct {
+	Mode     ListMode
+	Category string
+	Sort     string
+	Order    string
+	Page     int
+	PerPage  int
+}
+
 type ListMode int
 
 const (
@@ -41,17 +51,51 @@ func (uc *ListUsecase) Execute(ctx context.Context, mode ListMode) ([]domain.Art
 		return nil, err
 	}
 
+	if err := uc.markUnreadAsRead(ctx, articles); err != nil {
+		return nil, err
+	}
+
+	return articles, nil
+}
+
+// ExecuteFiltered は Web API 向けに、カテゴリ・並び替え・ページネーションに対応した記事一覧を取得する。
+// Execute と同様、取得した記事のうち未読のものを既読としてマークする。
+func (uc *ListUsecase) ExecuteFiltered(ctx context.Context, opts ListFilterOptions) ([]domain.Article, int64, error) {
+	filter := articlerepo.ListFilter{
+		Category: opts.Category,
+		Sort:     opts.Sort,
+		Order:    opts.Order,
+		Page:     opts.Page,
+		PerPage:  opts.PerPage,
+	}
+	switch opts.Mode {
+	case ListModeBookmarked:
+		filter.BookmarkedOnly = true
+	case ListModeUnread:
+		filter.Unread = true
+	}
+
+	articles, total, err := uc.articleRepo.FindFiltered(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if err := uc.markUnreadAsRead(ctx, articles); err != nil {
+		return nil, 0, err
+	}
+
+	return articles, total, nil
+}
+
+func (uc *ListUsecase) markUnreadAsRead(ctx context.Context, articles []domain.Article) error {
 	var unreadIDs []int64
 	for _, a := range articles {
 		if !a.Read {
 			unreadIDs = append(unreadIDs, a.ID)
 		}
 	}
-	if len(unreadIDs) > 0 {
-		if err := uc.articleRepo.MarkAsRead(ctx, unreadIDs); err != nil {
-			return nil, err
-		}
+	if len(unreadIDs) == 0 {
+		return nil
 	}
-
-	return articles, nil
+	return uc.articleRepo.MarkAsRead(ctx, unreadIDs)
 }

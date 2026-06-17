@@ -28,12 +28,15 @@
       "Bash(cp *)",
       "Bash(mv *)",
       "Bash(mkdir *)",
-      "Bash(touch *)"
+      "Bash(touch *)",
+      "Bash(curl http://localhost:*)",
+      "Bash(curl -s http://localhost:*)",
+      "Bash(curl -s -o /dev/null -w * http://localhost:*)",
+      "Bash(curl -s -o * http://localhost:*)"
     ],
     "deny": [
       "Bash(git push*)",
       "Bash(git pull*)",
-      "Bash(curl *)",
       "Bash(wget *)",
       "Bash(rm -rf *)",
       "Bash(sudo *)",
