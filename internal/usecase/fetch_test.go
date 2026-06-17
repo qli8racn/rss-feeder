@@ -46,6 +46,12 @@ func (m *mockArticleRepo) UpdateEnrichment(_ context.Context, _ int64, _, _ stri
 func (m *mockArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {
 	return nil, nil
 }
+func (m *mockArticleRepo) FindFiltered(_ context.Context, _ articlerepo.ListFilter) ([]domain.Article, int64, error) {
+	return nil, 0, nil
+}
+func (m *mockArticleRepo) DistinctCategories(_ context.Context) ([]string, error) {
+	return nil, nil
+}
 
 type mockFeedRepo struct {
 	registerFn func(ctx context.Context, url string) error

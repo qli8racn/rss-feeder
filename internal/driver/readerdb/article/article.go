@@ -160,6 +160,83 @@ func (r *repository) CountBookmarked(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+func (r *repository) FindFiltered(ctx context.Context, filter articlerepo.ListFilter) ([]domain.Article, int64, error) {
+	var conditions []string
+	var args []any
+
+	if filter.Unread {
+		conditions = append(conditions, "read = 0")
+	}
+	if filter.BookmarkedOnly {
+		conditions = append(conditions, "bookmarked = 1")
+	}
+	if filter.Keyword != "" {
+		conditions = append(conditions, "(title LIKE ? OR content LIKE ?)")
+		like := "%" + filter.Keyword + "%"
+		args = append(args, like, like)
+	}
+	if filter.Category != "" {
+		conditions = append(conditions, "category = ?")
+		args = append(args, filter.Category)
+	}
+
+	where := ""
+	if len(conditions) > 0 {
+		where = " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	var total int64
+	countQ := "SELECT COUNT(*) FROM articles" + where
+	if err := r.db.QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	sortColumn := filter.Sort
+	if !articlerepo.ValidSortFields[sortColumn] {
+		sortColumn = "published_at"
+	}
+	orderDir := "DESC"
+	if filter.Order == "asc" {
+		orderDir = "ASC"
+	}
+
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := filter.PerPage
+	if perPage < 1 {
+		perPage = articlerepo.DefaultPerPage
+	}
+
+	q := fmt.Sprintf("SELECT %s FROM articles%s ORDER BY %s %s LIMIT ? OFFSET ?", articleColumns, where, sortColumn, orderDir)
+	queryArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
+
+	articles, err := r.queryArgs(ctx, q, queryArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	return articles, total, nil
+}
+
+func (r *repository) DistinctCategories(ctx context.Context) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT DISTINCT category FROM articles WHERE category != '' ORDER BY category ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var categories []string
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return nil, err
+		}
+		categories = append(categories, c)
+	}
+	return categories, rows.Err()
+}
+
 func (r *repository) query(ctx context.Context, q string) ([]domain.Article, error) {
 	return r.queryArgs(ctx, q)
 }

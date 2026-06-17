@@ -38,8 +38,9 @@ func main() {
 	searchUC := usecase.NewSearchUsecase(do.MustInvoke[articlerepo.Repository](i))
 	bookmarkUC := usecase.NewBookmarkUsecase(do.MustInvoke[articlerepo.Repository](i))
 	auditUC := usecase.NewAuditUsecase(do.MustInvoke[auditlogrepo.Repository](i))
+	categoriesUC := usecase.NewListCategoriesUsecase(do.MustInvoke[articlerepo.Repository](i))
 
-	mux := handler.NewMux(listUC, searchUC, bookmarkUC, auditUC, *staticDir)
+	mux := handler.NewMux(listUC, searchUC, bookmarkUC, auditUC, categoriesUC, *staticDir)
 
 	addr := fmt.Sprintf(":%d", *port)
 	fmt.Printf("Listening on http://localhost%s\n", addr)

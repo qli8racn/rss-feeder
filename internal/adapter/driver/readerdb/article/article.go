@@ -9,6 +9,29 @@ import (
 
 var ErrDuplicate = errors.New("duplicate article")
 
+// DefaultPerPage は ListFilter.PerPage 未指定時のデフォルト値（ハンドラ層・ドライバ層で共有する）。
+const DefaultPerPage = 25
+
+// ValidSortFields は ListFilter.Sort に指定可能な値（ハンドラ層の検証とドライバ層のSQLカラム解決で共有する正とする定義）。
+var ValidSortFields = map[string]bool{
+	"title":        true,
+	"publisher":    true,
+	"category":     true,
+	"published_at": true,
+}
+
+// ListFilter は Web API（記事一覧・検索）向けの絞り込み・並び替え・ページネーション条件を表す。
+type ListFilter struct {
+	Unread         bool
+	BookmarkedOnly bool
+	Keyword        string
+	Category       string
+	Sort           string // "title" | "publisher" | "category" | "published_at"
+	Order          string // "asc" | "desc"
+	Page           int
+	PerPage        int
+}
+
 type Repository interface {
 	Save(ctx context.Context, article domain.Article) error
 	FindAll(ctx context.Context) ([]domain.Article, error)
@@ -24,4 +47,6 @@ type Repository interface {
 	Search(ctx context.Context, keyword string, bookmarkedOnly bool) ([]domain.Article, error)
 	UpdateEnrichment(ctx context.Context, id int64, summary, category string) error
 	FindWithoutSummary(ctx context.Context, limit int) ([]domain.Article, error)
+	FindFiltered(ctx context.Context, filter ListFilter) ([]domain.Article, int64, error)
+	DistinctCategories(ctx context.Context) ([]string, error)
 }

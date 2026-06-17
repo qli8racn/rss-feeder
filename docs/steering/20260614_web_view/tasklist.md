@@ -12,8 +12,8 @@
 
 ## 実装タスク（追加・Figma デザイン反映、2026-06-17）
 
-- [ ] `GET /api/articles` / `GET /api/articles/search` に `category` / `sort` / `order` / `page` / `per_page` 対応を追加し、レスポンスを `{articles, total, page, per_page}` 形式に変更する
-- [ ] `GET /api/categories`（DISTINCT カテゴリ一覧）を新規実装する
+- [x] `GET /api/articles` / `GET /api/articles/search` に `category` / `sort` / `order` / `page` / `per_page` 対応を追加し、レスポンスを `{articles, total, page, per_page}` 形式に変更する
+- [x] `GET /api/categories`（DISTINCT カテゴリ一覧）を新規実装する
 
 ## テスト
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -432,6 +433,147 @@ func TestArticleRepository_FindWithoutSummary(t *testing.T) {
 	}
 	if results[0].Summary != "" {
 		t.Errorf("Summary should be empty, got %q", results[0].Summary)
+	}
+}
+
+func TestArticleRepository_FindFiltered_Category(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	a1 := makeArticle("https://example.com/1")
+	a2 := makeArticle("https://example.com/2")
+	if err := r.Save(ctx, a1); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, a2); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `UPDATE articles SET category = 'Tech' WHERE url = 'https://example.com/1'`); err != nil {
+		t.Fatalf("setup category: %v", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `UPDATE articles SET category = 'AI' WHERE url = 'https://example.com/2'`); err != nil {
+		t.Fatalf("setup category: %v", err)
+	}
+
+	articles, total, err := r.FindFiltered(ctx, articlerepo.ListFilter{Category: "Tech", PerPage: 25})
+	if err != nil {
+		t.Fatalf("FindFiltered: %v", err)
+	}
+	if total != 1 {
+		t.Errorf("total: got %d, want 1", total)
+	}
+	if len(articles) != 1 || articles[0].Category != "Tech" {
+		t.Errorf("articles: got %+v", articles)
+	}
+}
+
+func TestArticleRepository_FindFiltered_SortAndOrder(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	a1 := makeArticle("https://example.com/1")
+	a1.Title = "B"
+	a2 := makeArticle("https://example.com/2")
+	a2.Title = "A"
+	if err := r.Save(ctx, a1); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, a2); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	articles, _, err := r.FindFiltered(ctx, articlerepo.ListFilter{Sort: "title", Order: "asc", PerPage: 25})
+	if err != nil {
+		t.Fatalf("FindFiltered: %v", err)
+	}
+	if len(articles) != 2 || articles[0].Title != "A" || articles[1].Title != "B" {
+		t.Errorf("expected [A, B] order, got %+v", articles)
+	}
+}
+
+func TestArticleRepository_FindFiltered_Pagination(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	for i := 0; i < 5; i++ {
+		if err := r.Save(ctx, makeArticle(fmt.Sprintf("https://example.com/%d", i))); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+	}
+
+	articles, total, err := r.FindFiltered(ctx, articlerepo.ListFilter{Page: 2, PerPage: 2})
+	if err != nil {
+		t.Fatalf("FindFiltered: %v", err)
+	}
+	if total != 5 {
+		t.Errorf("total: got %d, want 5", total)
+	}
+	if len(articles) != 2 {
+		t.Errorf("page size: got %d, want 2", len(articles))
+	}
+}
+
+func TestArticleRepository_FindFiltered_UnreadAndBookmarked(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeArticle("https://example.com/2")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `UPDATE articles SET read = 1, bookmarked = 1 WHERE url = 'https://example.com/1'`); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	unread, _, err := r.FindFiltered(ctx, articlerepo.ListFilter{Unread: true, PerPage: 25})
+	if err != nil {
+		t.Fatalf("FindFiltered: %v", err)
+	}
+	if len(unread) != 1 || unread[0].URL != "https://example.com/2" {
+		t.Errorf("unread: got %+v", unread)
+	}
+
+	bookmarked, _, err := r.FindFiltered(ctx, articlerepo.ListFilter{BookmarkedOnly: true, PerPage: 25})
+	if err != nil {
+		t.Fatalf("FindFiltered: %v", err)
+	}
+	if len(bookmarked) != 1 || bookmarked[0].URL != "https://example.com/1" {
+		t.Errorf("bookmarked: got %+v", bookmarked)
+	}
+}
+
+func TestArticleRepository_DistinctCategories(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeArticle("https://example.com/2")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeArticle("https://example.com/3")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `UPDATE articles SET category = 'Tech' WHERE url = 'https://example.com/1'`); err != nil {
+		t.Fatalf("setup category: %v", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `UPDATE articles SET category = 'AI' WHERE url = 'https://example.com/2'`); err != nil {
+		t.Fatalf("setup category: %v", err)
+	}
+	// url 3 はカテゴリ未設定（空文字）のまま
+
+	categories, err := r.DistinctCategories(ctx)
+	if err != nil {
+		t.Fatalf("DistinctCategories: %v", err)
+	}
+	if len(categories) != 2 {
+		t.Fatalf("count: got %d, want 2 (got %+v)", len(categories), categories)
+	}
+	if categories[0] != "AI" || categories[1] != "Tech" {
+		t.Errorf("expected [AI, Tech] (alphabetical), got %+v", categories)
 	}
 }
 

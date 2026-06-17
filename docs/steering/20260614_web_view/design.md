@@ -103,7 +103,7 @@ web/
 |------|------|
 | `category` | カテゴリで絞り込み |
 | `sort` | `title` / `publisher` / `category` / `published_at` |
-| `order` | `asc`（デフォルト） / `desc` |
+| `order` | `asc` / `desc`（デフォルト。既存 `FindAll` 等と同じ新着順） |
 | `page` | ページ番号（デフォルト 1） |
 | `per_page` | 1ページあたり件数（デフォルト 25） |
 

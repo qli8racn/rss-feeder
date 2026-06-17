@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
@@ -14,6 +15,11 @@ type mockSearchArticleRepo struct {
 	// captured args
 	gotKeyword        string
 	gotBookmarkedOnly bool
+
+	filtered      []domain.Article
+	filteredTotal int64
+	filteredErr   error
+	gotFilter     articlerepo.ListFilter
 }
 
 func (m *mockSearchArticleRepo) Save(_ context.Context, _ domain.Article) error { return nil }
@@ -48,6 +54,13 @@ func (m *mockSearchArticleRepo) UpdateEnrichment(_ context.Context, _ int64, _, 
 	return nil
 }
 func (m *mockSearchArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {
+	return nil, nil
+}
+func (m *mockSearchArticleRepo) FindFiltered(_ context.Context, filter articlerepo.ListFilter) ([]domain.Article, int64, error) {
+	m.gotFilter = filter
+	return m.filtered, m.filteredTotal, m.filteredErr
+}
+func (m *mockSearchArticleRepo) DistinctCategories(_ context.Context) ([]string, error) {
 	return nil, nil
 }
 
@@ -105,6 +118,36 @@ func TestSearchUsecase_BookmarkedOnlyFilter(t *testing.T) {
 	}
 	if repo.gotBookmarkedOnly != true {
 		t.Error("bookmarkedOnly should be true")
+	}
+}
+
+func TestSearchUsecase_ExecuteFiltered_PassesThroughOptionsAndTotal(t *testing.T) {
+	repo := &mockSearchArticleRepo{
+		filtered:      []domain.Article{{ID: 1, Title: "Go入門"}},
+		filteredTotal: 7,
+	}
+	uc := NewSearchUsecase(repo)
+
+	articles, total, err := uc.ExecuteFiltered(context.Background(), SearchFilterOptions{
+		Keyword:        "Go",
+		BookmarkedOnly: true,
+		Category:       "Tech",
+		Sort:           "published_at",
+		Order:          "desc",
+		Page:           1,
+		PerPage:        25,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 7 {
+		t.Errorf("total: got %d, want 7", total)
+	}
+	if len(articles) != 1 {
+		t.Errorf("articles: got %d, want 1", len(articles))
+	}
+	if repo.gotFilter.Keyword != "Go" || !repo.gotFilter.BookmarkedOnly || repo.gotFilter.Category != "Tech" {
+		t.Errorf("filter not passed through correctly: %+v", repo.gotFilter)
 	}
 }
 

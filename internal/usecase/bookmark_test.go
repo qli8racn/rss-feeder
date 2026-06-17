@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
@@ -55,6 +56,12 @@ func (m *mockBookmarkArticleRepo) FindWithoutSummary(_ context.Context, _ int) (
 	return nil, nil
 }
 func (m *mockBookmarkArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.Article, error) {
+	return nil, nil
+}
+func (m *mockBookmarkArticleRepo) FindFiltered(_ context.Context, _ articlerepo.ListFilter) ([]domain.Article, int64, error) {
+	return nil, 0, nil
+}
+func (m *mockBookmarkArticleRepo) DistinctCategories(_ context.Context) ([]string, error) {
 	return nil, nil
 }
 
