@@ -1,7 +1,7 @@
 import type { Article, SortField, SortOrder } from '../types'
 import { BookmarkIcon } from './icons'
-import { formatDate } from '../utils/date'
-import { categoryStyle } from '../utils/category'
+import { formatDate } from '../domain/date'
+import { categoryStyle } from '../domain/category'
 
 interface ArticleTableProps {
   articles: Article[]

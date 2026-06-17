@@ -12,6 +12,7 @@ const SORT_OPTIONS: { label: string; sort: SortField; order: SortOrder }[] = [
 ]
 
 interface SearchFilterBarProps {
+  initialKeyword: string
   onKeywordCommit: (value: string) => void
   category: string
   onCategoryChange: (value: string) => void
@@ -22,6 +23,7 @@ interface SearchFilterBarProps {
 }
 
 export default function SearchFilterBar({
+  initialKeyword,
   onKeywordCommit,
   category,
   onCategoryChange,
@@ -30,7 +32,7 @@ export default function SearchFilterBar({
   order,
   onSortOrderChange,
 }: SearchFilterBarProps) {
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(initialKeyword)
 
   // 入力中の毎キー入力でAPIを呼ばないよう、確定値は親へデバウンスして伝播する
   useEffect(() => {

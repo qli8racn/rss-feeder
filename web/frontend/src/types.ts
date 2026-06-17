@@ -24,3 +24,5 @@ export interface ArticlesResponse {
 
 export type SortField = 'title' | 'publisher' | 'category' | 'published_at'
 export type SortOrder = 'asc' | 'desc'
+
+export const SORT_FIELDS: readonly SortField[] = ['title', 'publisher', 'category', 'published_at']

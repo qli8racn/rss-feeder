@@ -24,7 +24,7 @@
 - [x] `web/frontend/`（Vite + React + TypeScript + Tailwind CSS）の雛形を作成する
 - [x] figma-mcp で Figma デザインから React コンポーネントの初期コードを生成し、API 連携・状態管理を実装する（詳細は `docs/web-ui-spec.md` の「実装の進め方」参照）
 - [x] `npm run build` の出力を `web/static/` に配置する
-- [ ] GitHub Copilot によるローカル / PR レビューの実践
-- [ ] Web UI で使用中の検索条件（`q` / `category` / `sort` / `order` / `page` など）を URL クエリに保持する
+- [x] GitHub Copilot によるローカル / PR レビューの実践
+- [x] Web UI で使用中の検索条件（`q` / `category` / `sort` / `order` / `page` など）を URL クエリに保持する
 - [ ] コード規約やアーキテクチャ仕様を `docs/web-ui-spec.md` に記載する
 - [ ] 不必要な状態管理の削除・コンポーネントの最適化を行う

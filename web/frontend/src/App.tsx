@@ -5,18 +5,21 @@ import ArticleTable from './components/ArticleTable'
 import Pagination from './components/Pagination'
 import Footer from './components/Footer'
 import { fetchArticles, fetchCategories, searchArticles, toggleBookmark } from './api'
+import { parseFilterState } from './domain/filter'
+import { syncFilterStateToURL } from './usecase/syncFilterStateToURL'
 import type { Article, SortField, SortOrder } from './types'
 
 function App() {
+  const [initialFilters] = useState(() => parseFilterState(window.location.search))
   const [articles, setArticles] = useState<Article[]>([])
   const [total, setTotal] = useState(0)
   const [perPage, setPerPage] = useState(25)
-  const [page, setPage] = useState(1)
-  const [keyword, setKeyword] = useState('')
-  const [category, setCategory] = useState('')
-  const [sort, setSort] = useState<SortField>('published_at')
-  const [order, setOrder] = useState<SortOrder>('desc')
-  const [bookmarkedOnly, setBookmarkedOnly] = useState(false)
+  const [page, setPage] = useState(initialFilters.page)
+  const [keyword, setKeyword] = useState(initialFilters.keyword)
+  const [category, setCategory] = useState(initialFilters.category)
+  const [sort, setSort] = useState<SortField>(initialFilters.sort)
+  const [order, setOrder] = useState<SortOrder>(initialFilters.order)
+  const [bookmarkedOnly, setBookmarkedOnly] = useState(initialFilters.bookmarkedOnly)
   const [bookmarkedTotal, setBookmarkedTotal] = useState(0)
   const [categories, setCategories] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -74,6 +77,10 @@ function App() {
     }
   }, [keyword, category, sort, order, page, bookmarkedOnly])
 
+  useEffect(() => {
+    syncFilterStateToURL({ keyword, category, sort, order, bookmarkedOnly, page })
+  }, [keyword, category, sort, order, bookmarkedOnly, page])
+
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / perPage)), [total, perPage])
 
   const handleToggleBookmark = async (id: number) => {
@@ -95,6 +102,7 @@ function App() {
       />
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <SearchFilterBar
+          initialKeyword={initialFilters.keyword}
           onKeywordCommit={setKeyword}
           category={category}
           onCategoryChange={setCategory}
