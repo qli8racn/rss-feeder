@@ -1,0 +1,26 @@
+export interface Article {
+  id: number
+  feed_id: number
+  feed_url: string
+  url: string
+  title: string
+  content: string
+  published_at: string
+  read: boolean
+  bookmarked: boolean
+  fetched_at: string
+  publisher: string
+  thumbnail_url: string
+  summary: string
+  category: string
+}
+
+export interface ArticlesResponse {
+  articles: Article[]
+  total: number
+  page: number
+  per_page: number
+}
+
+export type SortField = 'title' | 'publisher' | 'category' | 'published_at'
+export type SortOrder = 'asc' | 'desc'
