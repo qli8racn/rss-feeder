@@ -5,35 +5,17 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
+	"github.com/qli8racn/rss-feeder/internal/adapter/handler/web/openapi"
 	"github.com/qli8racn/rss-feeder/internal/domain"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
 
-// articleDTO は記事を JSON で表現するための DTO。
-type articleDTO struct {
-	ID           int64     `json:"id"`
-	FeedID       int64     `json:"feed_id"`
-	FeedURL      string    `json:"feed_url"`
-	URL          string    `json:"url"`
-	Title        string    `json:"title"`
-	Content      string    `json:"content"`
-	PublishedAt  time.Time `json:"published_at"`
-	Read         bool      `json:"read"`
-	Bookmarked   bool      `json:"bookmarked"`
-	FetchedAt    time.Time `json:"fetched_at"`
-	Publisher    string    `json:"publisher"`
-	ThumbnailURL string    `json:"thumbnail_url"`
-	Summary      string    `json:"summary"`
-	Category     string    `json:"category"`
-}
-
-func toArticleDTO(a domain.Article) articleDTO {
-	return articleDTO{
+func toArticleDTO(a domain.Article) openapi.Article {
+	return openapi.Article{
 		ID:           a.ID,
 		FeedID:       a.FeedID,
 		FeedURL:      a.FeedURL,
@@ -51,20 +33,12 @@ func toArticleDTO(a domain.Article) articleDTO {
 	}
 }
 
-func toArticleDTOs(articles []domain.Article) []articleDTO {
-	dtos := make([]articleDTO, len(articles))
+func toArticleDTOs(articles []domain.Article) []openapi.Article {
+	dtos := make([]openapi.Article, len(articles))
 	for i, a := range articles {
 		dtos[i] = toArticleDTO(a)
 	}
 	return dtos
-}
-
-// pagedArticlesDTO は記事一覧（ページネーション付き）を JSON で表現するための DTO。
-type pagedArticlesDTO struct {
-	Articles []articleDTO `json:"articles"`
-	Total    int64        `json:"total"`
-	Page     int          `json:"page"`
-	PerPage  int          `json:"per_page"`
 }
 
 // parseListQuery は記事一覧・検索 API に共通の category/sort/order/page/per_page クエリパラメータを解析する。
@@ -73,19 +47,18 @@ func parseListQuery(r *http.Request) (category, sort, order string, page, perPag
 
 	sort = r.URL.Query().Get("sort")
 	if sort == "" {
-		sort = "published_at"
+		sort = string(openapi.SortPublishedAt)
 	} else if !articlerepo.ValidSortFields[sort] {
 		return "", "", "", 0, 0, fmt.Errorf("sort は title, publisher, category, published_at のいずれかを指定してください")
 	}
 
-	order = r.URL.Query().Get("order")
-	switch order {
-	case "":
-		order = "desc"
-	case "asc", "desc":
-	default:
+	orderParam := openapi.Order(r.URL.Query().Get("order"))
+	if orderParam == "" {
+		orderParam = openapi.OrderDesc
+	} else if !orderParam.Valid() {
 		return "", "", "", 0, 0, fmt.Errorf("order は asc, desc のいずれかを指定してください")
 	}
+	order = string(orderParam)
 
 	page = 1
 	if v := r.URL.Query().Get("page"); v != "" {
@@ -111,17 +84,22 @@ func parseListQuery(r *http.Request) (category, sort, order string, page, perPag
 // ListArticlesHandler は GET /api/articles を処理する。
 func ListArticlesHandler(uc *usecase.ListUsecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var mode usecase.ListMode
-		switch r.URL.Query().Get("mode") {
-		case "unread":
-			mode = usecase.ListModeUnread
-		case "bookmarked":
-			mode = usecase.ListModeBookmarked
-		case "", "all":
-			mode = usecase.ListModeAll
-		default:
+		modeParam := openapi.Mode(r.URL.Query().Get("mode"))
+		if modeParam == "" {
+			modeParam = openapi.ModeAll
+		} else if !modeParam.Valid() {
 			writeJSONError(w, http.StatusBadRequest, "mode は all, unread, bookmarked のいずれかを指定してください")
 			return
+		}
+
+		var mode usecase.ListMode
+		switch modeParam {
+		case openapi.ModeUnread:
+			mode = usecase.ListModeUnread
+		case openapi.ModeBookmarked:
+			mode = usecase.ListModeBookmarked
+		default:
+			mode = usecase.ListModeAll
 		}
 
 		category, sort, order, page, perPage, err := parseListQuery(r)
@@ -143,7 +121,7 @@ func ListArticlesHandler(uc *usecase.ListUsecase) http.HandlerFunc {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, pagedArticlesDTO{
+		writeJSON(w, http.StatusOK, openapi.PagedArticles{
 			Articles: toArticleDTOs(articles),
 			Total:    total,
 			Page:     page,
@@ -182,7 +160,7 @@ func SearchArticlesHandler(uc *usecase.SearchUsecase) http.HandlerFunc {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, pagedArticlesDTO{
+		writeJSON(w, http.StatusOK, openapi.PagedArticles{
 			Articles: toArticleDTOs(articles),
 			Total:    total,
 			Page:     page,

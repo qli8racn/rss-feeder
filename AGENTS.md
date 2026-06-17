@@ -76,6 +76,13 @@ bin/web [--port 8080] [--static-dir web/static]
 `GET /api/articles`・`GET /api/articles/search`・`POST /api/articles/{id}/bookmark`・`GET /api/categories`・`POST /api/articles/fetch` を提供する（詳細は `docs/design.md`）。
 フロントエンドの動作確認方針（型チェック・ユニットテスト・ビルド確認のみ、ブラウザ目視確認はしない）は `CLAUDE.md` を参照。
 
+API 仕様は `docs/openapi.yaml`（OpenAPI 3.0）で管理する。仕様変更時は以下を再生成すること（詳細は `docs/design.md`）。
+
+```bash
+go generate ./internal/adapter/handler/web/openapi/...                          # Go 側の型（internal/adapter/handler/web/openapi/types.gen.go）
+cd web/frontend && npm run generate:api                                         # フロントエンド側の型（src/api/schema.gen.ts）
+```
+
 ---
 
 ## Test

@@ -45,6 +45,8 @@ Claude Code のエージェント・Hooks・SQLite の連携を段階的な機�
 | 8 | フィード管理の SQLite 移行（add-feed / list-feeds / remove-feed） | [20260608_feed_management](steering/20260608_feed_management/) |
 | 9 | Web ブラウザでの記事閲覧（JSON API + 静的フロントエンド配信） | [20260614_web_view](steering/20260614_web_view/) |
 | 10 | 記事メタデータ拡充（出版元・サムネイル・要約・カテゴリ） | [20260614_article_metadata](steering/20260614_article_metadata/) |
+| 11 | 設定ファイルによる ANTHROPIC_API_KEY 管理 | [20260615_config_apikey](steering/20260615_config_apikey/) |
+| 12 | OpenAPI による API 仕様管理とコード生成 | [20260617_openapi_codegen](steering/20260617_openapi_codegen/) |
 
 ---
 

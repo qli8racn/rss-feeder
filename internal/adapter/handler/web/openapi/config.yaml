@@ -1,0 +1,8 @@
+package: openapi
+generate:
+  models: true
+output-options:
+  name-normalizer: ToCamelCaseWithInitialisms
+compatibility:
+  old-enum-conflicts: true   # Mode/Sort/Order の定数名に ModeAll 等のプレフィックスを残す
+output: types.gen.go

@@ -42,6 +42,26 @@ go build -o bin/web ./cmd/web
 
 フロントエンド（`web/frontend/`、Vite + React + TypeScript）は `npm run build` で `web/static/` に出力する。
 
+#### API 仕様（OpenAPI）とコード生成
+
+`cmd/web` の JSON API 仕様は `docs/openapi.yaml`（OpenAPI 3.0）で一元管理する。エンドポイント追加・変更時は
+まず `docs/openapi.yaml` を更新し、以下のコマンドで Go・フロントエンド双方の型を再生成する。
+
+```bash
+go generate ./internal/adapter/handler/web/openapi/...   # internal/adapter/handler/web/openapi/types.gen.go を再生成
+cd web/frontend && npm run generate:api                  # src/api/schema.gen.ts を再生成
+```
+
+- Go 側は `oapi-codegen`（`go tool oapi-codegen`、`go.mod` の `tool` ディレクティブで管理）を使い、
+  `internal/adapter/handler/web/openapi/config.yaml` の設定で型（`models: true`）のみを生成する。
+  ルーティング・ハンドラ実装（chi）は既存のまま変更しない。生成された `openapi.Article` / `openapi.PagedArticles` /
+  `openapi.FetchResult` / `openapi.Error` を `internal/adapter/handler/web/` 配下のハンドラが DTO として利用する。
+- フロントエンド側は `openapi-typescript` を使い、`web/frontend/src/api/schema.gen.ts` に型定義のみを生成する。
+  既存の `web/frontend/src/api.ts`（fetch ラッパー）・`web/frontend/src/types.ts`（手書き型）の実装は変更しない。
+- 生成ファイル（`*.gen.go` / `*.gen.ts`）はリポジトリにコミットし、コード生成ツールが無い環境でも
+  `go build` / `npm run build` がそのまま通る状態を維持する。
+- 詳細は `docs/steering/20260617_openapi_codegen/` を参照。
+
 ### rss-agent（CLI）
 
 ```
@@ -153,9 +173,13 @@ rss-feeder/
 │   │       │   └── maintenance.go                # maintenance サブコマンド（Hook 経由で呼び出し）
 │   │       ├── web/                             # cmd/web（HTTP JSON API）向けハンドラ（ルート定義自体は cmd/web/main.go が持つ）
 │   │       │   ├── response.go                   # writeJSON・writeJSONError 共通ヘルパー
-│   │       │   ├── article.go                    # articleDTO・ListArticlesHandler・SearchArticlesHandler・BookmarkArticleHandler
+│   │       │   ├── article.go                    # ListArticlesHandler・SearchArticlesHandler・BookmarkArticleHandler（DTO は openapi パッケージの生成型）
 │   │       │   ├── category.go                   # ListCategoriesHandler
-│   │       │   └── fetch.go                       # FetchLatestHandler（最新フィード取得）
+│   │       │   ├── fetch.go                       # FetchLatestHandler（最新フィード取得）
+│   │       │   └── openapi/                       # docs/openapi.yaml から生成された型（oapi-codegen、DO NOT EDIT）
+│   │       │       ├── config.yaml                # oapi-codegen 設定（models のみ生成）
+│   │       │       ├── generate.go                # go:generate ディレクティブ
+│   │       │       └── types.gen.go                # Article・PagedArticles・FetchResult・Error 等
 │   │       └── agent/                            # rss-agent（cobra）向けハンドラ
 │   │           ├── summarize.go                   # summarize サブコマンド（--feed/--limit フラグ）
 │   │           ├── preference.go                  # preference サブコマンド
@@ -197,6 +221,7 @@ rss-feeder/
 | `github.com/go-chi/chi/v5` | HTTP ルーター | Web ビュー（`cmd/web`）のルーティング・ミドルウェア |
 | `github.com/go-chi/cors` | CORS ミドルウェア | figma-mcp 製フロントエンドを別ポートで開発する際の CORS 対応 |
 | `github.com/spf13/viper` | 設定ファイル読み込み | `config.yml` から `ANTHROPIC_API_KEY` 等を読み込む |
+| `github.com/oapi-codegen/oapi-codegen/v2`（tool） | OpenAPI → Go 型生成 | `docs/openapi.yaml` から `internal/adapter/handler/web/openapi` の型を生成。`go.mod` の `tool` ディレクティブで管理し、ランタイム依存にはしない |
 
 ---
 

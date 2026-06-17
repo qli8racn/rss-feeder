@@ -3,15 +3,9 @@ package web
 import (
 	"net/http"
 
+	"github.com/qli8racn/rss-feeder/internal/adapter/handler/web/openapi"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
-
-// fetchResultDTO は最新フィード取得結果を JSON で表現するための DTO。
-type fetchResultDTO struct {
-	Saved   int `json:"saved"`
-	Skipped int `json:"skipped"`
-	Errors  int `json:"errors"`
-}
 
 // FetchLatestHandler は POST /api/articles/fetch を処理する。
 func FetchLatestHandler(fetchUC *usecase.FetchUsecase) http.HandlerFunc {
@@ -25,7 +19,7 @@ func FetchLatestHandler(fetchUC *usecase.FetchUsecase) http.HandlerFunc {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, fetchResultDTO{
+		writeJSON(w, http.StatusOK, openapi.FetchResult{
 			Saved:   result.TotalSaved(),
 			Skipped: result.TotalSkipped(),
 			Errors:  result.TotalErrors(),
