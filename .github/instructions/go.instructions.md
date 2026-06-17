@@ -15,5 +15,5 @@ applyTo: "**/*.go"
   ```
 - ビルド確認:
   ```bash
-  go build -o bin/rss-feeder-web ./cmd/web
+  go build -o bin/web ./cmd/web
   ```
