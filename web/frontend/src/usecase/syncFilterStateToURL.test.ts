@@ -11,6 +11,7 @@ describe('syncFilterStateToURL', () => {
       order: 'desc',
       bookmarkedOnly: false,
       page: 1,
+      perPage: 25,
     })
     expect(window.location.search).toBe('')
   })
@@ -23,10 +24,12 @@ describe('syncFilterStateToURL', () => {
       order: 'asc',
       bookmarkedOnly: true,
       page: 2,
+      perPage: 50,
     })
     const params = new URLSearchParams(window.location.search)
     expect(params.get('q')).toBe('react')
     expect(params.get('page')).toBe('2')
+    expect(params.get('per_page')).toBe('50')
   })
 
   it('round-trips through parseFilterState', () => {
@@ -37,6 +40,7 @@ describe('syncFilterStateToURL', () => {
       order: 'asc' as const,
       bookmarkedOnly: true,
       page: 5,
+      perPage: 100 as const,
     }
     syncFilterStateToURL(original)
     expect(parseFilterState(window.location.search)).toEqual(original)

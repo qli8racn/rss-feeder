@@ -128,7 +128,7 @@ func writeJSONError(w http.ResponseWriter, status int, message string) {
 }
 
 // NewMux は Web ブラウザから記事を閲覧するための HTTP ハンドラ（JSON API + 静的ファイル配信）を構築する。
-func NewMux(listUC *usecase.ListUsecase, searchUC *usecase.SearchUsecase, bookmarkUC *usecase.BookmarkUsecase, auditUC *usecase.AuditUsecase, categoriesUC *usecase.ListCategoriesUsecase, staticDir string) http.Handler {
+func NewMux(listUC *usecase.ListUsecase, searchUC *usecase.SearchUsecase, bookmarkUC *usecase.BookmarkUsecase, auditUC *usecase.AuditUsecase, categoriesUC *usecase.ListCategoriesUsecase, fetchUC *usecase.FetchUsecase, staticDir string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -141,6 +141,7 @@ func NewMux(listUC *usecase.ListUsecase, searchUC *usecase.SearchUsecase, bookma
 	r.Get("/api/articles/search", handleSearchArticles(searchUC))
 	r.Get("/api/categories", handleListCategories(categoriesUC))
 	r.Post("/api/articles/{id}/bookmark", handleBookmarkArticle(bookmarkUC, auditUC))
+	r.Post("/api/fetch", handleFetchLatest(fetchUC))
 	r.Handle("/*", http.FileServer(http.Dir(staticDir)))
 
 	return r
@@ -238,6 +239,32 @@ func handleListCategories(uc *usecase.ListCategoriesUsecase) http.HandlerFunc {
 			categories = []string{}
 		}
 		writeJSON(w, http.StatusOK, categories)
+	}
+}
+
+// fetchResultDTO は最新フィード取得結果を JSON で表現するための DTO。
+type fetchResultDTO struct {
+	Saved   int `json:"saved"`
+	Skipped int `json:"skipped"`
+	Errors  int `json:"errors"`
+}
+
+func handleFetchLatest(fetchUC *usecase.FetchUsecase) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		result, err := fetchUC.ExecuteAll(r.Context())
+		if err != nil && len(result.Feeds) == 0 {
+			// フィード一覧の取得自体に失敗した場合のみ 500 として返す。
+			// 個々のフィード取得の失敗は saved/skipped/errors の件数で表現するため、
+			// その場合の err（ExecuteAll が TotalErrors()>0 のとき返す err）は無視してよい。
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		writeJSON(w, http.StatusOK, fetchResultDTO{
+			Saved:   result.TotalSaved(),
+			Skipped: result.TotalSkipped(),
+			Errors:  result.TotalErrors(),
+		})
 	}
 }
 

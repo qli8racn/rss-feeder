@@ -11,10 +11,14 @@ import (
 
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	auditlogrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/auditlog"
+	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
+	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/adapter/handler"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerdb/auditlog"
+	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
+	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/migration"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
@@ -28,6 +32,8 @@ func main() {
 	do.Provide(i, readerdb.NewClient)
 	do.Provide(i, dbrepoarticle.NewRepository)
 	do.Provide(i, dbrepoauditlog.NewRepository)
+	do.Provide(i, dbrepofeed.NewRepository)
+	do.Provide(i, driverrss.NewReader)
 
 	db := do.MustInvoke[*sql.DB](i)
 	if err := migration.Run(db); err != nil {
@@ -39,8 +45,13 @@ func main() {
 	bookmarkUC := usecase.NewBookmarkUsecase(do.MustInvoke[articlerepo.Repository](i))
 	auditUC := usecase.NewAuditUsecase(do.MustInvoke[auditlogrepo.Repository](i))
 	categoriesUC := usecase.NewListCategoriesUsecase(do.MustInvoke[articlerepo.Repository](i))
+	fetchUC := usecase.NewFetchUsecase(
+		do.MustInvoke[articlerepo.Repository](i),
+		do.MustInvoke[feedrepo.Repository](i),
+		do.MustInvoke[adapterrss.RSSReader](i),
+	)
 
-	mux := handler.NewMux(listUC, searchUC, bookmarkUC, auditUC, categoriesUC, *staticDir)
+	mux := handler.NewMux(listUC, searchUC, bookmarkUC, auditUC, categoriesUC, fetchUC, *staticDir)
 
 	addr := fmt.Sprintf(":%d", *port)
 	fmt.Printf("Listening on http://localhost%s\n", addr)

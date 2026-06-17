@@ -161,3 +161,55 @@ type mockSaveErrRepo struct{ mockArticleRepo }
 func (m *mockSaveErrRepo) Save(_ context.Context, _ domain.Article) error {
 	return errors.New("disk full")
 }
+
+func TestFetchUsecase_ExecuteAll_NoFeeds(t *testing.T) {
+	uc := NewFetchUsecase(&mockArticleRepo{}, &mockFeedRepo{}, &mockRSSReader{})
+
+	result, err := uc.ExecuteAll(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Feeds) != 0 {
+		t.Errorf("Feeds: got %d, want 0", len(result.Feeds))
+	}
+}
+
+func TestFetchUsecase_ExecuteAll_ListFeedsError(t *testing.T) {
+	uc := NewFetchUsecase(&mockArticleRepo{}, &mockFeedRepo{
+		listAllFn: func(_ context.Context) ([]domain.Feed, error) {
+			return nil, errors.New("db unavailable")
+		},
+	}, &mockRSSReader{})
+
+	result, err := uc.ExecuteAll(context.Background())
+	if err == nil {
+		t.Error("expected error when listing feeds fails, got nil")
+	}
+	if len(result.Feeds) != 0 {
+		t.Errorf("Feeds: got %d, want 0", len(result.Feeds))
+	}
+}
+
+func TestFetchUsecase_ExecuteAll_FetchesRegisteredFeeds(t *testing.T) {
+	uc := NewFetchUsecase(&mockArticleRepo{}, &mockFeedRepo{
+		listAllFn: func(_ context.Context) ([]domain.Feed, error) {
+			return []domain.Feed{{FeedURL: "https://feed.example.com"}}, nil
+		},
+	}, &mockRSSReader{
+		articles: []domain.Article{{URL: "https://example.com/1", Title: "A"}},
+	})
+
+	result, err := uc.ExecuteAll(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Feeds) != 1 {
+		t.Fatalf("Feeds: got %d, want 1", len(result.Feeds))
+	}
+	if result.Feeds[0].FeedURL != "https://feed.example.com" {
+		t.Errorf("FeedURL: got %q, want %q", result.Feeds[0].FeedURL, "https://feed.example.com")
+	}
+	if result.TotalSaved() != 1 {
+		t.Errorf("Saved: got %d, want 1", result.TotalSaved())
+	}
+}

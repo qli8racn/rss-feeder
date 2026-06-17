@@ -4,16 +4,16 @@ import SearchFilterBar from './components/SearchFilterBar'
 import ArticleTable from './components/ArticleTable'
 import Pagination from './components/Pagination'
 import Footer from './components/Footer'
-import { fetchArticles, fetchCategories, searchArticles, toggleBookmark } from './api'
+import { fetchArticles, fetchCategories, fetchLatestArticles, searchArticles, toggleBookmark } from './api'
 import { parseFilterState } from './domain/filter'
 import { syncFilterStateToURL } from './usecase/syncFilterStateToURL'
-import type { Article, SortField, SortOrder } from './types'
+import type { Article, PerPage, SortField, SortOrder } from './types'
 
 function App() {
   const [initialFilters] = useState(() => parseFilterState(window.location.search))
   const [articles, setArticles] = useState<Article[]>([])
   const [total, setTotal] = useState(0)
-  const [perPage, setPerPage] = useState(25)
+  const [perPage, setPerPage] = useState<PerPage>(initialFilters.perPage)
   const [page, setPage] = useState(initialFilters.page)
   const [keyword, setKeyword] = useState(initialFilters.keyword)
   const [category, setCategory] = useState(initialFilters.category)
@@ -23,6 +23,8 @@ function App() {
   const [bookmarkedTotal, setBookmarkedTotal] = useState(0)
   const [categories, setCategories] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
+  const [fetching, setFetching] = useState(false)
 
   const refreshBookmarkedTotal = useCallback(() => {
     // バッジの件数だけが必要なので、記事本文を含むフルデータは取得しない
@@ -38,16 +40,17 @@ function App() {
     refreshBookmarkedTotal()
   }, [refreshBookmarkedTotal])
 
-  // フィルター（キーワード・カテゴリ・ブックマーク絞り込み）が変わった場合のみページを1に戻す。
+  // フィルター（キーワード・カテゴリ・ブックマーク絞り込み・件数）が変わった場合のみページを1に戻す。
   // ページリセットと記事取得を同一effect内で行うことで、古いページ番号での無駄なフェッチを避ける。
-  const filtersRef = useRef({ keyword, category, bookmarkedOnly })
+  const filtersRef = useRef({ keyword, category, bookmarkedOnly, perPage })
 
   useEffect(() => {
     const filtersChanged =
       filtersRef.current.keyword !== keyword ||
       filtersRef.current.category !== category ||
-      filtersRef.current.bookmarkedOnly !== bookmarkedOnly
-    filtersRef.current = { keyword, category, bookmarkedOnly }
+      filtersRef.current.bookmarkedOnly !== bookmarkedOnly ||
+      filtersRef.current.perPage !== perPage
+    filtersRef.current = { keyword, category, bookmarkedOnly, perPage }
 
     if (filtersChanged && page !== 1) {
       setPage(1)
@@ -58,15 +61,14 @@ function App() {
     setError(null)
 
     const load = keyword
-      ? searchArticles({ q: keyword, bookmarked: bookmarkedOnly, category, sort, order, page })
-      : fetchArticles({ mode: bookmarkedOnly ? 'bookmarked' : 'all', category, sort, order, page })
+      ? searchArticles({ q: keyword, bookmarked: bookmarkedOnly, category, sort, order, page, perPage })
+      : fetchArticles({ mode: bookmarkedOnly ? 'bookmarked' : 'all', category, sort, order, page, perPage })
 
     load
       .then((res) => {
         if (cancelled) return
         setArticles(res.articles)
         setTotal(res.total)
-        setPerPage(res.per_page)
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message)
@@ -75,11 +77,11 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [keyword, category, sort, order, page, bookmarkedOnly])
+  }, [keyword, category, sort, order, page, bookmarkedOnly, perPage, reloadToken])
 
   useEffect(() => {
-    syncFilterStateToURL({ keyword, category, sort, order, bookmarkedOnly, page })
-  }, [keyword, category, sort, order, bookmarkedOnly, page])
+    syncFilterStateToURL({ keyword, category, sort, order, bookmarkedOnly, page, perPage })
+  }, [keyword, category, sort, order, bookmarkedOnly, page, perPage])
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / perPage)), [total, perPage])
 
@@ -89,6 +91,23 @@ function App() {
   }, [])
 
   const handleToggleBookmarkedOnly = useCallback(() => setBookmarkedOnly((v) => !v), [])
+
+  const handlePerPageChange = useCallback((value: PerPage) => setPerPage(value), [])
+
+  const handleFetchLatest = useCallback(async () => {
+    setFetching(true)
+    setError(null)
+    try {
+      await fetchLatestArticles()
+      setReloadToken((v) => v + 1)
+      fetchCategories().then(setCategories).catch(() => {})
+      refreshBookmarkedTotal()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setFetching(false)
+    }
+  }, [refreshBookmarkedTotal])
 
   const handleToggleBookmark = useCallback(
     async (id: number) => {
@@ -109,6 +128,8 @@ function App() {
         bookmarkedCount={bookmarkedTotal}
         bookmarkedOnly={bookmarkedOnly}
         onToggleBookmarkedOnly={handleToggleBookmarkedOnly}
+        fetching={fetching}
+        onFetchLatest={handleFetchLatest}
       />
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <SearchFilterBar
@@ -117,9 +138,8 @@ function App() {
           category={category}
           onCategoryChange={setCategory}
           categories={categories}
-          sort={sort}
-          order={order}
-          onSortOrderChange={handleSortChange}
+          perPage={perPage}
+          onPerPageChange={handlePerPageChange}
         />
         <div className="mt-4 flex items-center justify-between text-[12px] text-slate-500">
           <span>{total} 件</span>

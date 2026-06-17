@@ -1,15 +1,9 @@
 import { memo, useEffect, useState } from 'react'
 import { ChevronDownIcon, SearchIcon } from './icons'
-import type { SortField, SortOrder } from '../types'
+import { PER_PAGE_OPTIONS } from '../types'
+import type { PerPage } from '../types'
 
 const SEARCH_DEBOUNCE_MS = 300
-
-const SORT_OPTIONS: { label: string; sort: SortField; order: SortOrder }[] = [
-  { label: '新しい順', sort: 'published_at', order: 'desc' },
-  { label: '古い順', sort: 'published_at', order: 'asc' },
-  { label: 'タイトル (A→Z)', sort: 'title', order: 'asc' },
-  { label: 'タイトル (Z→A)', sort: 'title', order: 'desc' },
-]
 
 interface SearchFilterBarProps {
   initialKeyword: string
@@ -17,9 +11,8 @@ interface SearchFilterBarProps {
   category: string
   onCategoryChange: (value: string) => void
   categories: string[]
-  sort: SortField
-  order: SortOrder
-  onSortOrderChange: (sort: SortField, order: SortOrder) => void
+  perPage: PerPage
+  onPerPageChange: (perPage: PerPage) => void
 }
 
 function SearchFilterBar({
@@ -28,9 +21,8 @@ function SearchFilterBar({
   category,
   onCategoryChange,
   categories,
-  sort,
-  order,
-  onSortOrderChange,
+  perPage,
+  onPerPageChange,
 }: SearchFilterBarProps) {
   const [input, setInput] = useState(initialKeyword)
 
@@ -39,11 +31,6 @@ function SearchFilterBar({
     const handle = setTimeout(() => onKeywordCommit(input.trim()), SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(handle)
   }, [input, onKeywordCommit])
-
-  const currentSortIndex = Math.max(
-    0,
-    SORT_OPTIONS.findIndex((o) => o.sort === sort && o.order === order),
-  )
 
   return (
     <form
@@ -82,16 +69,13 @@ function SearchFilterBar({
         </div>
         <div className="relative">
           <select
-            value={currentSortIndex}
-            onChange={(e) => {
-              const opt = SORT_OPTIONS[Number(e.target.value)]
-              onSortOrderChange(opt.sort, opt.order)
-            }}
+            value={perPage}
+            onChange={(e) => onPerPageChange(Number(e.target.value) as PerPage)}
             className="appearance-none rounded border border-slate-400/10 bg-[#1e2733] py-2 pl-3 pr-8 font-mono text-[11px] text-slate-200 focus:outline-none"
           >
-            {SORT_OPTIONS.map((opt, i) => (
-              <option key={opt.label} value={i}>
-                {opt.label}
+            {PER_PAGE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}件
               </option>
             ))}
           </select>
