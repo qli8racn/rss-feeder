@@ -21,7 +21,7 @@
 
 ## フォローアップ（このフェーズ外）
 
-- [ ] `web/frontend/`（Vite + React + TypeScript + Tailwind CSS）の雛形を作成する
+- [x] `web/frontend/`（Vite + React + TypeScript + Tailwind CSS）の雛形を作成する
 - [ ] figma-mcp で Figma デザインから React コンポーネントの初期コードを生成し、API 連携・状態管理を実装する（詳細は `docs/web-ui-spec.md` の「実装の進め方」参照）
 - [ ] `npm run build` の出力を `web/static/` に配置する
 - [ ] GitHub Copilot によるローカル / PR レビューの実践

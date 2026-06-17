@@ -16,3 +16,7 @@ Thumbs.db
 
 # Local config (contains secrets)
 /internal/config/config.yml
+
+# Web frontend build output (web/frontend/ の `npm run build` で生成される)
+/web/static/*
+!/web/static/.gitkeep
