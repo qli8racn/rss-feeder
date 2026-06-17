@@ -54,8 +54,8 @@ GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -p 1 -o bin/rss-agent ./cmd/ag
 ### 層の依存方向
 
 ```
-adapter(handler) → usecase → domain
-driver           → adapter(interface)
+adapter(handler/cli, handler/web) → usecase → domain
+driver                            → adapter(interface)
 ```
 
 `usecase` と `domain` は外側の実装（SQL・HTTP）を知らない。`driver` が `adapter` のインターフェースを実装することで依存を逆転させる。
@@ -107,19 +107,26 @@ rss-feeder/
 │   │   │   └── rss/
 │   │   │       └── rss_reader.go               # RSSReader interface
 │   │   └── handler/
-│   │       ├── fetch.go                         # cobra コマンド → ListFeedsUsecase + FetchUsecase 呼び出し
-│   │       ├── list.go
-│   │       ├── bookmark.go
-│   │       ├── reset.go
-│   │       ├── search.go                        # search サブコマンド（--bookmarked フラグ）
-│   │       ├── add_feed.go                      # add-feed サブコマンド
-│   │       ├── list_feeds.go                    # list-feeds サブコマンド（msgNoFeeds 定数定義）
-│   │       ├── remove_feed.go                   # remove-feed サブコマンド
-│   │       ├── table.go                         # 記事一覧テーブル描画ヘルパー（printArticleTable）
-│   │       ├── audit.go                         # audit サブコマンド（Hook 経由で呼び出し）
-│   │       ├── check_article.go                 # check-article サブコマンド（Hook 経由で呼び出し）
-│   │       ├── check_bookmarked.go              # check-bookmarked サブコマンド（Hook 経由で呼び出し）
-│   │       └── maintenance.go                   # maintenance サブコマンド（Hook 経由で呼び出し）
+│   │       ├── cli/                             # rss-feeder（cobra）向けハンドラ
+│   │       │   ├── fetch.go                     # cobra コマンド → ListFeedsUsecase + FetchUsecase 呼び出し
+│   │       │   ├── list.go
+│   │       │   ├── bookmark.go
+│   │       │   ├── reset.go
+│   │       │   ├── search.go                    # search サブコマンド（--bookmarked フラグ）
+│   │       │   ├── add_feed.go                  # add-feed サブコマンド
+│   │       │   ├── list_feeds.go                # list-feeds サブコマンド（msgNoFeeds 定数定義）
+│   │       │   ├── remove_feed.go                # remove-feed サブコマンド
+│   │       │   ├── table.go                      # 記事一覧テーブル描画ヘルパー（printArticleTable）
+│   │       │   ├── audit.go                      # audit サブコマンド（Hook 経由で呼び出し）
+│   │       │   ├── check_article.go              # check-article サブコマンド（Hook 経由で呼び出し）
+│   │       │   ├── check_bookmarked.go          # check-bookmarked サブコマンド（Hook 経由で呼び出し）
+│   │       │   └── maintenance.go                # maintenance サブコマンド（Hook 経由で呼び出し）
+│   │       └── web/                             # cmd/web（HTTP JSON API）向けハンドラ
+│   │           ├── routes.go                     # NewMux（chi router 構築・ルート定義）
+│   │           ├── response.go                   # writeJSON・writeJSONError 共通ヘルパー
+│   │           ├── article.go                    # articleDTO・GET /api/articles・GET /api/articles/search・POST /api/articles/{id}/bookmark
+│   │           ├── category.go                   # GET /api/categories
+│   │           └── fetch.go                      # POST /api/articles/fetch（最新フィード取得）
 │   └── driver/
 │       ├── readerdb/                            # reader.db への接続・リポジトリ実装
 │       │   ├── client.go                        # DB 接続（sql.Open のみ）
@@ -224,7 +231,7 @@ Hook スクリプトは `sqlite3` コマンドを直接呼ばず、**Go バイ�
 ## DI 構成（samber/do）
 
 `main.go` に 1 つの `do.Injector` を置き、driver 層のプロバイダーを登録する。
-usecase 層は `do.MustInvoke` でリポジトリを取り出して直接構築し、handler に渡す。
+usecase 層は `do.MustInvoke` でリポジトリを取り出して直接構築し、handler/cli（または handler/web）に渡す。
 
 ```go
 // cmd/rss-feeder/main.go
@@ -266,18 +273,18 @@ func main() {
     // cobra コマンド組み立て
     root := &cobra.Command{Use: "rss-feeder", Short: "RSS フィードを取得・管理する CLI ツール"}
     root.AddCommand(
-        handler.NewFetchCommand(listFeedsUC, fetchUC),
-        handler.NewListCommand(listUC),
-        handler.NewBookmarkCommand(bookmarkUC),
-        handler.NewResetCommand(resetUC),
-        handler.NewSearchCommand(searchUC),
-        handler.NewCheckArticleCommand(checkArticleUC),
-        handler.NewCheckBookmarkedCommand(checkBookmarkedUC),
-        handler.NewAuditCommand(auditUC),
-        handler.NewMaintenanceCommand(maintenanceUC),
-        handler.NewAddFeedCommand(addFeedUC),
-        handler.NewListFeedsCommand(listFeedsUC),
-        handler.NewRemoveFeedCommand(removeFeedUC),
+        cli.NewFetchCommand(listFeedsUC, fetchUC),
+        cli.NewListCommand(listUC),
+        cli.NewBookmarkCommand(bookmarkUC),
+        cli.NewResetCommand(resetUC),
+        cli.NewSearchCommand(searchUC),
+        cli.NewCheckArticleCommand(checkArticleUC),
+        cli.NewCheckBookmarkedCommand(checkBookmarkedUC),
+        cli.NewAuditCommand(auditUC),
+        cli.NewMaintenanceCommand(maintenanceUC),
+        cli.NewAddFeedCommand(addFeedUC),
+        cli.NewListFeedsCommand(listFeedsUC),
+        cli.NewRemoveFeedCommand(removeFeedUC),
     )
 
     if err := root.Execute(); err != nil {
@@ -313,7 +320,7 @@ Claude Code が Bash ツールで "rss-feeder fetch" を実行
   │    └─ fetch はスキップ（bookmark / reset のみ検証対象）
   │
   ├─ rss-feeder fetch（Go バイナリ実行）
-  │    └─ adapter/handler/fetch.go
+  │    └─ adapter/handler/cli/fetch.go
   │         ├─ usecase/list_feeds.go  # DB からフィード URL 取得
   │         └─ usecase/fetch.go       # 重複チェック・保存指示
   │              ├─ driver/rss/reader.go               # HTTP GET → gofeed パース

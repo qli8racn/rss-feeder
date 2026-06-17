@@ -80,7 +80,7 @@ func (uc *FetchUsecase) Execute(ctx context.Context, feedURLs []string) (FetchRe
 }
 
 // ExecuteAll は登録済みの全フィードを取得して DB に保存する。
-// CLI（fetch コマンド）と Web API（POST /api/fetch）はともに「登録済み全フィードの取得」を
+// CLI（fetch コマンド）と Web API（POST /api/articles/fetch）はともに「登録済み全フィードの取得」を
 // 行うため、フィード一覧の取得から URL 抽出までをここに集約する。
 func (uc *FetchUsecase) ExecuteAll(ctx context.Context) (FetchResult, error) {
 	feeds, err := uc.feedRepo.ListAll(ctx)

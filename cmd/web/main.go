@@ -13,7 +13,7 @@ import (
 	auditlogrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/auditlog"
 	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
-	"github.com/qli8racn/rss-feeder/internal/adapter/handler"
+	"github.com/qli8racn/rss-feeder/internal/adapter/handler/web"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerdb/auditlog"
@@ -51,7 +51,7 @@ func main() {
 		do.MustInvoke[adapterrss.RSSReader](i),
 	)
 
-	mux := handler.NewMux(listUC, searchUC, bookmarkUC, auditUC, categoriesUC, fetchUC, *staticDir)
+	mux := web.NewMux(listUC, searchUC, bookmarkUC, auditUC, categoriesUC, fetchUC, *staticDir)
 
 	addr := fmt.Sprintf(":%d", *port)
 	fmt.Printf("Listening on http://localhost%s\n", addr)
