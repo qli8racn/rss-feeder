@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+
+	"github.com/qli8racn/rss-feeder/internal/adapter/handler/web/openapi"
 )
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
@@ -18,5 +20,5 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 }
 
 func writeJSONError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+	writeJSON(w, status, openapi.Error{Error: message})
 }

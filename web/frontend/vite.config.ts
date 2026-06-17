@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    // `npm run dev` 時、rss-feeder-web（デフォルト :8080）にAPIをプロキシする
+    // `npm run dev` 時、bin/web（デフォルト :8080）にAPIをプロキシする
     proxy: {
       '/api': 'http://localhost:8080',
     },
