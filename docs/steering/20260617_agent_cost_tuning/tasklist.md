@@ -14,11 +14,11 @@
 
 ## ドキュメント
 
-- [ ] README.md に `ANTHROPIC_API_KEY` は Claude Console（console.anthropic.com）で発行する
+- [x] README.md に `ANTHROPIC_API_KEY` は Claude Console（console.anthropic.com）で発行する
   キーであり、claude.ai のアカウントとは別物である旨を明記
-- [ ] AGENTS.md の `rss-agent` セットアップ手順に同様の注記を追加
-- [ ] `internal/config/config.example.yml` のコメントに同様の注記を追加
-- [ ] `docs/design.md` の `rss-agent` セクションに本フェーズの内容（モデル選定の指針・
+- [x] AGENTS.md の `rss-agent` セットアップ手順に同様の注記を追加
+- [x] `internal/config/config.example.yml` のコメントに同様の注記を追加
+- [x] `docs/design.md` の `rss-agent` セクションに本フェーズの内容（モデル選定の指針・
   コスト計測の仕組み）を追記
 
 ## 費用・実行時間の可視化（未実装）

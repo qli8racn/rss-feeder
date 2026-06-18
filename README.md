@@ -12,6 +12,8 @@ AI エージェント機能（`rss-agent`）で記事要約や読書傾向の分
 - Go 1.24 以上
 - GCC（`mattn/go-sqlite3` の CGO ビルドに必要）
 - `ANTHROPIC_API_KEY`（`rss-agent` 使用時のみ。`config.yml` または環境変数で設定）
+  - claude.ai（コンシューマー向けチャット）のログイン情報ではなく、Claude Console
+    （https://console.anthropic.com）の「API Keys」から発行する API キーを使用する
 
 ## セットアップ
 

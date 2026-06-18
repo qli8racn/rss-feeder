@@ -1,1 +1,3 @@
+# anthropic_api_key は claude.ai（コンシューマー向けチャット）のログイン情報ではなく、
+# Claude Console（https://console.anthropic.com）の「API Keys」から発行する API キーを使用する。
 anthropic_api_key: "sk-ant-xxxxxxxx"
