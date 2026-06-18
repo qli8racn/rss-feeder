@@ -78,6 +78,10 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 	return n, nil
 }
 
+// maxContentRunes は要約対象として送信する記事本文の最大文字数。
+// 入力トークンを抑えるため、これを超える本文は末尾を切り詰める。
+const maxContentRunes = 2000
+
 func (a *enrichAgent) summarizeAndCategorize(ctx context.Context, articles []domain.Article) ([]enrichResult, error) {
 	type articleInput struct {
 		ID      int64  `json:"id"`
@@ -86,7 +90,7 @@ func (a *enrichAgent) summarizeAndCategorize(ctx context.Context, articles []dom
 	}
 	inputs := make([]articleInput, len(articles))
 	for i, art := range articles {
-		inputs[i] = articleInput{ID: art.ID, Title: art.Title, Content: art.Content}
+		inputs[i] = articleInput{ID: art.ID, Title: art.Title, Content: truncateRunes(art.Content, maxContentRunes)}
 	}
 	b, err := json.Marshal(inputs)
 	if err != nil {
@@ -94,7 +98,7 @@ func (a *enrichAgent) summarizeAndCategorize(ctx context.Context, articles []dom
 	}
 
 	params := anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaudeOpus4_8,
+		Model:     anthropic.ModelClaudeHaiku4_5,
 		MaxTokens: 4096,
 		System: []anthropic.TextBlockParam{{
 			Text: "あなたはRSS記事の要約・分類アシスタントです。" +
@@ -122,6 +126,15 @@ func (a *enrichAgent) summarizeAndCategorize(ctx context.Context, articles []dom
 	}
 
 	return nil, fmt.Errorf("テキスト応答が見つかりませんでした")
+}
+
+// truncateRunes は s をルーン数 max までに切り詰める。max 以下の場合はそのまま返す。
+func truncateRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max])
 }
 
 // extractJSON はテキストから最初の JSON 配列部分のみを取り出す（前後の説明文を除去する）。

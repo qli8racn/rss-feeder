@@ -79,6 +79,12 @@ rss-agent <command> [flags]
 `config.yml` に値があれば `ANTHROPIC_API_KEY` 環境変数にセットする。詳細は
 `docs/steering/20260615_config_apikey/` を参照。
 
+> `ANTHROPIC_API_KEY` は claude.ai（コンシューマー向けチャット）のログイン情報ではなく、
+> Claude Console（https://console.anthropic.com）の「API Keys」から発行する API キーを使用する。
+
+各エージェントのモデル選定・コスト・実行時間のチューニング方針は
+`docs/steering/20260617_agent_cost_tuning/` を参照。
+
 #### ビルド
 
 CGO（mattn/go-sqlite3）と Anthropic SDK を同時にリンクするためメモリ使用量が大きい。

@@ -2,6 +2,8 @@ package anthropic
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -28,6 +30,29 @@ func toArticleJSONList(articles []domain.Article) []articleJSON {
 }
 
 type toolHandler func(name, inputJSON string) (string, error)
+
+// parseLimitInput はツール呼び出しの inputJSON から "limit" フィールドを取り出す。
+// 0以下、または未指定（inputJSON が空）の場合は defaultLimit を使う。
+// maxLimit > 0 の場合、defaultLimit・指定値の双方をこの値に切り詰める（0以下なら上限なし）。
+func parseLimitInput(inputJSON string, defaultLimit, maxLimit int) (int, error) {
+	var input struct {
+		Limit int `json:"limit"`
+	}
+	if inputJSON != "" {
+		if err := json.Unmarshal([]byte(inputJSON), &input); err != nil {
+			return 0, fmt.Errorf("invalid tool input: %w", err)
+		}
+	}
+
+	limit := input.Limit
+	if limit <= 0 {
+		limit = defaultLimit
+	}
+	if maxLimit > 0 && limit > maxLimit {
+		limit = maxLimit
+	}
+	return limit, nil
+}
 
 func runAgentLoop(ctx context.Context, client anthropic.Client, params anthropic.MessageNewParams, handler toolHandler) (string, error) {
 	messages := params.Messages
