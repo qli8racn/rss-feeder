@@ -1,0 +1,58 @@
+package anthropic
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/anthropics/anthropic-sdk-go"
+)
+
+// modelPricing は 1M トークンあたりの USD 単価（入力・出力）。
+// 価格改定時はここを更新する。
+var modelPricing = map[string]struct{ Input, Output float64 }{
+	anthropic.ModelClaudeHaiku4_5:  {Input: 1.00, Output: 5.00},
+	anthropic.ModelClaudeSonnet4_6: {Input: 3.00, Output: 15.00},
+	anthropic.ModelClaudeOpus4_8:   {Input: 5.00, Output: 25.00},
+}
+
+// estimateCostUSD は Usage から概算費用（USD）を計算する。
+// cache_read は通常入力の約0.1倍、cache_creation は約1.25倍として概算する。
+// 単価が登録されていないモデルは 0 を返す。
+func estimateCostUSD(model string, u anthropic.Usage) float64 {
+	price, ok := modelPricing[model]
+	if !ok {
+		return 0
+	}
+	input := float64(u.InputTokens) + float64(u.CacheCreationInputTokens)*1.25 + float64(u.CacheReadInputTokens)*0.1
+	output := float64(u.OutputTokens)
+	return (input*price.Input + output*price.Output) / 1_000_000
+}
+
+// addUsage は2つの Usage の各トークン数を加算した結果を返す。
+// runAgentLoop でのツール呼び出しループ全体のトークン使用量を合算するために使う。
+func addUsage(total, delta anthropic.Usage) anthropic.Usage {
+	total.InputTokens += delta.InputTokens
+	total.OutputTokens += delta.OutputTokens
+	total.CacheCreationInputTokens += delta.CacheCreationInputTokens
+	total.CacheReadInputTokens += delta.CacheReadInputTokens
+	return total
+}
+
+// logUsage はトークン使用量・概算費用・実行時間を標準エラー出力に1行で記録する。
+// 標準出力はコマンドの主たる出力（要約結果など）に使うため、ログはそちらを汚さない標準エラー出力に出す。
+func logUsage(model string, usage anthropic.Usage, elapsed time.Duration) {
+	fmt.Fprintf(os.Stderr, "[rss-agent] model=%s input=%d output=%d cost=$%.4f elapsed=%s\n",
+		model, usage.InputTokens, usage.OutputTokens, estimateCostUSD(model, usage), elapsed.Round(time.Millisecond))
+}
+
+// runAgentLoopWithUsageLog は runAgentLoop を実行し、完了後にトークン使用量・概算費用・
+// 実行時間を logUsage で標準エラー出力に記録する。preference.go/summarize.go の
+// 計測用ボイラープレート（計測開始・Usage集計・defer ログ出力）を共通化するためのラッパー。
+func runAgentLoopWithUsageLog(ctx context.Context, client anthropic.Client, params anthropic.MessageNewParams, handler toolHandler) (string, error) {
+	start := time.Now()
+	result, usage, err := runAgentLoop(ctx, client, params, handler)
+	logUsage(params.Model, usage, time.Since(start))
+	return result, err
+}

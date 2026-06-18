@@ -60,7 +60,7 @@ func (a *preferenceAgent) Run(ctx context.Context) (string, error) {
 		},
 	}
 
-	return runAgentLoop(ctx, a.client, params, func(_, inputJSON string) (string, error) {
+	return runAgentLoopWithUsageLog(ctx, a.client, params, func(_, inputJSON string) (string, error) {
 		limit, err := parseLimitInput(inputJSON, maxBookmarkedArticles, maxBookmarkedArticles)
 		if err != nil {
 			return "", err

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/samber/do/v2"
@@ -83,6 +84,13 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 const maxContentRunes = 2000
 
 func (a *enrichAgent) summarizeAndCategorize(ctx context.Context, articles []domain.Article) ([]enrichResult, error) {
+	start := time.Now()
+	model := anthropic.ModelClaudeHaiku4_5
+	var usage anthropic.Usage
+	defer func() {
+		logUsage(model, usage, time.Since(start))
+	}()
+
 	type articleInput struct {
 		ID      int64  `json:"id"`
 		Title   string `json:"title"`
@@ -98,7 +106,7 @@ func (a *enrichAgent) summarizeAndCategorize(ctx context.Context, articles []dom
 	}
 
 	params := anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaudeHaiku4_5,
+		Model:     model,
 		MaxTokens: 4096,
 		System: []anthropic.TextBlockParam{{
 			Text: "あなたはRSS記事の要約・分類アシスタントです。" +
@@ -114,6 +122,7 @@ func (a *enrichAgent) summarizeAndCategorize(ctx context.Context, articles []dom
 	if err != nil {
 		return nil, err
 	}
+	usage = resp.Usage
 
 	for _, block := range resp.Content {
 		if tb, ok := block.AsAny().(anthropic.TextBlock); ok {

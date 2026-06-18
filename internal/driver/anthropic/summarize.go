@@ -60,7 +60,7 @@ func (a *summarizeAgent) Run(ctx context.Context, opts adapteranthropic.Summariz
 	}
 
 	defaultLimit := opts.Limit
-	return runAgentLoop(ctx, a.client, params, func(_, inputJSON string) (string, error) {
+	return runAgentLoopWithUsageLog(ctx, a.client, params, func(_, inputJSON string) (string, error) {
 		var input struct {
 			FeedURL string `json:"feed_url"`
 		}

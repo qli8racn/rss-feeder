@@ -21,20 +21,28 @@
 - [x] `docs/design.md` の `rss-agent` セクションに本フェーズの内容（モデル選定の指針・
   コスト計測の仕組み）を追記
 
-## 費用・実行時間の可視化（未実装）
+## 費用・実行時間の可視化（実装済み）
 
-- [ ] `internal/driver/anthropic/usage.go` を新規作成し、モデル別料金テーブルと
-  `estimateCostUSD` を実装
-- [ ] `loop.go` の `runAgentLoop` を `Usage` を加算して返すように変更
-- [ ] `summarize.go`/`preference.go`/`enrich.go` の `Run()` で、実行時間（`time.Since`）と
-  概算費用を標準エラー出力に1行で表示する
+- [x] `internal/driver/anthropic/usage.go` を新規作成し、モデル別料金テーブルと
+  `estimateCostUSD`・`addUsage`・`logUsage` を実装
+- [x] `loop.go` の `runAgentLoop` を `Usage` を加算して返すように変更（戻り値を
+  `(string, anthropic.Usage, error)` に拡張）
+- [x] `summarize.go`/`preference.go`/`enrich.go` の `Run()`（`enrich.go` は
+  `summarizeAndCategorize`）で、実行時間（`time.Since`）と概算費用を `defer` で
+  標準エラー出力に1行表示する
+- [x] `usage.go`：`preference.go`/`summarize.go` で重複していた計測用ボイラープレート
+  （計測開始・Usage集計・defer ログ出力）を `runAgentLoopWithUsageLog` に共通化
+  （コードレビューでの DRY 指摘対応）
 
 ## テスト
 
 - [x] `truncateRunes` の単体テスト（`enrich_test.go`：境界値・マルチバイト文字・空文字列）
 - [x] `parseLimitInput` の単体テスト（`loop_test.go`：デフォルト値・上限クランプ・不正 JSON）
-- [ ] `estimateCostUSD` の単体テスト（既知の `Usage` 値に対する計算結果を検証）
-- [ ] `runAgentLoop` の `Usage` 加算ロジックのテスト（複数ターンでの合算を検証）
+- [x] `estimateCostUSD` の単体テスト（`usage_test.go`：既知モデル・未知モデル・
+  cache トークン込みの計算結果を検証）
+- [x] `runAgentLoop` の合算ロジックのテスト（`usage_test.go`：合算処理を `addUsage` として
+  切り出し、複数ターン分の加算をユニットテストで検証。`runAgentLoop` 自体は実際の HTTP
+  呼び出しを伴うため、ここでは加算ロジック単体をテスト対象とした）
 
 ## フォローアップ（このフェーズ外）
 

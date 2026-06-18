@@ -54,20 +54,24 @@ func parseLimitInput(inputJSON string, defaultLimit, maxLimit int) (int, error) 
 	return limit, nil
 }
 
-func runAgentLoop(ctx context.Context, client anthropic.Client, params anthropic.MessageNewParams, handler toolHandler) (string, error) {
+// runAgentLoop はツール呼び出しを処理しながら Claude とのやり取りを繰り返す。
+// 戻り値の Usage は、ループ内で発生した全リクエストのトークン使用量の合計。
+func runAgentLoop(ctx context.Context, client anthropic.Client, params anthropic.MessageNewParams, handler toolHandler) (string, anthropic.Usage, error) {
+	var total anthropic.Usage
 	messages := params.Messages
 	for {
 		params.Messages = messages
 		resp, err := client.Messages.New(ctx, params)
 		if err != nil {
-			return "", err
+			return "", total, err
 		}
+		total = addUsage(total, resp.Usage)
 		messages = append(messages, resp.ToParam())
 
 		if resp.StopReason != anthropic.StopReasonToolUse {
 			for _, block := range resp.Content {
 				if tb, ok := block.AsAny().(anthropic.TextBlock); ok {
-					return tb.Text, nil
+					return tb.Text, total, nil
 				}
 			}
 			break
@@ -88,5 +92,5 @@ func runAgentLoop(ctx context.Context, client anthropic.Client, params anthropic
 		}
 		messages = append(messages, anthropic.NewUserMessage(results...))
 	}
-	return "", nil
+	return "", total, nil
 }
