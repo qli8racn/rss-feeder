@@ -2,6 +2,8 @@ package anthropic
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -29,20 +31,47 @@ func toArticleJSONList(articles []domain.Article) []articleJSON {
 
 type toolHandler func(name, inputJSON string) (string, error)
 
-func runAgentLoop(ctx context.Context, client anthropic.Client, params anthropic.MessageNewParams, handler toolHandler) (string, error) {
+// parseLimitInput はツール呼び出しの inputJSON から "limit" フィールドを取り出す。
+// 0以下、または未指定（inputJSON が空）の場合は defaultLimit を使う。
+// maxLimit > 0 の場合、defaultLimit・指定値の双方をこの値に切り詰める（0以下なら上限なし）。
+func parseLimitInput(inputJSON string, defaultLimit, maxLimit int) (int, error) {
+	var input struct {
+		Limit int `json:"limit"`
+	}
+	if inputJSON != "" {
+		if err := json.Unmarshal([]byte(inputJSON), &input); err != nil {
+			return 0, fmt.Errorf("invalid tool input: %w", err)
+		}
+	}
+
+	limit := input.Limit
+	if limit <= 0 {
+		limit = defaultLimit
+	}
+	if maxLimit > 0 && limit > maxLimit {
+		limit = maxLimit
+	}
+	return limit, nil
+}
+
+// runAgentLoop はツール呼び出しを処理しながら Claude とのやり取りを繰り返す。
+// 戻り値の Usage は、ループ内で発生した全リクエストのトークン使用量の合計。
+func runAgentLoop(ctx context.Context, client messageCreator, params anthropic.MessageNewParams, handler toolHandler) (string, anthropic.Usage, error) {
+	var total anthropic.Usage
 	messages := params.Messages
 	for {
 		params.Messages = messages
-		resp, err := client.Messages.New(ctx, params)
+		resp, err := client.New(ctx, params)
 		if err != nil {
-			return "", err
+			return "", total, err
 		}
+		total = addUsage(total, resp.Usage)
 		messages = append(messages, resp.ToParam())
 
 		if resp.StopReason != anthropic.StopReasonToolUse {
 			for _, block := range resp.Content {
 				if tb, ok := block.AsAny().(anthropic.TextBlock); ok {
-					return tb.Text, nil
+					return tb.Text, total, nil
 				}
 			}
 			break
@@ -63,5 +92,5 @@ func runAgentLoop(ctx context.Context, client anthropic.Client, params anthropic
 		}
 		messages = append(messages, anthropic.NewUserMessage(results...))
 	}
-	return "", nil
+	return "", total, nil
 }

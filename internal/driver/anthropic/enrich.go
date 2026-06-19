@@ -3,8 +3,11 @@ package anthropic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/samber/do/v2"
@@ -15,13 +18,14 @@ import (
 )
 
 type enrichAgent struct {
-	client anthropic.Client
+	client messageCreator
 	repo   articlerepo.Repository
 }
 
 func NewEnrichAgent(i do.Injector) (adapteranthropic.EnrichAgent, error) {
+	client := anthropic.NewClient()
 	return &enrichAgent{
-		client: anthropic.NewClient(),
+		client: &client.Messages,
 		repo:   do.MustInvoke[articlerepo.Repository](i),
 	}, nil
 }
@@ -32,10 +36,25 @@ type enrichResult struct {
 	Category string `json:"category"`
 }
 
+// enrichBatchSize は1回のAPI呼び出しで処理する記事数。
+// 40件で output ≈ 3,400〜3,900トークンとなり、4096トークンの上限に対して
+// 安全マージンがあることを実測した上で採用した値。
+const enrichBatchSize = 40
+
+// enrichConcurrency はバッチを並列実行する際の最大同時実行数。
+const enrichConcurrency = 4
+
 // Run は要約・カテゴリが未設定の記事に対して Claude に要約・カテゴリ分類させ、結果を DB に保存する。
 // Force が true の場合は要約済みの記事も含めた最新記事を対象に再処理する。
+// 記事数が enrichBatchSize を超える場合は複数バッチに分割し、enrichConcurrency を
+// 上限に並列実行する（1バッチが失敗しても他バッチの処理・DB保存は継続する。DB書き込みも
+// バッチ単位で行うため、1バッチのDB書き込み失敗が他バッチの保存済み結果を巻き込むことはない）。
 // 処理した記事数を返す。
 func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptions) (int, error) {
+	start := time.Now()
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	if opts.Limit == 0 {
 		opts.Limit = 10
 	}
@@ -59,26 +78,129 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 		requested[art.ID] = true
 	}
 
-	results, err := a.summarizeAndCategorize(ctx, articles)
-	if err != nil {
-		return 0, err
+	chunks := chunkArticles(articles, enrichBatchSize)
+	outcomes := make([]chunkOutcome, len(chunks))
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, enrichConcurrency)
+	dispatched := 0
+	for i, chunk := range chunks {
+		// 同時実行数の上限に達している間はここでブロックする。ctxのチェックは
+		// このブロッキング送信より前に行っても意味がない（送信がブロックしている間に
+		// 他のチャンクがctxをキャンセルする可能性があるため）。空きが出てから
+		// チェックすることで、実行中にキャンセルされた場合、まだディスパッチしていない
+		// チャンク分のコストを無駄にしない。既にディスパッチ済みのチャンクは、
+		// APIクライアント自身がctxを見て中断するのに任せる。
+		sem <- struct{}{}
+		if ctx.Err() != nil {
+			<-sem
+			break
+		}
+		dispatched++
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			results, usage, err := a.summarizeAndCategorize(ctx, chunk)
+			outcomes[i] = chunkOutcome{results: results, usage: usage, err: err}
+		}()
+	}
+	wg.Wait()
+	for i := dispatched; i < len(chunks); i++ {
+		outcomes[i] = chunkOutcome{err: fmt.Errorf("チャンク%d: ディスパッチ前にcontextがキャンセルされました: %w", i, ctx.Err())}
 	}
 
+	_, totalUsage, batchErr := aggregateChunkOutcomes(outcomes)
+	logUsage(anthropic.ModelClaudeHaiku4_5, totalUsage, time.Since(start))
+
+	// DBへの保存はチャンク単位で行う。1チャンクのDB書き込みが失敗しても、他チャンクで
+	// 既にコミット済みの結果はそのまま残る（チャンク単位の部分成功をDB層でも維持する）。
 	n := 0
-	for _, r := range results {
-		if !requested[r.ID] {
+	errs := []error{batchErr}
+	for _, o := range outcomes {
+		if o.err != nil {
 			continue
 		}
-		if err := a.repo.UpdateEnrichment(ctx, r.ID, r.Summary, r.Category); err != nil {
-			return n, fmt.Errorf("記事 %d の更新に失敗しました: %w", r.ID, err)
+		updates := buildEnrichmentUpdates(o.results, requested)
+		if len(updates) == 0 {
+			continue
 		}
-		n++
+		if err := a.repo.UpdateEnrichmentBatch(ctx, updates); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		n += len(updates)
 	}
 
-	return n, nil
+	return n, errors.Join(errs...)
 }
 
-func (a *enrichAgent) summarizeAndCategorize(ctx context.Context, articles []domain.Article) ([]enrichResult, error) {
+// buildEnrichmentUpdates は1チャンクの要約結果から、要求された記事IDのみを対象とした
+// 更新リストを作る。モデルが同一IDを重複して返した場合は最初の1件だけを採用する。
+func buildEnrichmentUpdates(results []enrichResult, requested map[int64]bool) []articlerepo.EnrichmentUpdate {
+	updates := make([]articlerepo.EnrichmentUpdate, 0, len(results))
+	seen := make(map[int64]bool, len(results))
+	for _, r := range results {
+		if !requested[r.ID] || seen[r.ID] {
+			continue
+		}
+		seen[r.ID] = true
+		updates = append(updates, articlerepo.EnrichmentUpdate{ID: r.ID, Summary: r.Summary, Category: r.Category})
+	}
+	return updates
+}
+
+// chunkArticles は articles を size 件ずつのバッチに分割する。
+func chunkArticles(articles []domain.Article, size int) [][]domain.Article {
+	if len(articles) == 0 {
+		return nil
+	}
+	chunks := make([][]domain.Article, 0, (len(articles)+size-1)/size)
+	for i := 0; i < len(articles); i += size {
+		end := i + size
+		if end > len(articles) {
+			end = len(articles)
+		}
+		chunks = append(chunks, articles[i:end])
+	}
+	return chunks
+}
+
+type chunkOutcome struct {
+	results []enrichResult
+	usage   anthropic.Usage
+	err     error
+}
+
+// aggregateChunkOutcomes は各バッチの結果を集約する。一部のバッチが失敗しても
+// 成功したバッチの結果は保持し、失敗は errors.Join でまとめて返す（部分成功を許容する）。
+// Usage は失敗したバッチ（レスポンス解析失敗など、APIリクエスト自体は成功したケース）の
+// ものも含めて合算する。
+func aggregateChunkOutcomes(outcomes []chunkOutcome) ([]enrichResult, anthropic.Usage, error) {
+	var allResults []enrichResult
+	var totalUsage anthropic.Usage
+	var errs []error
+	for _, o := range outcomes {
+		totalUsage = addUsage(totalUsage, o.usage)
+		if o.err != nil {
+			errs = append(errs, o.err)
+			continue
+		}
+		allResults = append(allResults, o.results...)
+	}
+	return allResults, totalUsage, errors.Join(errs...)
+}
+
+// maxContentRunes は要約対象として送信する記事本文の最大文字数。
+// 入力トークンを抑えるため、これを超える本文は末尾を切り詰める。
+const maxContentRunes = 2000
+
+// summarizeAndCategorize は1バッチ分の記事をまとめて Claude に要約・分類させる。
+// 戻り値の Usage は、解析失敗時（resp.Usage は得られているが JSON 解析に失敗した場合）も
+// 呼び出し元でコストを集計できるよう、エラーの有無に関わらず返す。
+func (a *enrichAgent) summarizeAndCategorize(ctx context.Context, articles []domain.Article) ([]enrichResult, anthropic.Usage, error) {
+	model := anthropic.ModelClaudeHaiku4_5
+
 	type articleInput struct {
 		ID      int64  `json:"id"`
 		Title   string `json:"title"`
@@ -86,15 +208,15 @@ func (a *enrichAgent) summarizeAndCategorize(ctx context.Context, articles []dom
 	}
 	inputs := make([]articleInput, len(articles))
 	for i, art := range articles {
-		inputs[i] = articleInput{ID: art.ID, Title: art.Title, Content: art.Content}
+		inputs[i] = articleInput{ID: art.ID, Title: art.Title, Content: truncateRunes(art.Content, maxContentRunes)}
 	}
 	b, err := json.Marshal(inputs)
 	if err != nil {
-		return nil, err
+		return nil, anthropic.Usage{}, err
 	}
 
 	params := anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaudeOpus4_8,
+		Model:     model,
 		MaxTokens: 4096,
 		System: []anthropic.TextBlockParam{{
 			Text: "あなたはRSS記事の要約・分類アシスタントです。" +
@@ -106,22 +228,37 @@ func (a *enrichAgent) summarizeAndCategorize(ctx context.Context, articles []dom
 		},
 	}
 
-	resp, err := a.client.Messages.New(ctx, params)
+	resp, err := a.client.New(ctx, params)
 	if err != nil {
-		return nil, err
+		return nil, anthropic.Usage{}, err
 	}
+	usage := resp.Usage
 
 	for _, block := range resp.Content {
 		if tb, ok := block.AsAny().(anthropic.TextBlock); ok {
 			var results []enrichResult
 			if err := json.Unmarshal([]byte(extractJSON(tb.Text)), &results); err != nil {
-				return nil, fmt.Errorf("レスポンスの解析に失敗しました: %w", err)
+				if resp.StopReason == anthropic.StopReasonMaxTokens {
+					return nil, usage, fmt.Errorf(
+						"MaxTokens(%d)に達してレスポンスが途中で切り詰められたため解析に失敗しました。enrichBatchSizeを小さくする必要があります: %w",
+						params.MaxTokens, err)
+				}
+				return nil, usage, fmt.Errorf("レスポンスの解析に失敗しました: %w", err)
 			}
-			return results, nil
+			return results, usage, nil
 		}
 	}
 
-	return nil, fmt.Errorf("テキスト応答が見つかりませんでした")
+	return nil, usage, fmt.Errorf("テキスト応答が見つかりませんでした")
+}
+
+// truncateRunes は s をルーン数 max までに切り詰める。max 以下の場合はそのまま返す。
+func truncateRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max])
 }
 
 // extractJSON はテキストから最初の JSON 配列部分のみを取り出す（前後の説明文を除去する）。

@@ -22,6 +22,9 @@ DB 初期化は初回起動時に自動実行される。
 `config.yml` が無い場合は `internal/config/config.example.yml` をコピーして作成し、
 `anthropic_api_key` に値を設定する（`config.yml` は Git 管理対象外）。
 
+> `ANTHROPIC_API_KEY` は claude.ai（コンシューマー向けチャット）のログイン情報ではなく、
+> Claude Console（https://console.anthropic.com）の「API Keys」から発行する API キーを使用する。
+
 ```bash
 cp internal/config/config.example.yml internal/config/config.yml
 ```

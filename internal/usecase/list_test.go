@@ -50,7 +50,7 @@ func (m *mockListArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([
 func (m *mockListArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockListArticleRepo) UpdateEnrichment(_ context.Context, _ int64, _, _ string) error {
+func (m *mockListArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate) error {
 	return nil
 }
 func (m *mockListArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {

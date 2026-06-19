@@ -18,11 +18,12 @@ func NewEnrichCommand(uc *usecase.EnrichUsecase) *cobra.Command {
 		Short: "記事に要約・カテゴリを付与してDBに保存する",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			n, err := uc.Execute(cmd.Context(), anthropic.EnrichOptions{Limit: limit, Force: force})
-			if err != nil {
-				return err
+			// 一部バッチのみ失敗した場合も処理件数を表示する。何も処理対象がなかった
+			// （n==0かつエラーなし）場合も実行確認のため表示する。
+			if n > 0 || err == nil {
+				fmt.Printf("%d 件の記事を要約・分類しました\n", n)
 			}
-			fmt.Printf("%d 件の記事を要約・分類しました\n", n)
-			return nil
+			return err
 		},
 	}
 	cmd.Flags().IntVar(&limit, "limit", 10, "処理件数")

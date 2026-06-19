@@ -32,6 +32,13 @@ type ListFilter struct {
 	PerPage        int
 }
 
+// EnrichmentUpdate は UpdateEnrichmentBatch に渡す1件分の更新内容。
+type EnrichmentUpdate struct {
+	ID       int64
+	Summary  string
+	Category string
+}
+
 type Repository interface {
 	Save(ctx context.Context, article domain.Article) error
 	FindAll(ctx context.Context) ([]domain.Article, error)
@@ -45,7 +52,8 @@ type Repository interface {
 	CountBookmarked(ctx context.Context) (int64, error)
 	FetchLatest(ctx context.Context, limit int, feedURL string) ([]domain.Article, error)
 	Search(ctx context.Context, keyword string, bookmarkedOnly bool) ([]domain.Article, error)
-	UpdateEnrichment(ctx context.Context, id int64, summary, category string) error
+	// UpdateEnrichmentBatch は複数件の要約・カテゴリ更新を1トランザクションでまとめて行う。
+	UpdateEnrichmentBatch(ctx context.Context, updates []EnrichmentUpdate) error
 	FindWithoutSummary(ctx context.Context, limit int) ([]domain.Article, error)
 	FindFiltered(ctx context.Context, filter ListFilter) ([]domain.Article, int64, error)
 	DistinctCategories(ctx context.Context) ([]string, error)

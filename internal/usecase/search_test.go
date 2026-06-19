@@ -50,7 +50,7 @@ func (m *mockSearchArticleRepo) Search(_ context.Context, keyword string, bookma
 	m.gotBookmarkedOnly = bookmarkedOnly
 	return m.results, m.err
 }
-func (m *mockSearchArticleRepo) UpdateEnrichment(_ context.Context, _ int64, _, _ string) error {
+func (m *mockSearchArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate) error {
 	return nil
 }
 func (m *mockSearchArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {

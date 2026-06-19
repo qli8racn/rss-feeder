@@ -13,13 +13,14 @@ import (
 )
 
 type summarizeAgent struct {
-	client anthropic.Client
+	client messageCreator
 	reader articlerepo.Repository
 }
 
 func NewSummarizeAgent(i do.Injector) (adapteranthropic.SummarizeAgent, error) {
+	client := anthropic.NewClient()
 	return &summarizeAgent{
-		client: anthropic.NewClient(),
+		client: &client.Messages,
 		reader: do.MustInvoke[articlerepo.Repository](i),
 	}, nil
 }
@@ -48,7 +49,7 @@ func (a *summarizeAgent) Run(ctx context.Context, opts adapteranthropic.Summariz
 	}
 
 	params := anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaudeOpus4_8,
+		Model:     anthropic.ModelClaudeHaiku4_5,
 		MaxTokens: 4096,
 		System: []anthropic.TextBlockParam{{
 			Text: "あなたはRSS記事の要約アシスタントです。fetch_articlesツールで記事を取得し、わかりやすく日本語で要約してください。",
@@ -57,24 +58,21 @@ func (a *summarizeAgent) Run(ctx context.Context, opts adapteranthropic.Summariz
 			anthropic.NewUserMessage(anthropic.NewTextBlock(query)),
 		},
 		Tools: tools,
-		Thinking: anthropic.ThinkingConfigParamUnion{
-			OfAdaptive: &anthropic.ThinkingConfigAdaptiveParam{},
-		},
 	}
 
 	defaultLimit := opts.Limit
-	return runAgentLoop(ctx, a.client, params, func(_, inputJSON string) (string, error) {
+	return runAgentLoopWithUsageLog(ctx, a.client, params, func(_, inputJSON string) (string, error) {
 		var input struct {
-			Limit   int    `json:"limit"`
 			FeedURL string `json:"feed_url"`
 		}
 		if err := json.Unmarshal([]byte(inputJSON), &input); err != nil {
 			return "", fmt.Errorf("invalid tool input: %w", err)
 		}
-		if input.Limit == 0 {
-			input.Limit = defaultLimit
+		limit, err := parseLimitInput(inputJSON, defaultLimit, 0)
+		if err != nil {
+			return "", err
 		}
-		articles, err := a.reader.FetchLatest(ctx, input.Limit, input.FeedURL)
+		articles, err := a.reader.FetchLatest(ctx, limit, input.FeedURL)
 		if err != nil {
 			return "", err
 		}
