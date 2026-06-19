@@ -48,7 +48,7 @@ func (m *mockResetArticleRepo) FetchLatest(_ context.Context, _ int, _ string) (
 func (m *mockResetArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockResetArticleRepo) UpdateEnrichment(_ context.Context, _ int64, _, _ string) error {
+func (m *mockResetArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate) error {
 	return nil
 }
 func (m *mockResetArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {

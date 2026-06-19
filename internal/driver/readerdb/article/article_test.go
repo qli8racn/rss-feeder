@@ -387,26 +387,80 @@ func TestArticleRepository_Save_PublisherAndThumbnail(t *testing.T) {
 	}
 }
 
-func TestArticleRepository_UpdateEnrichment(t *testing.T) {
+func TestArticleRepository_UpdateEnrichmentBatch(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
 	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
+	if err := r.Save(ctx, makeArticle("https://example.com/2")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
 	all, _ := r.FindAll(ctx)
-	id := all[0].ID
 
-	if err := r.UpdateEnrichment(ctx, id, "要約テキスト", "Tech"); err != nil {
-		t.Fatalf("UpdateEnrichment: %v", err)
+	updates := []articlerepo.EnrichmentUpdate{
+		{ID: all[0].ID, Summary: "要約1", Category: "Tech"},
+		{ID: all[1].ID, Summary: "要約2", Category: "Business"},
+	}
+	if err := r.UpdateEnrichmentBatch(ctx, updates); err != nil {
+		t.Fatalf("UpdateEnrichmentBatch: %v", err)
 	}
 
-	found, _ := r.FindByID(ctx, id)
-	if found.Summary != "要約テキスト" {
-		t.Errorf("Summary: got %q", found.Summary)
+	found0, _ := r.FindByID(ctx, all[0].ID)
+	if found0.Summary != "要約1" || found0.Category != "Tech" {
+		t.Errorf("got summary=%q category=%q, want 要約1/Tech", found0.Summary, found0.Category)
 	}
-	if found.Category != "Tech" {
-		t.Errorf("Category: got %q", found.Category)
+	found1, _ := r.FindByID(ctx, all[1].ID)
+	if found1.Summary != "要約2" || found1.Category != "Business" {
+		t.Errorf("got summary=%q category=%q, want 要約2/Business", found1.Summary, found1.Category)
+	}
+}
+
+func TestArticleRepository_UpdateEnrichmentBatch_Empty(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	if err := r.UpdateEnrichmentBatch(ctx, nil); err != nil {
+		t.Errorf("UpdateEnrichmentBatch(nil): got error %v, want nil", err)
+	}
+}
+
+func TestArticleRepository_UpdateEnrichmentBatch_FailureRollsBackEarlierRows(t *testing.T) {
+	// 2件目の更新がctxキャンセルにより失敗した場合、1件目の更新（トランザクション内では
+	// 既に成功していた）もコミットされずロールバックされることを確認する
+	// （UpdateEnrichmentBatchは1回の呼び出し全体がall-or-nothingであることの検証）。
+	ctx, cancel := context.WithCancel(context.Background())
+	r := newRepo(t)
+
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeArticle("https://example.com/2")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	all, _ := r.FindAll(ctx)
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("BeginTx: %v", err)
+	}
+	stmt, err := tx.PrepareContext(ctx, `UPDATE articles SET summary = ?, category = ? WHERE id = ?`)
+	if err != nil {
+		t.Fatalf("PrepareContext: %v", err)
+	}
+	if _, err := stmt.ExecContext(ctx, "要約1", "Tech", all[0].ID); err != nil {
+		t.Fatalf("ExecContext (1st row): %v", err)
+	}
+	cancel() // 2件目の実行前にctxをキャンセルし、2件目だけを失敗させる
+	if _, err := stmt.ExecContext(ctx, "要約2", "Business", all[1].ID); err == nil {
+		t.Fatal("ExecContext (2nd row): want error after ctx is canceled")
+	}
+	_ = tx.Rollback()
+
+	found0, _ := r.FindByID(context.Background(), all[0].ID)
+	if found0.Summary != "" {
+		t.Errorf("1件目はロールバックされ未更新のはず: got summary=%q, want empty", found0.Summary)
 	}
 }
 
@@ -420,8 +474,8 @@ func TestArticleRepository_FindWithoutSummary(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 	all, _ := r.FindAll(ctx)
-	if err := r.UpdateEnrichment(ctx, all[0].ID, "要約", "Tech"); err != nil {
-		t.Fatalf("UpdateEnrichment: %v", err)
+	if err := r.UpdateEnrichmentBatch(ctx, []articlerepo.EnrichmentUpdate{{ID: all[0].ID, Summary: "要約", Category: "Tech"}}); err != nil {
+		t.Fatalf("UpdateEnrichmentBatch: %v", err)
 	}
 
 	results, err := r.FindWithoutSummary(ctx, 10)

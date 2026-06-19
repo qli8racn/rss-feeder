@@ -13,13 +13,14 @@ import (
 )
 
 type summarizeAgent struct {
-	client anthropic.Client
+	client messageCreator
 	reader articlerepo.Repository
 }
 
 func NewSummarizeAgent(i do.Injector) (adapteranthropic.SummarizeAgent, error) {
+	client := anthropic.NewClient()
 	return &summarizeAgent{
-		client: anthropic.NewClient(),
+		client: &client.Messages,
 		reader: do.MustInvoke[articlerepo.Repository](i),
 	}, nil
 }

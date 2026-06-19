@@ -7,7 +7,15 @@ import (
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
 )
+
+// messageCreator は anthropic.MessageService.New を抽象化したインターフェース。
+// summarize/preference/enrich の各エージェントが共有し、テストで実APIを呼ばずに
+// fakeへ差し替えられるようにするために用意する。
+type messageCreator interface {
+	New(ctx context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error)
+}
 
 // modelPricing は 1M トークンあたりの USD 単価（入力・出力）。
 // 価格改定時はここを更新する。
@@ -50,7 +58,7 @@ func logUsage(model string, usage anthropic.Usage, elapsed time.Duration) {
 // runAgentLoopWithUsageLog は runAgentLoop を実行し、完了後にトークン使用量・概算費用・
 // 実行時間を logUsage で標準エラー出力に記録する。preference.go/summarize.go の
 // 計測用ボイラープレート（計測開始・Usage集計・defer ログ出力）を共通化するためのラッパー。
-func runAgentLoopWithUsageLog(ctx context.Context, client anthropic.Client, params anthropic.MessageNewParams, handler toolHandler) (string, error) {
+func runAgentLoopWithUsageLog(ctx context.Context, client messageCreator, params anthropic.MessageNewParams, handler toolHandler) (string, error) {
 	start := time.Now()
 	result, usage, err := runAgentLoop(ctx, client, params, handler)
 	logUsage(params.Model, usage, time.Since(start))

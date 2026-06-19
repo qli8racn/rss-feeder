@@ -142,11 +142,32 @@ func (r *repository) Search(ctx context.Context, keyword string, bookmarkedOnly 
 	return r.queryArgs(ctx, q, args...)
 }
 
-func (r *repository) UpdateEnrichment(ctx context.Context, id int64, summary, category string) error {
-	_, err := r.db.ExecContext(ctx, `
-		UPDATE articles SET summary = ?, category = ? WHERE id = ?
-	`, summary, category, id)
-	return err
+// UpdateEnrichmentBatch は複数件の要約・カテゴリ更新を1トランザクションでまとめて行う。
+// 1件ずつ ExecContext するより、ジャーナルへのfsyncをまとめられる分高速。
+// 1件でも失敗すればトランザクション全体をロールバックする（呼び出し元はこの単位を
+// 「DBへの保存単位」として扱うため、部分成功させたい場合は呼び出し元で複数回に分けて呼ぶ）。
+func (r *repository) UpdateEnrichmentBatch(ctx context.Context, updates []articlerepo.EnrichmentUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, `UPDATE articles SET summary = ?, category = ? WHERE id = ?`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, u := range updates {
+		if _, err := stmt.ExecContext(ctx, u.Summary, u.Category, u.ID); err != nil {
+			return fmt.Errorf("記事 %d の更新に失敗しました: %w", u.ID, err)
+		}
+	}
+	return tx.Commit()
 }
 
 func (r *repository) FindWithoutSummary(ctx context.Context, limit int) ([]domain.Article, error) {

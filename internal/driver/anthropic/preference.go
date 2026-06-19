@@ -13,13 +13,14 @@ import (
 )
 
 type preferenceAgent struct {
-	client anthropic.Client
+	client messageCreator
 	reader articlerepo.Repository
 }
 
 func NewPreferenceAgent(i do.Injector) (adapteranthropic.PreferenceAgent, error) {
+	client := anthropic.NewClient()
 	return &preferenceAgent{
-		client: anthropic.NewClient(),
+		client: &client.Messages,
 		reader: do.MustInvoke[articlerepo.Repository](i),
 	}, nil
 }

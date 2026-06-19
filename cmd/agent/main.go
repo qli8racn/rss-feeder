@@ -44,6 +44,9 @@ func main() {
 		Use:   "rss-agent",
 		Short: "RSS 記事をAIで分析・要約するCLIツール",
 	}
+	// 実行時エラーとcobraの自動usage出力が混在して紛らわしくならないようにする
+	// （全サブコマンドに一括適用するため、ルートコマンドで設定する）。
+	root.SilenceUsage = true
 
 	root.AddCommand(
 		agent.NewSummarizeCommand(summarizeUC),
