@@ -24,16 +24,16 @@
 
 ## フロントエンド
 
-- [ ] `cd web/frontend && npm run generate:api` で型を再生成
-- [ ] `web/frontend/src/types.ts` に `Feed` 型を追加
-- [ ] `web/frontend/src/api.ts` に `fetchFeeds` / `addFeed` / `removeFeed` を追加
-- [ ] `web/frontend/src/components/icons.tsx` に `SettingsIcon` / `TrashIcon` を追加
-- [ ] `web/frontend/src/components/FeedManagementModal.tsx` 新規作成
-- [ ] `web/frontend/src/components/Header.tsx` に「フィード管理」ボタンを追加
-- [ ] `web/frontend/src/App.tsx` にモーダル開閉状態を追加
+- [x] `cd web/frontend && npm run generate:api` で型を再生成
+- [x] `web/frontend/src/types.ts` に `Feed` 型を追加
+- [x] `web/frontend/src/api.ts` に `fetchFeeds` / `addFeed` / `removeFeed` を追加
+- [x] `web/frontend/src/components/icons.tsx` に `ListIcon` / `PlusIcon` / `TrashIcon` / `CloseIcon` を追加（Figmaデザインに合わせ、当初案の `SettingsIcon` から変更）
+- [x] `web/frontend/src/components/FeedManagementModal.tsx` 新規作成
+- [x] `web/frontend/src/components/Header.tsx` に「フィード管理」ボタンを追加
+- [x] `web/frontend/src/App.tsx` にモーダル開閉状態を追加
 
 ## 確認
 
 - [x] `go test ./...`
-- [ ] `cd web/frontend && npx tsc --noEmit && npm run test && npm run build`
+- [x] `cd web/frontend && npx tsc --noEmit && npm run test && npm run build`（すべて成功。`npm run lint` も確認）
 - [x] `curl` で `GET /api/feeds` / `POST /api/feeds` / `DELETE /api/feeds/{id}` の実エンドポイント確認（`CLAUDE.md` のフロントエンド確認方針により、ブラウザでの目視確認はユーザー自身が行う）
