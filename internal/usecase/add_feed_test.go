@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
+	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
 func TestAddFeedUsecase_RegistersNewFeed(t *testing.T) {
@@ -15,13 +16,20 @@ func TestAddFeedUsecase_RegistersNewFeed(t *testing.T) {
 			registered = url
 			return nil
 		},
+		findByURLFn: func(_ context.Context, url string) (*domain.Feed, error) {
+			return &domain.Feed{ID: 1, FeedURL: url}, nil
+		},
 	})
 
-	if err := uc.Execute(context.Background(), "https://example.com/feed"); err != nil {
+	feed, err := uc.Execute(context.Background(), "https://example.com/feed")
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if registered != "https://example.com/feed" {
 		t.Errorf("registered: got %q, want %q", registered, "https://example.com/feed")
+	}
+	if feed == nil || feed.FeedURL != "https://example.com/feed" {
+		t.Errorf("feed: got %+v, want FeedURL %q", feed, "https://example.com/feed")
 	}
 }
 
@@ -32,7 +40,7 @@ func TestAddFeedUsecase_AlreadyExists(t *testing.T) {
 		},
 	})
 
-	err := uc.Execute(context.Background(), "https://example.com/feed")
+	_, err := uc.Execute(context.Background(), "https://example.com/feed")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -49,7 +57,24 @@ func TestAddFeedUsecase_RepoError(t *testing.T) {
 		},
 	})
 
-	if err := uc.Execute(context.Background(), "https://example.com/feed"); !errors.Is(err, repoErr) {
+	if _, err := uc.Execute(context.Background(), "https://example.com/feed"); !errors.Is(err, repoErr) {
 		t.Errorf("expected repo error, got %v", err)
+	}
+}
+
+func TestAddFeedUsecase_FindByURLNotFoundAfterRegister(t *testing.T) {
+	uc := NewAddFeedUsecase(&mockFeedRepo{
+		registerFn: func(_ context.Context, _ string) error { return nil },
+		findByURLFn: func(_ context.Context, _ string) (*domain.Feed, error) {
+			return nil, nil
+		},
+	})
+
+	feed, err := uc.Execute(context.Background(), "https://example.com/feed")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if feed != nil {
+		t.Errorf("expected nil feed, got %+v", feed)
 	}
 }

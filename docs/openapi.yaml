@@ -112,6 +112,70 @@ paths:
         "500":
           $ref: '#/components/responses/InternalServerError'
 
+  /api/feeds:
+    get:
+      summary: 登録済みフィード一覧
+      operationId: listFeeds
+      tags: [feeds]
+      responses:
+        "200":
+          description: フィード一覧
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Feed'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      summary: フィードを追加
+      operationId: addFeed
+      tags: [feeds]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddFeedRequest'
+      responses:
+        "201":
+          description: 追加されたフィード
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Feed'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/feeds/{id}:
+    delete:
+      summary: フィードを削除
+      description: 指定 ID のフィードを削除する。関連記事も連動削除される。
+      operationId: removeFeed
+      tags: [feeds]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: フィード ID
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "204":
+          description: 削除成功（ボディなし）
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
   /api/categories:
     get:
       summary: 設定済みカテゴリの一覧
@@ -192,6 +256,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
+    Conflict:
+      description: 対象が既に存在する
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     InternalServerError:
       description: サーバー内部エラー
       content:
@@ -265,6 +335,37 @@ components:
         summary:
           type: string
         category:
+          type: string
+
+    Feed:
+      type: object
+      required:
+        - id
+        - feed_url
+        - title
+        - last_fetched
+        - created_at
+      properties:
+        id:
+          type: integer
+          format: int64
+        feed_url:
+          type: string
+        title:
+          type: string
+        last_fetched:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    AddFeedRequest:
+      type: object
+      required: [feed_url]
+      properties:
+        feed_url:
           type: string
 
     PagedArticles:
