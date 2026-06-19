@@ -89,9 +89,14 @@ func (m *mockFeedRepo) Remove(ctx context.Context, id int64) error {
 type mockRSSReader struct {
 	articles []domain.Article
 	err      error
+	// fetchFn が設定されている場合はこちらを優先する（呼び出しごとに異なる結果を返す必要があるテスト用）。
+	fetchFn func(ctx context.Context, feedURL string) (string, []domain.Article, error)
 }
 
-func (m *mockRSSReader) Fetch(_ context.Context, _ string) (string, []domain.Article, error) {
+func (m *mockRSSReader) Fetch(ctx context.Context, feedURL string) (string, []domain.Article, error) {
+	if m.fetchFn != nil {
+		return m.fetchFn(ctx, feedURL)
+	}
 	return "mock feed", m.articles, m.err
 }
 

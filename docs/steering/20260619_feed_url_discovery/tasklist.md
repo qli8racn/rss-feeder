@@ -2,7 +2,7 @@
 
 ## 共通ドライバ
 
-- [ ] `golang.org/x/net` を `go.mod` で直接依存に変更（`golang.org/x/net/html` を使用。`findFeedLink` 実装時に対応）
+- [x] `golang.org/x/net` を `go.mod` で直接依存に変更（`golang.org/x/net/html` を使用。`findFeedLink` 実装時に対応）
 - [x] `internal/adapter/driver/htmlfetch/htmlfetch.go` 新規作成（`Fetcher` interface）
 - [x] `internal/driver/htmlfetch/htmlfetch.go` 新規作成（タイムアウト15秒の実装。レスポンスサイズ上限5MBも追加）
 - [x] `internal/driver/htmlfetch/htmlfetch_test.go` 新規作成（`httptest` 統合テスト）
@@ -18,14 +18,16 @@
 
 ## resolve_feed_url（`cmd/web` ・ `cmd/rss-feeder` 共通）
 
-- [ ] `internal/usecase/resolve_feed_url.go` 新規作成（`ResolveFeedURLUsecase`・`findFeedLink` 純粋関数・`ErrFeedNotFound`。ステップ3呼び出しに30秒タイムアウトを設定、各ステップの失敗はログに残す）
-- [ ] `internal/usecase/resolve_feed_url_test.go` 新規作成
+- [x] `internal/usecase/resolve_feed_url.go` 新規作成（`ResolveFeedURLUsecase`・`findFeedLink` 純粋関数・`ErrFeedNotFound`。ステップ3呼び出しに30秒タイムアウトを設定、各ステップの失敗はログに残す）
+- [x] `internal/usecase/resolve_feed_url_test.go` 新規作成
 - [ ] `internal/adapter/handler/cli/add_feed.go` 修正（`ResolveFeedURLUsecase` → `AddFeedUsecase` の順で呼び出す）
+  - 保留: `cmd/web`・`cmd/rss-feeder` 側で `feeddiscovery.Agent` の具象実装（サブプロセス／インプロセス）が揃ってから main.go の DI とまとめて変更する（先に変更すると一時的にビルドが壊れるため）
 - [ ] `internal/adapter/handler/web/feed.go` 修正（同上、`ErrFeedNotFound` を 400 に、タイムアウトを 504 にマッピング）
+  - 同上の理由で保留
 
 ## cmd/web 側（サブプロセス経由、同時実行数制限）
 
-- [ ] `internal/adapter/driver/feeddiscovery/feeddiscovery.go` 新規作成（`Agent` interface、`ErrAgentUnavailable`）
+- [x] `internal/adapter/driver/feeddiscovery/feeddiscovery.go` 新規作成（`Agent` interface、`ErrAgentUnavailable`）
 - [ ] `internal/driver/feeddiscovery/subprocess.go` 新規作成（セマフォで同時実行数を制限した上で `exec.CommandContext` で `bin/rss-agent discover-feed` 実行）
 - [ ] `internal/driver/feeddiscovery/subprocess_test.go` 新規作成（同時実行数の上限挙動を含む）
 - [ ] `cmd/web/main.go` に DI 登録・`--rss-agent-path`（デフォルト `bin/rss-agent`）・`--feed-discovery-concurrency`（デフォルト2）フラグ追加・`AddFeedHandler` 呼び出しに80秒の `context.WithTimeout` を追加
