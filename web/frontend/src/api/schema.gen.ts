@@ -78,6 +78,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/feeds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 登録済みフィード一覧 */
+        get: operations["listFeeds"];
+        put?: never;
+        /** フィードを追加 */
+        post: operations["addFeed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/feeds/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * フィードを削除
+         * @description 指定 ID のフィードを削除する。関連記事も連動削除される。
+         */
+        delete: operations["removeFeed"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/categories": {
         parameters: {
             query?: never;
@@ -140,6 +178,19 @@ export interface components {
             summary: string;
             category: string;
         };
+        Feed: {
+            /** Format: int64 */
+            id: number;
+            feed_url: string;
+            title: string;
+            /** Format: date-time */
+            last_fetched: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AddFeedRequest: {
+            feed_url: string;
+        };
         PagedArticles: {
             articles: components["schemas"]["Article"][];
             /** Format: int64 */
@@ -168,6 +219,15 @@ export interface components {
         };
         /** @description 対象が見つからない */
         NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description 対象が既に存在する */
+        Conflict: {
             headers: {
                 [name: string]: unknown;
             };
@@ -321,6 +381,78 @@ export interface operations {
                     "application/json": components["schemas"]["FetchResult"];
                 };
             };
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listFeeds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description フィード一覧 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Feed"][];
+                };
+            };
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    addFeed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddFeedRequest"];
+            };
+        };
+        responses: {
+            /** @description 追加されたフィード */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Feed"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    removeFeed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description フィード ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 削除成功（ボディなし） */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
         };
     };

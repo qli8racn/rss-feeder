@@ -15,7 +15,7 @@ func NewAddFeedCommand(uc *usecase.AddFeedUsecase) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			url := args[0]
-			if err := uc.Execute(cmd.Context(), url); err != nil {
+			if _, err := uc.Execute(cmd.Context(), url); err != nil {
 				return err
 			}
 			fmt.Printf("登録しました: %s\n", url)

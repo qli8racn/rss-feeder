@@ -1,4 +1,4 @@
-import type { Article, ArticlesResponse } from './types'
+import type { Article, ArticlesResponse, Feed } from './types'
 
 const PER_PAGE = 25
 
@@ -69,4 +69,31 @@ export async function fetchLatestArticles(): Promise<FetchLatestResult> {
   const res = await fetch('/api/articles/fetch', { method: 'POST' })
   if (!res.ok) throw new Error(`最新フィードの取得に失敗しました (${res.status})`)
   return res.json()
+}
+
+export async function fetchFeeds(): Promise<Feed[]> {
+  const res = await fetch('/api/feeds')
+  if (!res.ok) throw new Error(`フィード一覧の取得に失敗しました (${res.status})`)
+  return res.json()
+}
+
+export async function addFeed(feedUrl: string): Promise<Feed> {
+  const res = await fetch('/api/feeds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ feed_url: feedUrl }),
+  })
+  if (!res.ok) {
+    if (res.status === 409) throw new Error('すでに登録済みのフィードです')
+    throw new Error(`フィードの追加に失敗しました (${res.status})`)
+  }
+  return res.json()
+}
+
+export async function removeFeed(id: number): Promise<void> {
+  const res = await fetch(`/api/feeds/${id}`, { method: 'DELETE' })
+  if (!res.ok) {
+    if (res.status === 404) throw new Error('フィードが見つかりません')
+    throw new Error(`フィードの削除に失敗しました (${res.status})`)
+  }
 }

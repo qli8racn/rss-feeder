@@ -54,13 +54,19 @@ func (m *mockArticleRepo) DistinctCategories(_ context.Context) ([]string, error
 }
 
 type mockFeedRepo struct {
-	registerFn func(ctx context.Context, url string) error
-	listAllFn  func(ctx context.Context) ([]domain.Feed, error)
-	removeFn   func(ctx context.Context, id int64) error
+	registerFn  func(ctx context.Context, url string) error
+	findByURLFn func(ctx context.Context, url string) (*domain.Feed, error)
+	listAllFn   func(ctx context.Context) ([]domain.Feed, error)
+	removeFn    func(ctx context.Context, id int64) error
 }
 
-func (m *mockFeedRepo) Save(_ context.Context, _ domain.Feed) (int64, error)        { return 1, nil }
-func (m *mockFeedRepo) FindByURL(_ context.Context, _ string) (*domain.Feed, error) { return nil, nil }
+func (m *mockFeedRepo) Save(_ context.Context, _ domain.Feed) (int64, error) { return 1, nil }
+func (m *mockFeedRepo) FindByURL(ctx context.Context, url string) (*domain.Feed, error) {
+	if m.findByURLFn != nil {
+		return m.findByURLFn(ctx, url)
+	}
+	return nil, nil
+}
 func (m *mockFeedRepo) Register(ctx context.Context, url string) error {
 	if m.registerFn != nil {
 		return m.registerFn(ctx, url)

@@ -4,6 +4,7 @@ import SearchFilterBar from './components/SearchFilterBar'
 import ArticleTable from './components/ArticleTable'
 import Pagination from './components/Pagination'
 import Footer from './components/Footer'
+import FeedManagementModal from './components/FeedManagementModal'
 import { fetchArticles, fetchCategories, fetchLatestArticles, searchArticles, toggleBookmark } from './api'
 import { parseFilterState } from './domain/filter'
 import { syncFilterStateToURL } from './usecase/syncFilterStateToURL'
@@ -25,6 +26,7 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
   const [fetching, setFetching] = useState(false)
+  const [feedModalOpen, setFeedModalOpen] = useState(false)
 
   const refreshBookmarkedTotal = useCallback(() => {
     // バッジの件数だけが必要なので、記事本文を含むフルデータは取得しない
@@ -130,7 +132,9 @@ function App() {
         onToggleBookmarkedOnly={handleToggleBookmarkedOnly}
         fetching={fetching}
         onFetchLatest={handleFetchLatest}
+        onOpenFeedManagement={() => setFeedModalOpen(true)}
       />
+      <FeedManagementModal open={feedModalOpen} onClose={() => setFeedModalOpen(false)} />
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <SearchFilterBar
           initialKeyword={initialFilters.keyword}

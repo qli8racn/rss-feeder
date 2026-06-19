@@ -70,6 +70,11 @@ func (e Sort) Valid() bool {
 	}
 }
 
+// AddFeedRequest defines model for AddFeedRequest.
+type AddFeedRequest struct {
+	FeedURL string `json:"feed_url"`
+}
+
 // Article defines model for Article.
 type Article struct {
 	Bookmarked   bool      `json:"bookmarked"`
@@ -91,6 +96,15 @@ type Article struct {
 // Error defines model for Error.
 type Error struct {
 	Error string `json:"error"`
+}
+
+// Feed defines model for Feed.
+type Feed struct {
+	CreatedAt   time.Time  `json:"created_at"`
+	FeedURL     string     `json:"feed_url"`
+	ID          int64      `json:"id"`
+	LastFetched *time.Time `json:"last_fetched"`
+	Title       string     `json:"title"`
 }
 
 // FetchResult defines model for FetchResult.
@@ -128,6 +142,9 @@ type PerPage = int
 
 // BadRequest defines model for BadRequest.
 type BadRequest = Error
+
+// Conflict defines model for Conflict.
+type Conflict = Error
 
 // InternalServerError defines model for InternalServerError.
 type InternalServerError = Error
@@ -179,3 +196,6 @@ type SearchArticlesParams struct {
 	// PerPage 1 ページあたりの件数
 	PerPage *PerPage `form:"per_page,omitempty" json:"per_page,omitempty"`
 }
+
+// AddFeedJSONRequestBody defines body for AddFeed for application/json ContentType.
+type AddFeedJSONRequestBody = AddFeedRequest

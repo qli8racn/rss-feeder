@@ -30,3 +30,11 @@ export const SORT_FIELDS: readonly SortField[] = ['title', 'publisher', 'categor
 export const PER_PAGE_OPTIONS = [25, 50, 100] as const
 export type PerPage = (typeof PER_PAGE_OPTIONS)[number]
 export const DEFAULT_PER_PAGE: PerPage = 25
+
+export interface Feed {
+  id: number
+  feed_url: string
+  title: string
+  last_fetched: string | null
+  created_at: string
+}

@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { BookmarkIcon, RefreshIcon, RssIcon } from './icons'
+import { BookmarkIcon, ListIcon, RefreshIcon, RssIcon } from './icons'
 
 interface HeaderProps {
   bookmarkedCount: number
@@ -7,9 +7,17 @@ interface HeaderProps {
   onToggleBookmarkedOnly: () => void
   fetching: boolean
   onFetchLatest: () => void
+  onOpenFeedManagement: () => void
 }
 
-function Header({ bookmarkedCount, bookmarkedOnly, onToggleBookmarkedOnly, fetching, onFetchLatest }: HeaderProps) {
+function Header({
+  bookmarkedCount,
+  bookmarkedOnly,
+  onToggleBookmarkedOnly,
+  fetching,
+  onFetchLatest,
+  onOpenFeedManagement,
+}: HeaderProps) {
   return (
     <header className="flex items-center justify-between border-b border-slate-400/10 bg-[#0d1117]/95 px-6 py-4">
       <div className="flex items-center gap-3">
@@ -41,6 +49,14 @@ function Header({ bookmarkedCount, bookmarkedOnly, onToggleBookmarkedOnly, fetch
           <span className="rounded bg-[#1e2733] px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
             {bookmarkedCount}
           </span>
+        </button>
+        <button
+          type="button"
+          onClick={onOpenFeedManagement}
+          className="flex items-center gap-1.5 rounded border border-slate-400/10 px-3 py-1.5 font-mono text-[11px] text-slate-500"
+        >
+          <ListIcon className="size-3" />
+          <span>フィード管理</span>
         </button>
       </div>
     </header>

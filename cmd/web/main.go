@@ -53,13 +53,16 @@ func main() {
 		do.MustInvoke[feedrepo.Repository](i),
 		do.MustInvoke[adapterrss.RSSReader](i),
 	)
+	addFeedUC := usecase.NewAddFeedUsecase(do.MustInvoke[feedrepo.Repository](i))
+	listFeedsUC := usecase.NewListFeedsUsecase(do.MustInvoke[feedrepo.Repository](i))
+	removeFeedUC := usecase.NewRemoveFeedUsecase(do.MustInvoke[feedrepo.Repository](i))
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{"GET", "POST"},
+		AllowedMethods: []string{"GET", "POST", "DELETE"},
 	}))
 
 	r.Get("/api/articles", web.ListArticlesHandler(listUC))
@@ -67,6 +70,9 @@ func main() {
 	r.Post("/api/articles/fetch", web.FetchLatestHandler(fetchUC))
 	r.Post("/api/articles/{id}/bookmark", web.BookmarkArticleHandler(bookmarkUC, auditUC))
 	r.Get("/api/categories", web.ListCategoriesHandler(categoriesUC))
+	r.Get("/api/feeds", web.ListFeedsHandler(listFeedsUC))
+	r.Post("/api/feeds", web.AddFeedHandler(addFeedUC))
+	r.Delete("/api/feeds/{id}", web.RemoveFeedHandler(removeFeedUC))
 	r.Handle("/*", http.FileServer(http.Dir(*staticDir)))
 
 	addr := fmt.Sprintf(":%d", *port)
