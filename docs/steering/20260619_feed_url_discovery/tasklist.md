@@ -9,12 +9,12 @@
 
 ## Claude を直接呼ぶ側（`cmd/agent` ・ `cmd/rss-feeder` 共通の Go パッケージ）
 
-- [ ] `internal/adapter/driver/anthropic/discover_feed.go` 新規作成（`FeedDiscoveryAgent` interface）
-- [ ] `internal/driver/anthropic/discover_feed.go` 新規作成（`claude-haiku-4-5`、`<head>` 抽出・truncate）
-- [ ] `internal/usecase/discover_feed.go` 新規作成（`DiscoverFeedUsecase`）
-- [ ] `internal/usecase/discover_feed_test.go` 新規作成
-- [ ] `internal/adapter/handler/agent/discover_feed.go` 新規作成（`discover-feed <url>` コマンド。`rss-agent` 単独実行用）
-- [ ] `cmd/agent/main.go` に DI 登録・コマンド追加
+- [x] `internal/adapter/driver/anthropic/discover_feed.go` 新規作成（`FeedDiscoveryAgent` interface）
+- [x] `internal/driver/anthropic/discover_feed.go` 新規作成（`claude-haiku-4-5`、`<head>` 抽出・truncate）
+- [x] `internal/usecase/discover_feed.go` 新規作成（`DiscoverFeedUsecase`）
+- [x] `internal/usecase/discover_feed_test.go` 新規作成
+- [x] `internal/adapter/handler/agent/discover_feed.go` 新規作成（`discover-feed <url>` コマンド。`rss-agent` 単独実行用）
+- [x] `cmd/agent/main.go` に DI 登録・コマンド追加（`adapterrss.RSSReader` ・ `htmlfetch.Fetcher` の DI 登録も追加）
 
 ## resolve_feed_url（`cmd/web` ・ `cmd/rss-feeder` 共通）
 
