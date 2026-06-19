@@ -2,10 +2,10 @@
 
 ## 共通ドライバ
 
-- [ ] `golang.org/x/net` を `go.mod` で直接依存に変更（`golang.org/x/net/html` を使用）
-- [ ] `internal/adapter/driver/htmlfetch/htmlfetch.go` 新規作成（`Fetcher` interface）
-- [ ] `internal/driver/htmlfetch/htmlfetch.go` 新規作成（タイムアウト15秒の実装）
-- [ ] `internal/driver/htmlfetch/htmlfetch_test.go` 新規作成（`httptest` 統合テスト）
+- [ ] `golang.org/x/net` を `go.mod` で直接依存に変更（`golang.org/x/net/html` を使用。`findFeedLink` 実装時に対応）
+- [x] `internal/adapter/driver/htmlfetch/htmlfetch.go` 新規作成（`Fetcher` interface）
+- [x] `internal/driver/htmlfetch/htmlfetch.go` 新規作成（タイムアウト15秒の実装。レスポンスサイズ上限5MBも追加）
+- [x] `internal/driver/htmlfetch/htmlfetch_test.go` 新規作成（`httptest` 統合テスト）
 
 ## Claude を直接呼ぶ側（`cmd/agent` ・ `cmd/rss-feeder` 共通の Go パッケージ）
 
