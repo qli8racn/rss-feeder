@@ -1,8 +1,9 @@
 import { memo, useEffect, useState } from 'react'
-import SelectField from './ui/SelectField'
-import TextField from './ui/TextField'
-import { PER_PAGE_OPTIONS } from '../types'
-import type { PerPage } from '../types'
+import { SearchIcon } from '../atoms/icons'
+import SelectField from '../molecules/SelectField'
+import TextField from '../molecules/TextField'
+import { PER_PAGE_OPTIONS } from '../../types'
+import type { PerPage } from '../../types'
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -44,7 +45,7 @@ function SearchFilterBar({
     >
       <TextField
         className="flex-1"
-        hasIcon
+        icon={<SearchIcon className="size-3.5 text-text-secondary" />}
         value={input}
         onChange={(e) => setInput(e.target.value)}
         placeholder="タイトル・メディア・サマリーで検索..."

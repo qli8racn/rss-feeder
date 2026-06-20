@@ -1,6 +1,6 @@
 import { memo } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon } from './icons'
-import PageButton from './ui/PageButton'
+import { ChevronLeftIcon, ChevronRightIcon } from '../atoms/icons'
+import PageButton from '../molecules/PageButton'
 
 interface PaginationProps {
   page: number

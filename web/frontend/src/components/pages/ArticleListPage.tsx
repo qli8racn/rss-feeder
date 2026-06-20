@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Header from './components/Header'
-import SearchFilterBar from './components/SearchFilterBar'
-import ArticleTable from './components/ArticleTable'
-import Pagination from './components/Pagination'
-import Footer from './components/Footer'
-import FeedManagementModal from './components/FeedManagementModal'
-import { fetchArticles, fetchCategories, fetchLatestArticles, searchArticles, toggleBookmark } from './api'
-import { parseFilterState } from './domain/filter'
-import { syncFilterStateToURL } from './usecase/syncFilterStateToURL'
-import type { Article, PerPage, SortField, SortOrder } from './types'
+import ArticleListTemplate from '../templates/ArticleListTemplate'
+import { fetchArticles, fetchCategories, fetchLatestArticles, searchArticles, toggleBookmark } from '../../api'
+import { parseFilterState } from '../../domain/filter'
+import { syncFilterStateToURL } from '../../usecase/syncFilterStateToURL'
+import type { Article, PerPage, SortField, SortOrder } from '../../types'
 
-function App() {
+function ArticleListPage() {
   const [initialFilters] = useState(() => parseFilterState(window.location.search))
   const [articles, setArticles] = useState<Article[]>([])
   const [total, setTotal] = useState(0)
@@ -125,52 +120,34 @@ function App() {
   )
 
   return (
-    <div className="min-h-screen bg-surface-base text-slate-200">
-      <Header
-        bookmarkedCount={bookmarkedTotal}
-        bookmarkedOnly={bookmarkedOnly}
-        onToggleBookmarkedOnly={handleToggleBookmarkedOnly}
-        fetching={fetching}
-        onFetchLatest={handleFetchLatest}
-        onOpenFeedManagement={() => setFeedModalOpen(true)}
-      />
-      <FeedManagementModal open={feedModalOpen} onClose={() => setFeedModalOpen(false)} />
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        <SearchFilterBar
-          initialKeyword={initialFilters.keyword}
-          onKeywordCommit={setKeyword}
-          category={category}
-          onCategoryChange={setCategory}
-          categories={categories}
-          perPage={perPage}
-          onPerPageChange={handlePerPageChange}
-        />
-        <div className="mt-4 flex items-center justify-between text-small text-slate-500">
-          <span>{total} 件</span>
-          <span>
-            {page} / {totalPages} ページ
-          </span>
-        </div>
-        <div className="mt-3">
-          {error ? (
-            <p className="py-12 text-center text-sm text-rose-400">{error}</p>
-          ) : (
-            <ArticleTable
-              articles={articles}
-              page={page}
-              perPage={perPage}
-              sort={sort}
-              order={order}
-              onSortChange={handleSortChange}
-              onToggleBookmark={handleToggleBookmark}
-            />
-          )}
-        </div>
-        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
-        <Footer totalArticles={total} />
-      </main>
-    </div>
+    <ArticleListTemplate
+      bookmarkedCount={bookmarkedTotal}
+      bookmarkedOnly={bookmarkedOnly}
+      onToggleBookmarkedOnly={handleToggleBookmarkedOnly}
+      fetching={fetching}
+      onFetchLatest={handleFetchLatest}
+      onOpenFeedManagement={() => setFeedModalOpen(true)}
+      feedModalOpen={feedModalOpen}
+      onCloseFeedManagement={() => setFeedModalOpen(false)}
+      initialKeyword={initialFilters.keyword}
+      onKeywordCommit={setKeyword}
+      category={category}
+      onCategoryChange={setCategory}
+      categories={categories}
+      perPage={perPage}
+      onPerPageChange={handlePerPageChange}
+      total={total}
+      page={page}
+      totalPages={totalPages}
+      onPageChange={setPage}
+      error={error}
+      articles={articles}
+      sort={sort}
+      order={order}
+      onSortChange={handleSortChange}
+      onToggleBookmark={handleToggleBookmark}
+    />
   )
 }
 
-export default App
+export default ArticleListPage

@@ -125,16 +125,64 @@ Figma側は、上記4コンポーネント（`Table`を除く）をMain Componen
 - ページネーションの「次へ」ボタンに、誤って「前へ」と同じ左向き矢印のVariantを適用してしまった。`Variant=Next` を新たに作成し、矢印アイコンのベクターを `relativeTransform` で水平反転して修正した
 - Component Set内で一部のVariantにのみ追加のVariantプロパティ（例: `Direction`）を持たせようとしたところ、「Component set has existing errors」で操作が失敗した。Component Set内の全Variantは同じプロパティキーの組み合わせを持つ必要があるため、単一の `Variant` プロパティの値を増やす（`Nav`→`Prev`/`Next`に分割）方式に変更した
 
-## ディレクトリ構成への変更（案）
+## ディレクトリ構成（Atomic Design、2026-06-20 三次改訂）
+
+`ui/` というフラットな置き場ではなく、Atomic Designの階層で再編した。
 
 ```
-web/frontend/
-  tailwind.config.js     theme.extend にトークン追加
-  src/components/
-    ui/                   新設（共通コンポーネントの置き場。抽出対象が決まった場合のみ作成）
+web/frontend/src/components/
+  atoms/        Button.tsx, icons.tsx
+  molecules/    IconButton.tsx, PageButton.tsx, SelectField.tsx, TextField.tsx, Table.tsx, CategoryBadge.tsx
+  organisms/    Header.tsx, SearchFilterBar.tsx, ArticleTable.tsx, Pagination.tsx, Footer.tsx, FeedManagementModal.tsx
+  templates/    ArticleListTemplate.tsx（App.tsxからレイアウトJSXのみを抽出）
+  pages/        ArticleListPage.tsx（App.tsxから状態管理・データ取得ロジックを抽出）
 ```
+
+`App.tsx`は削除し、`main.tsx`は`pages/ArticleListPage`を読み込む。
+
+### Button・TextFieldの再設計（atomic design層の誤りの修正）
+
+最初に作成した`ui/Button.tsx`は`icon: 'refresh' | 'list' | 'plus' | 'bookmark'`という閉じたenumを持ち、特定の組み合わせごとに見た目が変わる設計だった。これは実質的に「特定の意味を持った組み合わせ」であり、atomではなくmoleculeの性質を持っていた。本来atomにすべきは「枠線・角丸・背景色だけを持つ最小単位」であり、アイコン・ラベルは呼び出し側が`children`として自由に合成すべきという指摘を受け、以下のように再設計した。
+
+- **`Button`（atom）**: `icon`/`variant`/`spinning`/`badge`propを廃し、`children`でアイコン・ラベルを自由合成する。背景色も「常時filled」に簡略化した（後述のFigma側デザイン変更に合わせたもの）。`active`（amberの配色）は枠の見た目を切り替えるだけの軸であり、コンテンツ合成とは独立した関心事のためatomのpropとして残した
+- **`atoms/icons.tsx`**: 元から個別の関数コンポーネント（`RssIcon`等）として分離されていたため、実質的に元からatomの粒度だった。SVGファイルへの分割は、現状11種・107行という規模では本格的な恩恵（ビルド設定の複雑化に対して）が薄いため見送った（11種を大きく超える、またはFigmaからのSVG書き出しを頻繁に取り込む運用になったら再検討する）
+- **`IconButton`・`PageButton`（molecule）**: 元からアイコン（atom）をpropまたはchildrenとして受け取る構造だったため、Button atomの再設計に伴う変更は不要だった
+- **`TextField`（molecule）**: `hasIcon: boolean`で検索アイコンの表示を固定的に切り替えていたのは汎用性が低いという指摘を受け、`icon?: ReactNode`に変更し任意のアイコンを受け取れるようにした
+- **`CategoryBadge`（molecule、新規）**: `ArticleTable.tsx`内で2箇所重複していたカテゴリ配色ロジック（`domain/category.ts`の`categoryStyle`を呼ぶ部分）を切り出した
+
+### セマンティックカラートークンの追加
+
+`text-slate-200`/`text-slate-500`/`text-amber-400`という生のTailwindカラー名には意味づけがなく、用途（主要テキスト/補助テキスト/アクセント）が名前から分からない問題があった。CSS変数ではなくTailwindの`theme.extend`で管理する方針を継続し、以下を追加した。
+
+```js
+colors: {
+  text: {
+    primary: '#e2e8f0',    // 主要テキスト（旧: slate-200）
+    secondary: '#64748b',  // 補助テキスト（旧: slate-500）
+  },
+  accent: {
+    default: '#fbbf24',    // アクセント（旧: amber-400）
+  },
+},
+```
+
+ランタイムでのテーマ切り替え要件がない（ダーク1色のみ）ため、CSS変数より素のTailwind theme値の方がIDE補完・utility classとしての一貫性の面で優位と判断した。
+
+### Figma側: Icon atom・Button再構築・全セクションComponent化（2026-06-20 三次改訂）
+
+- **`Icon`（Component Set、`General`ページ）**: 既存のButton/IconButton/TextField/PageButton/SelectFieldに埋め込まれていたベクター（icon/refresh, icon/close等）をそれぞれクローンし、`Name`プロパティ（Rss/Refresh/Bookmark/Search/ChevronDown/ChevronLeft/ChevronRight/List/Plus/Trash/Close）を持つ単一のComponent Setとして再構成した。ゼロから描画するのではなく既存ベクターを複製したため、見た目の再現性が高い
+- **`Button`の再構築**: 旧来の4 Variant（`Icon`×`Style`）構成を、単一Componentに統合した。`Icon`をINSTANCE_SWAPプロパティ（`Icon`atomを参照）、`Label`をTEXTプロパティとして公開し、背景は常時`surface/raised`にバインドしたfilledスタイルに統一した。Header3インスタンス・Feed Management Modalの追加ボタンインスタンスを新Componentにスワップ（`instance.swapComponent()`）した上で、`setProperties()`で各ボタンのIcon/Labelを設定し、旧Component Setは削除した
+- **`TextField`へのINSTANCE_SWAP追加**: `Has Icon=True`側に直接描画されていた検索アイコンのベクターを、`Icon`atomのインスタンス（デフォルト値Search）に置き換え、INSTANCE_SWAPプロパティとして公開した。検索アイコン固定ではなく任意のアイコンに差し替え可能であることが、Figma上のプロパティとしても明示されるようにした
+- **全セクションのMain Component化**: 従来「再利用されないため命名のみ整理する」としていた`Header`/`SearchFilterBar`/`ArticleTable`/`Pagination`/`Footer`/`Feed Management Modal`を、その場で`figma.createComponentFromNode()`によりMain Componentに変換した（位置・親子関係は維持したまま、ノードタイプのみFRAME→COMPONENTに変更）。再利用の有無に関わらずコンポーネントとして明示する方針に転換した
+- **Figmaページ構成の分割**: 単一の`Page 1`を`General`（atoms/molecules）にリネームし、新規ページ`Frontend`を作成して`ArticleListPage`・`Feed Management Modal`フレーム（および新たにComponent化した6つのorganism）を移動した
+
+#### 作業中に発生した不具合と対処（三次改訂分）
+
+- `figma.createComponentFromNode()`を、すでに`COMPONENT`型であるノード（既存Component Setのバリアントをクローンしたもの）に対して呼び出すと「Cannot create component from node」で失敗した。クローンした時点で既に`COMPONENT`型だったため、変換不要だったことに気付き、そのまま`Button`として使用するよう修正した
+- `addComponentProperty('Icon', 'INSTANCE_SWAP', ...)`のデフォルト値に、Iconインスタンスの`id`（インスタンス自身のID）を渡すと「Default value for instance swap component property is invalid」で失敗した。INSTANCE_SWAPのデフォルト値には参照先の**メインComponentのID**を渡す必要があり、修正した
+- `instance.componentPropertyReferences = { instanceSwapContent: propKey }`は「Unrecognized key(s) in object: 'instanceSwapContent'」で失敗した。Plugin APIの型定義を確認したところ、INSTANCE_SWAPプロパティの参照キーは`mainComponent`であり、修正した
 
 ## 確認方法
 
 - `npx tsc --noEmit && npm run test && npm run build` がすべて成功すること
-- 既存画面の見た目（DOM構造・スタイルの見え方）に変化がないことの目視確認は、`CLAUDE.md` の方針通りユーザー自身が行う
+- 既存画面の見た目（DOM構造・スタイルの見え方）に変化がないことの目視確認は、`CLAUDE.md` の方針通りユーザー自身が行う（Figma側の見た目変化は`get_screenshot`で都度確認した）

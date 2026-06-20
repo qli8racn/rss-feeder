@@ -31,8 +31,10 @@ function PageButton({ variant, onClick, children, disabled, active, ariaLabel }:
     <button
       type="button"
       onClick={onClick}
-      className={`size-8 rounded border font-mono text-caption ${
-        active ? 'border-amber-500/60 bg-amber-500/10 text-amber-400' : 'border-slate-400/10 text-slate-500'
+      disabled={disabled}
+      aria-label={ariaLabel}
+      className={`size-8 rounded border font-mono text-caption disabled:opacity-30 ${
+        active ? 'border-amber-500/60 bg-amber-500/10 text-accent-default' : 'border-slate-400/10 text-text-secondary'
       }`}
     >
       {children}
