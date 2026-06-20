@@ -27,6 +27,14 @@
 
 ## フォローアップ（このフェーズ外）
 
-- [ ] フロントエンドの `api.ts`／`types.ts` を生成型（`schema.gen.ts`）に統合する
+- [x] フロントエンドの `api.ts`／`types.ts` を生成型（`schema.gen.ts`）に統合する
+  - `types.ts` を撤廃し、`domain/article.ts`（`Article`/`ArticlesResponse`/`FetchLatestResult`/`Mode`/
+    `SortField`/`SortOrder`とその定数）・`domain/feed.ts`（`Feed`）に分割。Go側の
+    `internal/domain/article.go`・`feed.go` と同じエンティティ単位の構成に合わせた
+  - 各型は `schema.gen.ts` の `components['schemas']` 型のエイリアスとし、手書き定義を撤廃
+  - `api.ts` の手書き `FetchLatestResult` interface・`mode` のリテラル型を `domain/article.ts` 経由の生成型に置き換え
+  - `domain/filter.ts`・`ArticleTable.tsx`・`ArticleListPage.tsx`・`ArticleListTemplate.tsx`・
+    `SearchFilterBar.tsx`・`FeedManagementModal.tsx` のimport元を `domain/article`・`domain/feed` に変更
+  - `npx tsc -b --noEmit` / `npm run test` / `npm run build` で確認
 - [ ] サーバー側のリクエスト・レスポンスのスキーマバリデーション（ミドルウェア等）の追加
 - [ ] `oapi-codegen` の `chi-server` 生成によるルーティング自動生成への移行検討

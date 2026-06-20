@@ -4,7 +4,7 @@ import ArticleTable from '../organisms/ArticleTable'
 import Pagination from '../organisms/Pagination'
 import Footer from '../organisms/Footer'
 import FeedManagementModal from '../organisms/FeedManagementModal'
-import type { Article, PerPage, SortField, SortOrder } from '../../types'
+import type { Article, PerPage, SortField, SortOrder } from '../../domain/article'
 
 interface ArticleListTemplateProps {
   bookmarkedCount: number

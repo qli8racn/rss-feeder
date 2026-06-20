@@ -72,7 +72,8 @@ cd web/frontend && npm run generate:api                  # src/api/schema.gen.ts
   ルーティング・ハンドラ実装（chi）は既存のまま変更しない。生成された `openapi.Article` / `openapi.PagedArticles` /
   `openapi.FetchResult` / `openapi.Error` を `internal/adapter/handler/web/` 配下のハンドラが DTO として利用する。
 - フロントエンド側は `openapi-typescript` を使い、`web/frontend/src/api/schema.gen.ts` に型定義のみを生成する。
-  既存の `web/frontend/src/api.ts`（fetch ラッパー）・`web/frontend/src/types.ts`（手書き型）の実装は変更しない。
+  `web/frontend/src/domain/article.ts`・`domain/feed.ts` で `components['schemas']` 型をエンティティ単位のエイリアスとして
+  re-export し、`api.ts`（fetch ラッパー）や各コンポーネントはそこを経由して利用する（手書き型の二重管理を廃止）。
 - 生成ファイル（`*.gen.go` / `*.gen.ts`）はリポジトリにコミットし、コード生成ツールが無い環境でも
   `go build` / `npm run build` がそのまま通る状態を維持する。
 - 詳細は `docs/steering/20260617_openapi_codegen/` を参照。

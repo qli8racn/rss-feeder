@@ -1,4 +1,5 @@
-import type { Article, ArticlesResponse, Feed } from './types'
+import type { Article, ArticlesResponse, FetchLatestResult, Mode } from './domain/article'
+import type { Feed } from './domain/feed'
 
 const PER_PAGE = 25
 
@@ -13,7 +14,7 @@ function buildQuery(params: Record<string, string | number | boolean | undefined
 }
 
 export interface ListParams {
-  mode?: 'all' | 'unread' | 'bookmarked'
+  mode?: Mode
   category?: string
   sort?: string
   order?: string
@@ -57,12 +58,6 @@ export async function toggleBookmark(id: number): Promise<Article> {
   const res = await fetch(`/api/articles/${id}/bookmark`, { method: 'POST' })
   if (!res.ok) throw new Error(`ブックマーク更新に失敗しました (${res.status})`)
   return res.json()
-}
-
-export interface FetchLatestResult {
-  saved: number
-  skipped: number
-  errors: number
 }
 
 export async function fetchLatestArticles(): Promise<FetchLatestResult> {
