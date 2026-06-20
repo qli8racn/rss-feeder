@@ -97,6 +97,14 @@ theme: {
 - 既存のCloseボタン（26×26）・3つのDeleteボタン（24×24）を `IconButton` のインスタンスに置き換え（Closeボタンは24×24に統一。コード側も既に同サイズで実装済みのため見た目への実質的な影響はない）
 - カテゴリセレクト（`Button` 1:31）・件数セレクト（壊れていた `Container` 1:35。テキストが欠落していたため `25件`＝コードの`DEFAULT_PER_PAGE`を補って表示）を `SelectField` のインスタンスに置き換え
 
+### Component Properties の整備（コードとの対応付け）
+
+Code Connect は導入しないが、Figma側のComponent Propertiesとコード側のpropsの対応関係を明示的に揃える。
+
+- **IconButton**: `combineAsVariants` により自動生成されたVariantプロパティ `Icon`（`Close` / `Trash`）を、コード側 `IconButton` の `icon: 'close' | 'trash'` propとして1:1で対応させた。従来は `children` でアイコン要素を呼び出し側から渡す設計だったが、Figma側が「アイコンの種類をVariantで選ぶ」構造になっているため、コード側もそれに合わせて閉じた選択肢のpropに変更した（`web/frontend/src/components/ui/IconButton.tsx`）
+- **SelectField**: ラベルの文字列を生のテキストレイヤー直接編集ではなく、TEXTタイプのComponent Property `Label` として公開した（デフォルト値 `すべてのカテゴリ`）。
+  - コード側に対応する `label` propは追加していない。コード側の `<select>` は選択中の `<option>` の表示テキストをブラウザが自動描画するため、明示的な `label` propを持たせても実際には使われない（呼び出し側が `children`（`<option>` 群）と `value` を渡せば表示文字列は自動的に決まる）。Figmaの `Label` は「静的なモックアップ上で見た目を作るための値」であり、コードでは `value` に対応する `<option>` の文字列が実質的な対応物となる
+
 ## ディレクトリ構成への変更（案）
 
 ```

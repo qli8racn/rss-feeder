@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { addFeed, fetchFeeds, removeFeed } from '../api'
 import type { Feed } from '../types'
-import { CloseIcon, PlusIcon, TrashIcon } from './icons'
+import { PlusIcon } from './icons'
 import IconButton from './ui/IconButton'
 
 interface FeedManagementModalProps {
@@ -73,9 +73,7 @@ function FeedManagementModal({ open, onClose }: FeedManagementModalProps) {
       <div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded border border-slate-400/10 bg-surface-base text-slate-200">
         <div className="flex items-center justify-between border-b border-slate-400/10 px-[18px] py-3.5">
           <h2 className="font-mono text-body font-bold text-slate-200/90">フィード管理</h2>
-          <IconButton onClick={onClose} ariaLabel="閉じる">
-            <CloseIcon className="size-3.5 text-slate-500" />
-          </IconButton>
+          <IconButton icon="close" onClick={onClose} ariaLabel="閉じる" />
         </div>
 
         <form
@@ -131,12 +129,11 @@ function FeedManagementModal({ open, onClose }: FeedManagementModalProps) {
                   {formatLastFetched(feed.last_fetched)}
                 </span>
                 <IconButton
+                  icon="trash"
                   onClick={() => handleRemove(feed)}
                   ariaLabel={`${feed.feed_url} を削除`}
                   className={ACTION_COL_CLASS}
-                >
-                  <TrashIcon className="size-3.5 text-slate-500" />
-                </IconButton>
+                />
               </div>
             ))}
           </div>

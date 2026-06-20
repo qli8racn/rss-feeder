@@ -28,6 +28,11 @@
 
 - [x] Code Connectの前提条件（チームライブラリへの公開・Organization/Enterpriseプラン）を確認した結果、個人開発である本プロジェクトでは適用できないと判断し、スコープから除外した（`requirements.md` 参照）
 
+## Component Properties の整備（コードとの対応付け）
+
+- [x] `IconButton`: Figma側のVariantプロパティ `Icon`（`Close`/`Trash`）に合わせ、コード側を `children` 受け渡しから `icon: 'close' | 'trash'` propに変更する（`web/frontend/src/components/ui/IconButton.tsx`、`FeedManagementModal.tsx` の呼び出し2箇所を追随）
+- [x] `SelectField`: ラベルをTEXTタイプのComponent Property `Label` として公開する（生のテキストレイヤー直接編集から変更）。コード側に対応する `label` propは追加しない（`<select>` の表示文字列はブラウザが選択中の `<option>` から自動描画するため、明示的なpropが実際には使われない。`design.md` 参照）
+
 ## 確認
 
 - [x] `npx tsc --noEmit && npm run test && npm run build`（すべて成功。`npm run lint` も確認。ビルド後のCSSサイズは変化なし）
