@@ -32,7 +32,7 @@
 
 ## 確認
 
-- [ ] `go build ./...` / `go vet ./...` / `go test ./...`
+- [x] `go build ./...` / `go vet ./...` / `go test ./...`
 - [ ] `bin/rss-agent enrich --force --limit 5`（`--feed` 未指定）が従来通り全フィード対象で動作することを確認（後方互換）
 - [ ] `bin/rss-feeder add-feed <url>` で、フィード登録→記事取得→要約・カテゴライズ（サブプロセス経由）が連続して実行され、
       `bin/rss-feeder list` で要約・カテゴリ付きの記事が確認できることを確認
