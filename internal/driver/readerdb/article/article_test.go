@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -15,10 +16,18 @@ import (
 
 func newTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite3", ":memory:")
+	// sqlite3の:memory:はコネクションごとに別DBになるため、プールが新規コネクションを
+	// 開くと別の空DBに繋がってしまう。cache=shared + SetMaxOpenConns(1)でも、
+	// プールが唯一のコネクションを破棄して新規に開き直す瞬間に保持者が0になると、
+	// 共有インメモリDBそのものが破棄され「no such table」になることを確認した。
+	// ファイルベースのDBであればコネクションが何本開かれても同じファイルを参照するため、
+	// この問題が起きない。
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
+		t.Fatalf("open db: %v", err)
 	}
+	db.SetMaxOpenConns(1)
 	if err := migration.Run(db); err != nil {
 		t.Fatalf("migration: %v", err)
 	}
@@ -458,7 +467,13 @@ func TestArticleRepository_UpdateEnrichmentBatch_FailureRollsBackEarlierRows(t *
 	}
 	_ = tx.Rollback()
 
-	found0, _ := r.FindByID(context.Background(), all[0].ID)
+	found0, err := r.FindByID(context.Background(), all[0].ID)
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	if found0 == nil {
+		t.Fatalf("FindByID: record not found for id=%d", all[0].ID)
+	}
 	if found0.Summary != "" {
 		t.Errorf("1件目はロールバックされ未更新のはず: got summary=%q, want empty", found0.Summary)
 	}
