@@ -16,20 +16,22 @@
 
 機能追加を続けるほど、見た目の微妙なズレ（同じ意味の色・サイズが画面ごとに違う値になる）とFigma↔コードの対応関係の追跡不可能性が拡大していく。
 
-本フェーズでは、見た目を変えないリファクタリングとして、フロントエンドのデザイントークンとコンポーネント構成を整理し、最終的に Figma Code Connect でFigmaコンポーネントとReactコンポーネントを対応づける。
+本フェーズでは、見た目を変えないリファクタリングとして、フロントエンドのデザイントークンとコンポーネント構成を整理する。Figma側も対応する要素をコンポーネント化する。
+
+> **2026-06-20 改訂**: 当初は最終ステップとして Figma Code Connect 導入を予定していたが、Code Connect はFigmaの**チームライブラリへの公開（Publish）**と**Organization/Enterpriseプランを持つチーム**が前提となる機能であり、本プロジェクトは個人開発（所属組織・チームライブラリなし）であるため対象外と判断し、スコープから外した。Figma側のコンポーネント化（Main Component + Variants、Design Tokens変数）はそのまま実施する。
 
 ## 受け入れ条件
 
 - `tailwind.config.js` の `theme.extend` に、現在使われている値から抽出したデザイントークンを定義する（色・フォントサイズ・ボーダー等。命名・分類の方針は `design.md` で定める）
 - 既存コンポーネント（`Header` / `FeedManagementModal` / `SearchFilterBar` / `ArticleTable` / `Pagination` / `Footer` / `icons`）のハードコードされた任意値クラスを、定義したトークンを参照するユーティリティクラスに置き換える
 - 重複しているスタイルパターン（アイコンボタン等）を共通コンポーネントに抽出する（対象範囲は `design.md` / `tasklist.md` で定める）
-- Figma側で、上記で抽出した共通コンポーネントに対応する要素をコンポーネント化する（Main Component + Variants）
-- Figma Code Connect（`.figma.tsx`）で、Figma上でコンポーネント化した要素と対応するReactコンポーネントをマッピングする
+- Figma側で、上記で抽出した共通コンポーネントに対応する要素をコンポーネント化する（Main Component + Variants、Figma Variablesへのバインド）
 - 整理後も `npx tsc --noEmit` / `npm run test` / `npm run build` が通り、画面の見た目（DOM構造・スタイルの見え方）が変化しないこと（フォントサイズについては0.5px未満の近似値統合は許容する。`design.md` 参照）
 
 ## スコープ外
 
 - 新規機能・画面の追加
 - レイアウト・配色そのものの変更（既存の見た目を保ったままトークン化するのみ）
-- 記事一覧画面（`ArticleTable` 等）全体のコンポーネント粒度での再設計。Code Connectの対象は、本フェーズで抽出する共通コンポーネント（アイコンボタン・入力欄等）に限定し、画面全体のFigmaコンポーネント化は別フェーズで判断する
+- 記事一覧画面（`ArticleTable` 等）全体のコンポーネント粒度での再設計。Figmaコンポーネント化の対象は、本フェーズで抽出する共通コンポーネント（アイコンボタン・セレクト等）に限定する
+- **Figma Code Connect**（チームライブラリへの公開・Organization/Enterpriseプランが前提のため、個人開発である本プロジェクトでは対象外）
 - React コンポーネントテストの新規導入（既存方針通り未導入を維持する。`docs/web-ui-spec.md` 参照）

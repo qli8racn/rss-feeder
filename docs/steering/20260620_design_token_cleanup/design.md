@@ -78,16 +78,24 @@ theme: {
 
 実際に抽出するかどうか・範囲は `tasklist.md` で個別に判断する（無理に共通化すると却って複雑になるケースもあるため、2箇所以上で完全一致するスタイルのみを対象にする）。
 
-### Figma側の進め方・Code Connect導入
+### Figma側の進め方
 
-本フェーズの最終ステップとして、コード側で抽出した共通コンポーネントをFigma側にも反映し、Code Connectで対応づける。
-
-1. コード側の共通コンポーネント抽出（`IconButton` 等）を先に完了させる（トークン定義より後、Figma作業より前）
-2. `figma-generate-library` skill を使い、対象範囲（ヘッダーボタン、アイコンボタン、入力欄）をFigma上でMain Component化し、状態違い（disabled等）をVariantsとして設定する。色・フォントサイズは本フェーズで定義したTailwindトークンの値とFigma Variablesを一致させる
-3. `figma-code-connect` skill を使い、`web/frontend/src/components/ui/` の各コンポーネントに対応する `.figma.tsx` を作成する。Figmaのprops（Variant名）とReact側のprops（`variant` / `disabled` 等）を対応づける
-4. Code Connect Publish後、対応関係が反映されていることを確認する
+1. コード側の共通コンポーネント抽出（`IconButton` / `SelectField`）を先に完了させる（トークン定義より後、Figma作業より前）
+2. `figma-generate-library` skill を使い、対象範囲（アイコンボタン、セレクト）をFigma上でMain Component化する。色・角丸はFigma Variables（`Design Tokens` コレクション）として定義し、コード側のTailwindトークンと値を一致させてバインドする
+3. 既存の重複箇所（Closeボタン・3つのDeleteボタン・カテゴリ/件数セレクト）を、作成したコンポーネントのインスタンスに置き換える
+4. `get_screenshot` で見た目に変化がないことを確認する
 
 対象範囲は画面全体（`ArticleTable` 等の複雑なレイアウト）ではなく、本フェーズで抽出する再利用可能な小コンポーネントに限定する（`requirements.md` のスコープ外参照）。
+
+> **2026-06-20 改訂**: 当初はこの後の手順としてFigma Code Connect導入（`.figma.tsx`作成）を計画していたが、Code Connectはチームライブラリへの公開・Organization/Enterpriseプランが前提の機能であり、個人開発である本プロジェクトには適用できないと判明したため、対象外とした（`requirements.md` 参照）。
+
+### 実施結果（Figma側）
+
+- Variable Collection `Design Tokens`（mode: `Value`）: `border/subtle`・`surface/raised`・`text/primary`・`text/secondary`（いずれもCOLOR、既存画面の実測値と同一）・`radius/sm`（FLOAT、3.75）
+- Component Set `IconButton`（Variant: `Icon=Close` / `Icon=Trash`）: 24×24、`border/subtle` にバインドした枠線、アイコンの線色は `text/secondary` にバインド
+- Component `SelectField`: `surface/raised` 背景・`border/subtle` 枠線・`radius/sm` 角丸、ラベルは `text/primary`、chevronは `text/secondary`
+- 既存のCloseボタン（26×26）・3つのDeleteボタン（24×24）を `IconButton` のインスタンスに置き換え（Closeボタンは24×24に統一。コード側も既に同サイズで実装済みのため見た目への実質的な影響はない）
+- カテゴリセレクト（`Button` 1:31）・件数セレクト（壊れていた `Container` 1:35。テキストが欠落していたため `25件`＝コードの`DEFAULT_PER_PAGE`を補って表示）を `SelectField` のインスタンスに置き換え
 
 ## ディレクトリ構成への変更（案）
 

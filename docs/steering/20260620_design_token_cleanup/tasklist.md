@@ -17,13 +17,18 @@
 - [x] `IconButton` を `web/frontend/src/components/ui/IconButton.tsx` として切り出す（`FeedManagementModal.tsx` の閉じる・削除ボタンの完全一致スタイルが対象。`Header.tsx` のボタンはテキスト付きで構造が異なるため対象外）
 - [x] `SelectField` を `web/frontend/src/components/ui/SelectField.tsx` として切り出す（`SearchFilterBar.tsx` 内のカテゴリ・件数セレクトが完全一致スタイルのため対象）。`TextField` は検索欄（`pl-9 pr-4`、検索アイコン付き）とURL入力欄（`px-3`、アイコンなし）でパディング・構造が異なり完全一致しないため抽出対象外と判断した
 
-## Figma側のコンポーネント化・Code Connect導入
+## Figma側のコンポーネント化
 
-- [ ] `figma-generate-library` skill で、抽出した共通コンポーネント（`IconButton` 等）に対応する要素をFigma上でMain Component化し、Variantsを設定する
-- [ ] `figma-code-connect` skill で、`web/frontend/src/components/ui/` の各コンポーネントに対応する `.figma.tsx` を作成する
-- [ ] Code Connect Publish後、対応関係が反映されていることを確認する
+- [x] Variable Collection `Design Tokens`（`border/subtle` / `surface/raised` / `text/primary` / `text/secondary` / `radius/sm`）を作成（既存画面の実測値と同一）
+- [x] `figma-generate-library` skill で `IconButton`（Variant: `Icon=Close` / `Icon=Trash`）・`SelectField` をMain Component化し、上記Variablesにバインド
+- [x] 既存のCloseボタン・3つのDeleteボタン・カテゴリ/件数セレクトを、作成したコンポーネントのインスタンスに置き換える（件数セレクトはテキストが欠落していたため `25件` を補完）
+- [x] `get_screenshot` で見た目に変化がないことを確認
 
-## 確認（トークン定義・コンポーネント抽出分）
+## Code Connect（対象外と判断）
+
+- [x] Code Connectの前提条件（チームライブラリへの公開・Organization/Enterpriseプラン）を確認した結果、個人開発である本プロジェクトでは適用できないと判断し、スコープから除外した（`requirements.md` 参照）
+
+## 確認
 
 - [x] `npx tsc --noEmit && npm run test && npm run build`（すべて成功。`npm run lint` も確認。ビルド後のCSSサイズは変化なし）
 - [ ] 既存画面の見た目に変化がないことを目視確認（ユーザー自身、`CLAUDE.md` の方針通り）
