@@ -23,17 +23,17 @@ RSS/Atom フィードの直接 URL（`.../feed`, `.../rss.xml` 等）以外、�
 
 ## アーキテクチャ上の制約
 
-- **`cmd/web` のみ** Anthropic SDK に直接依存しない。常駐サーバーである `cmd/web` に Claude 呼び出しを直接組み込みたくないため、
-  ステップ 3 は `cmd/web` から `bin/rss-agent discover-feed <url>` を**サブプロセスとして実行**する形で実現する
+> **2026-06-20 改訂**: 当初は `cmd/rss-feeder` も Anthropic SDK に直接依存してよいとし、ステップ3をインプロセスで
+> 実装する方針だったが、Anthropic SDK への依存を `cmd/agent`（`bin/rss-agent`）に一本化する方針に変更した。
+> `cmd/web`・`cmd/rss-feeder` のどちらも `bin/rss-agent discover-feed <url>` をサブプロセス経由で呼び出す
+> （実装内容は完全に同一。`internal/driver/feeddiscovery/subprocess.go` を共用する）。詳細は `design.md` 参照。
+
+- **Anthropic SDK に直接依存するのは `cmd/agent`（`bin/rss-agent`）のみ**。`cmd/web`・`cmd/rss-feeder` はいずれも
+  Claude 呼び出しを直接組み込まず、ステップ 3 は `bin/rss-agent discover-feed <url>` を**サブプロセスとして実行**する形で実現する
   （Claude Code の Hook が `bin/rss-feeder` をサブプロセス実行する既存パターンと同種のアプローチ）。
-- `cmd/rss-feeder`（CLI）は Anthropic SDK に**直接依存してよい**。`rss-feeder` は既に CGO（`go-sqlite3`）に依存しており、
-  `rss-agent` も同じ CGO + Anthropic SDK の組み合わせで既にビルドメモリ対策（`GOMAXPROCS=1` 等、`docs/design.md` 参照）を
-  受け入れている。`rss-feeder` に Anthropic SDK を追加しても新しいリスク要因にはならず、既に許容している特性の延長でしかない。
-  そのためステップ 3 は `rss-feeder add-feed` 内ではサブプロセスを経由せず、`internal/usecase/discover_feed.go` を
-  インプロセスで直接呼び出す（`bin/rss-agent` の存在に依存しない）。
-- `bin/rss-agent` が存在しない・実行できない場合でも `cmd/web` 側の 1, 2 のステップは引き続き機能する
-  （AI フォールバックなしで動作を継続する。`cmd/rss-feeder` 側はインプロセス実装のため、この制約自体が存在しない）。
-- `cmd/web` がステップ 3（サブプロセス起動）を同時に何件まで実行してよいかは「同時実行数の制御」節で定める。
+- `bin/rss-agent` が存在しない・実行できない場合でも、1, 2 のステップは引き続き機能する
+  （AI フォールバックなしで動作を継続する。`cmd/web`・`cmd/rss-feeder` どちらにも当てはまる）。
+- ステップ 3（サブプロセス起動）を同時に何件まで実行してよいかは「同時実行数の制御」節で定める。
 
 ## 受け入れ条件
 
@@ -44,9 +44,8 @@ RSS/Atom フィードの直接 URL（`.../feed`, `.../rss.xml` 等）以外、�
 - 検証に成功した場合: 標準出力にフィード URL のみを出力し、終了コード 0
 - 見つからない・検証に失敗した場合: 標準エラーにメッセージを出力し、終了コード 1
 - モデルは `claude-haiku-4-5`（単純な抽出タスクのため、`enrich`/`summarize` と同じコスト方針）
-- このコマンドが内部で使う Go パッケージ（`internal/usecase/discover_feed.go` 等）は `cmd/rss-feeder` からも
-  インプロセスで直接 import して使う（`cmd/agent` 専用の実装にしない）。`rss-agent discover-feed` コマンド自体は
-  単独実行・動作確認用として残す
+- `cmd/web`・`cmd/rss-feeder` はこのコマンドを `bin/rss-agent discover-feed <url>` としてサブプロセス実行することで
+  ステップ3を利用する（Anthropic SDK への直接依存は `cmd/agent` に閉じる）
 
 ### `add-feed`（CLI）/ `POST /api/feeds`（Web API）
 
@@ -55,15 +54,16 @@ RSS/Atom フィードの直接 URL（`.../feed`, `.../rss.xml` 等）以外、�
 - 探索処理が一定時間（後述）を超えた場合はタイムアウトエラーとする
 - Web UI（`FeedManagementModal`）は変更不要（既存の「追加中...」ローディング表示がそのまま探索中の待機時間をカバーする）
 
-### 同時実行数の制御（`cmd/web` のみ）
+### 同時実行数の制御
 
-- `POST /api/feeds` を同時に複数受け付けた場合、ステップ3（`bin/rss-agent` のサブプロセス起動）が無制限に並行実行されないよう、
+- `cmd/web`: `POST /api/feeds` を同時に複数受け付けた場合、ステップ3（`bin/rss-agent` のサブプロセス起動）が無制限に並行実行されないよう、
   同時実行数の上限を設ける（プロセスfork・新規DB接続・Claude API呼び出しが伴うため、コスト・リソース両面で野放しにできない）
 - 上限に達している間に来た追加のリクエストは、空きが出るまで待機する（先着順）。待機中にハンドラ全体のタイムアウト
   （後述）に達した場合はタイムアウトエラーとして失敗させる（つまり「同時実行数の上限による待機」と「探索できなかった」は
   区別せず、いずれも失敗として扱う。低頻度な管理操作であるためこの粒度で十分とする）
 - ステップ1・2（直接パース・標準探索のHTTP取得）は同時実行数を制限しない（プロセス起動を伴わず、既存の記事取得等と同等の負荷でしかないため）
-- `cmd/rss-feeder` 側はインプロセス実装で、CLI コマンドはユーザーが手動で起動するものであるため、本フェーズでは対象外とする
+- `cmd/rss-feeder`: CLI コマンドはユーザーが手動で起動する単発実行であり、同一プロセス内で複数の `add-feed` が並行実行されることはないため、
+  同時実行数を1（実質的に制限なし）として固定する。`--feed-discovery-concurrency` のようなフラグは設けない
 
 ## スコープ外
 

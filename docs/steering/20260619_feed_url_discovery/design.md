@@ -1,10 +1,14 @@
 # 設計：フィードURL自動探索
 
+> **2026-06-20 改訂**: ステップ3（Claude フォールバック）の実装方式を、`cmd/web`・`cmd/rss-feeder` どちらも
+> サブプロセス経由に統一した（当初は `cmd/rss-feeder` のみインプロセス実装だったが、Anthropic SDK への依存を
+> `cmd/agent` に一本化する方針に変更したため）。以下は改訂後の内容。
+
 ## 処理フロー
 
-ステップ3（Claude フォールバック）の実装方式が `cmd/web` と `cmd/rss-feeder` で異なる（前者はサブプロセス経由、
-後者はインプロセス）。`ResolveFeedURLUsecase` 自体は共通で、依存する `feeddiscovery.Agent` の実装だけが
-バイナリごとに異なる。
+ステップ3（Claude フォールバック）は `cmd/web`・`cmd/rss-feeder` のどちらも同じ実装（サブプロセス経由）を使う。
+`ResolveFeedURLUsecase` は依存する `feeddiscovery.Agent` を抽象として受け取るため、バイナリ間で usecase 自体の
+コードは完全に共通。
 
 ```
 add-feed <url> / POST /api/feeds  body: { "feed_url": "<url>" }
@@ -15,7 +19,7 @@ add-feed <url> / POST /api/feeds  body: { "feed_url": "<url>" }
        │    ├─ [2] htmlfetch.Fetcher.Fetch(ctx, url) → HTML取得
        │    │      └─ findFeedLink(html, url)（<link rel="alternate"> 抽出・相対URL解決、純粋関数）
        │    │           候補あり → RSSReader.Fetch で再検証 → 成功すれば採用
-       │    └─ [3] feeddiscovery.Agent.Discover(ctx, url)（実装はバイナリごとに異なる。下記参照）
+       │    └─ [3] feeddiscovery.Agent.Discover(ctx, url)（cmd/web・cmd/rss-feeder共通のサブプロセス実装。下記参照）
        │           解決できなければ ErrFeedNotFound
        └─ usecase/add_feed.go AddFeedUsecase.Execute(ctx, resolvedURL)（既存・変更なし）
 ```
@@ -23,27 +27,21 @@ add-feed <url> / POST /api/feeds  body: { "feed_url": "<url>" }
 ### ステップ3の実装方式
 
 ```
-cmd/web（サブプロセス経由。Anthropic SDKに直接依存しない）
-  feeddiscovery.Agent = subprocessAgent
+cmd/web ・ cmd/rss-feeder（共通。サブプロセス経由。Anthropic SDKに直接依存しない）
+  feeddiscovery.Agent = subprocessAgent（internal/driver/feeddiscovery/subprocess.go）
     └─ セマフォで同時実行数を制限 → exec.CommandContext(ctx, rssAgentPath, "discover-feed", url)
-         └─ bin/rss-agent discover-feed <url>（別プロセス）
+         └─ bin/rss-agent discover-feed <url>（別プロセス。cmd/agent はAnthropic SDKに直接依存）
               ├─ htmlfetch.Fetcher.Fetch(ctx, url) → HTML取得（<head>抽出・truncate）
               ├─ adapteranthropic.FeedDiscoveryAgent.Discover(ctx, url, head)
               │    └─ Claude (claude-haiku-4-5) にURL推測を依頼
               └─ 候補URLを adapterrss.RSSReader.Fetch で再検証
                    成功 → stdoutにURLを出力・終了コード0
                    失敗 → stderrにメッセージ・終了コード1
-
-cmd/rss-feeder（インプロセス。Anthropic SDKに直接依存してよい）
-  feeddiscovery.Agent = cmd/rss-feeder/main.go 内のアダプタ（同一プロセス内で直接呼び出すだけのラッパー）
-    └─ usecase.DiscoverFeedUsecase.Execute(ctx, url) をそのまま呼ぶ
-         ├─ htmlfetch.Fetcher.Fetch(ctx, url) → HTML取得（<head>抽出・truncate）
-         ├─ adapteranthropic.FeedDiscoveryAgent.Discover(ctx, url, head)
-         └─ 候補URLを adapterrss.RSSReader.Fetch で再検証
 ```
 
-`internal/usecase/discover_feed.go`（`DiscoverFeedUsecase`）は `cmd/agent`・`cmd/rss-feeder` の両方から import される
-共通の Go パッケージであり、コードの重複はない（リンクされるバイナリが異なるだけ）。
+`internal/usecase/discover_feed.go`（`DiscoverFeedUsecase`）・`internal/adapter/driver/anthropic/discover_feed.go`・
+`internal/driver/anthropic/discover_feed.go` は **`cmd/agent` 専用**（Anthropic SDK に直接依存する箇所をこのバイナリに
+閉じ込めるため）。`cmd/web`・`cmd/rss-feeder` からはこれらのパッケージを import しない。
 
 ## 新規ファイル
 
@@ -54,22 +52,22 @@ cmd/rss-feeder（インプロセス。Anthropic SDKに直接依存してよい�
 | `internal/adapter/driver/htmlfetch/htmlfetch.go` | `Fetcher` interface（`Fetch(ctx, url) (html string, err error)`） |
 | `internal/driver/htmlfetch/htmlfetch.go` | `net/http` での HTML 取得実装。タイムアウト15秒。`Content-Type` レスポンスヘッダが `text/html` で**始まらない**場合はエラーとする（`charset=utf-8` 等のパラメータが付くのが実運用上ほぼ必須のため、完全一致ではなく `strings.HasPrefix` で判定する） |
 
-### `cmd/agent` ・ `cmd/rss-feeder` 側（Claude を直接呼ぶ。Anthropic SDK に直接依存してよい）
+### `cmd/agent` 専用（Claude を直接呼ぶ。Anthropic SDK に直接依存）
 
 | ファイル | 役割 |
 |---------|------|
 | `internal/adapter/driver/anthropic/discover_feed.go` | `FeedDiscoveryAgent` interface（`Discover(ctx, url, html string) (feedURL string, err error)`） |
 | `internal/driver/anthropic/discover_feed.go` | Claude (`claude-haiku-4-5`) 実装。`<head>` 抽出・truncate、レスポンスから URL 抽出 |
-| `internal/usecase/discover_feed.go` | `DiscoverFeedUsecase`（HTML取得 → Claude問い合わせ → `RSSReader.Fetch` で再検証、の薄いオーケストレーション）。`cmd/agent`・`cmd/rss-feeder` の双方から import される |
+| `internal/usecase/discover_feed.go` | `DiscoverFeedUsecase`（HTML取得 → Claude問い合わせ → `RSSReader.Fetch` で再検証、の薄いオーケストレーション）。`cmd/agent` のみから import される |
 | `internal/usecase/discover_feed_test.go` | モックベースのユニットテスト |
-| `internal/adapter/handler/agent/discover_feed.go` | `discover-feed <url>` cobra コマンド（`rss-agent` 単独実行・動作確認用）。成功時 stdout にURLのみ出力、失敗時 stderr + exit 1 |
+| `internal/adapter/handler/agent/discover_feed.go` | `discover-feed <url>` cobra コマンド。成功時 stdout にURLのみ出力、失敗時 stderr + exit 1 |
 
-### `cmd/web` 側（サブプロセス経由。Anthropic SDK に依存しない）
+### `cmd/web` ・ `cmd/rss-feeder` 共通（サブプロセス経由。Anthropic SDK に依存しない）
 
 | ファイル | 役割 |
 |---------|------|
 | `internal/adapter/driver/feeddiscovery/feeddiscovery.go` | `Agent` interface（`Discover(ctx, url) (feedURL string, err error)`）、`ErrAgentUnavailable` |
-| `internal/driver/feeddiscovery/subprocess.go` | `bin/rss-agent discover-feed <url>` をサブプロセス実行する実装。同時実行数を制限するセマフォを内包する（「同時実行数の制御」節参照）。バイナリ未検出時は `ErrAgentUnavailable` を返す |
+| `internal/driver/feeddiscovery/subprocess.go` | `bin/rss-agent discover-feed <url>` をサブプロセス実行する実装。同時実行数を制限するセマフォを内包する（「同時実行数の制御」節参照）。バイナリ未検出時は `ErrAgentUnavailable` を返す。`cmd/web`・`cmd/rss-feeder` の両方から利用する |
 | `internal/driver/feeddiscovery/subprocess_test.go` | 統合テスト |
 
 ### `cmd/web` ・ `cmd/rss-feeder` 共通（探索オーケストレーション）
@@ -86,7 +84,7 @@ cmd/rss-feeder（インプロセス。Anthropic SDKに直接依存してよい�
 | `internal/adapter/handler/cli/add_feed.go` | `ResolveFeedURLUsecase.Execute` を呼んで解決した URL を `AddFeedUsecase.Execute` に渡す |
 | `internal/adapter/handler/web/feed.go` | 同上。`ErrFeedNotFound` を 400 に、タイムアウトを 504 にマッピング |
 | `cmd/web/main.go` | `htmlfetch.Fetcher` ・ `feeddiscovery.Agent`（サブプロセス実装、同時実行数の上限値を渡す）・ `ResolveFeedURLUsecase` を DI 登録。`--rss-agent-path`（デフォルト `bin/rss-agent`）・`--feed-discovery-concurrency`（デフォルト2）フラグを追加。`AddFeedHandler` 呼び出し箇所で `context.WithTimeout` を設定 |
-| `cmd/rss-feeder/main.go` | `htmlfetch.Fetcher` ・ `adapteranthropic.FeedDiscoveryAgent` ・ `DiscoverFeedUsecase` を DI 登録。`DiscoverFeedUsecase` を `feeddiscovery.Agent` として渡すための小さなアダプタ型を `main.go` 内に定義（コンポジションルートなので層違反にならない）。`ResolveFeedURLUsecase` を DI 登録し `add-feed` サブコマンドに渡す |
+| `cmd/rss-feeder/main.go` | `htmlfetch.Fetcher` ・ `feeddiscovery.Agent`（サブプロセス実装。`cmd/web` と同じ `NewSubprocessAgent` を同時実行数1で利用）・ `ResolveFeedURLUsecase` を DI 登録。`--rss-agent-path`（デフォルト `bin/rss-agent`）フラグを追加。Anthropic SDK 関連の import（`adapteranthropic`・`driveranthropic`・`config.SetupAnthropicAPIKey()`・専用アダプタ型）は撤去 |
 | `cmd/agent/main.go` | `adapteranthropic.FeedDiscoveryAgent` ・ `DiscoverFeedUsecase` を DI 登録、`discover-feed` コマンドを追加 |
 | `docs/design.md` | コマンド一覧・パッケージ構成・依存ライブラリ表を更新 |
 | `go.mod` | `golang.org/x/net` を `// indirect` から直接依存へ変更（`golang.org/x/net/html` を `<link>` 抽出に使用。バージョンは既存の `v0.50.0` のまま、新規モジュール追加ではない） |
@@ -109,9 +107,8 @@ import "errors"
 var ErrAgentUnavailable = errors.New("rss-agent is not available")
 
 type Agent interface {
-    // Discover はフィードURLを推測する。実装は cmd/web（サブプロセス経由）と
-    // cmd/rss-feeder（インプロセス）で異なる。
-    // サブプロセス実装の場合、バイナリが存在しない・実行できない場合は ErrAgentUnavailable を返す。
+    // Discover はフィードURLを推測する。cmd/web・cmd/rss-feeder とも同じサブプロセス実装を使う。
+    // バイナリが存在しない・実行できない場合は ErrAgentUnavailable を返す。
     Discover(ctx context.Context, url string) (feedURL string, err error)
 }
 
@@ -124,7 +121,7 @@ type FeedDiscoveryAgent interface {
 ```
 
 ```go
-// internal/driver/feeddiscovery/subprocess.go（cmd/web 専用）
+// internal/driver/feeddiscovery/subprocess.go（cmd/web ・ cmd/rss-feeder 共通）
 package feeddiscovery
 
 type subprocessAgent struct {
@@ -156,17 +153,6 @@ func (a *subprocessAgent) Discover(ctx context.Context, url string) (string, err
         return "", fmt.Errorf("rss-agent discover-feed failed: %s: %w", strings.TrimSpace(stderr.String()), err)
     }
     return strings.TrimSpace(stdout.String()), nil
-}
-```
-
-```go
-// cmd/rss-feeder/main.go（コンポジションルート内のアダプタ。専用パッケージは作らない）
-type discoverFeedAgent struct {
-    uc *usecase.DiscoverFeedUsecase
-}
-
-func (a *discoverFeedAgent) Discover(ctx context.Context, url string) (string, error) {
-    return a.uc.Execute(ctx, url)
 }
 ```
 
@@ -222,12 +208,13 @@ func findFeedLink(html, baseURL string) (string, bool)
 > `ErrFeedNotFound` の単一メッセージのままでよいが、運用時に「なぜ見つからなかったか」を
 > 追跡できるようにする。
 
-## 同時実行数の制御（`cmd/web` のみ）
+## 同時実行数の制御
 
-- `subprocessAgent` がセマフォ（capacity = `--feed-discovery-concurrency`、デフォルト 2）でステップ3の同時実行数を制限する
+- `cmd/web`: `subprocessAgent` がセマフォ（capacity = `--feed-discovery-concurrency`、デフォルト 2）でステップ3の同時実行数を制限する
 - 上限に達している間に来たリクエストは、空きが出るまで `Discover` 内でブロックする（待機時間は後述のステップ3用タイムアウトの範囲内）
 - ステップ1・2（HTTP取得のみ）は制限しない
-- `cmd/rss-feeder` はインプロセス実装で、CLIはユーザーが手動で起動するものなので対象外とする
+- `cmd/rss-feeder`: 同じ `subprocessAgent` を `maxConcurrency=1` で構築する（CLIはユーザーが手動で起動する単発実行のため、
+  上限値をフラグ化する必要はない）
 
 ## タイムアウト方針
 

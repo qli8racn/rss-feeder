@@ -30,11 +30,20 @@
 - [x] `internal/driver/feeddiscovery/subprocess_test.go` 新規作成（同時実行数の上限挙動を含む）
 - [x] `cmd/web/main.go` に DI 登録・`--rss-agent-path`（デフォルト `bin/rss-agent`）・`--feed-discovery-concurrency`（デフォルト2）フラグ追加
 
-## cmd/rss-feeder 側（インプロセス、Anthropic SDK に直接依存）
+## cmd/rss-feeder 側（インプロセス、Anthropic SDK に直接依存）※2026-06-20 に下記「アーキテクチャ変更」で撤回
 
 - [x] `cmd/rss-feeder/main.go` に `htmlfetch.Fetcher` ・ `adapteranthropic.FeedDiscoveryAgent` ・ `DiscoverFeedUsecase` を DI 登録（`config.Load()` で `ANTHROPIC_API_KEY` を設定する処理も `cmd/agent/main.go` から移植）
 - [x] `cmd/rss-feeder/main.go` 内に `DiscoverFeedUsecase` を `feeddiscovery.Agent` として渡すための小さなアダプタ型（`discoverFeedAgent`）を定義（専用パッケージは作らない。コンポジションルートのため層違反にならない。`var _ feeddiscovery.Agent = (*discoverFeedAgent)(nil)` でコンパイル時にインターフェース充足を確認）
 - [x] `cmd/rss-feeder/main.go` に `ResolveFeedURLUsecase` を DI 登録し `add-feed` サブコマンドに渡す（`--rss-agent-path` 等のフラグは不要）
+
+## アーキテクチャ変更：cmd/rss-feeder もサブプロセス経由に統一（2026-06-20）
+
+Anthropic SDK への直接依存を `cmd/agent` に一本化する方針に変更したため、上記「cmd/rss-feeder 側（インプロセス）」を撤回し、
+`cmd/web` と同じサブプロセス実装に差し替える（`docs/steering/20260619_feed_url_discovery/design.md` 改訂箇所を参照）。
+
+- [ ] `cmd/rss-feeder/main.go` から `adapteranthropic`・`driveranthropic`・`config.SetupAnthropicAPIKey()` 呼び出し・`discoverFeedAgent` アダプタ型・`discoverFeedUC` を削除
+- [ ] `cmd/rss-feeder/main.go` に `--rss-agent-path`（デフォルト `bin/rss-agent`）フラグを追加し、`driverfeeddiscovery.NewSubprocessAgent(*rssAgentPath, 1)` を構築して `ResolveFeedURLUsecase` に渡す
+- [ ] `go build ./...` / `go vet ./...` / `go test ./...` で確認
 
 ## OpenAPI・ドキュメント
 
