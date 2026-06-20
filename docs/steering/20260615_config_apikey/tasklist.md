@@ -22,4 +22,6 @@
 
 ## フォローアップ（このフェーズ外）
 
-- [ ] `rss-feeder`（`cmd/rss-feeder/main.go`）側で `config.yml` を使う設定項目が増えた場合の対応
+> 2026-06-20: 以下は対応しない方針に決定（ユーザー判断）。
+
+- [ ] ~~`rss-feeder`（`cmd/rss-feeder/main.go`）側で `config.yml` を使う設定項目が増えた場合の対応~~（対応しない）
