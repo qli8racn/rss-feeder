@@ -105,6 +105,26 @@ Code Connect は導入しないが、Figma側のComponent Propertiesとコード
 - **SelectField**: ラベルの文字列を生のテキストレイヤー直接編集ではなく、TEXTタイプのComponent Property `Label` として公開した（デフォルト値 `すべてのカテゴリ`）。
   - コード側に対応する `label` propは追加していない。コード側の `<select>` は選択中の `<option>` の表示テキストをブラウザが自動描画するため、明示的な `label` propを持たせても実際には使われない（呼び出し側が `children`（`<option>` 群）と `value` を渡せば表示文字列は自動的に決まる）。Figmaの `Label` は「静的なモックアップ上で見た目を作るための値」であり、コードでは `value` に対応する `<option>` の文字列が実質的な対応物となる
 
+### 追加の分解（2026-06-20 再改訂）
+
+`IconButton`/`SelectField`だけでは `Index`（記事一覧ページ全体）・`Feed Management Modal` という1セクション単位の構造が残っていたため、以下を追加で抽出した。
+
+- **`Button`**（アイコン+ラベルボタン）: Header の「最新フィードを取得」「ブックマーク」「フィード管理」、Feed Management Modal の「追加」の4箇所が対象。Variant `Icon`（Refresh/List/Bookmark/Plus）と `Style`（Outline/Filled。Plusのみ Filled）の2軸。ブックマークの件数バッジ・アクティブ状態の配色切り替えはコード側のみで表現し、Figmaは既定状態（非アクティブ）のみを表現する
+- **`TextField`**: 検索欄（虫眼鏡アイコン付き）とフィード追加URL欄を、Variant `Has Icon`（True/False）で統合
+- **`PageButton`**: ページネーションの矢印（Prev/Next）・数字ボタンを統合。Prev/Nextは矢印の向きが異なるため別Variantとして分離した
+- **`Table`シェル**: `ArticleTable` と `Feed Management Modal` のフィード一覧で、外枠の角丸・ボーダー・ヘッダ背景・行区切り線のみを共通化。列構成は完全に異なるため、列の内容（セル）は共通化していない。Feed Management Modal側は元々divによる擬似テーブルだったため、実際の `<table>` マークアップに修正した上で適用した
+
+Figma側は、上記4コンポーネント（`Table`を除く）をMain Component化し、既存の重複箇所をインスタンスに置き換えた。`Table`はFigma側では新規Componentを作らず、`ArticleTable`・Feed Management Modalの該当フレームの色を `Design Tokens` 変数にバインドするだけに留めた（列構成が異なる2つのセクションを1つのComponentインスタンスとして表現する手段がないため）。
+
+再利用されない単位（`Header`/`SearchFilterBar`/`ArticleTable`/`Pagination`/`Footer`、ページ全体）はFigma Componentにせず、コードのコンポーネント名に合わせてFrame名を整理した（`Index`→`ArticleListPage` 等）。Figma↔コードの対応関係は `docs/component-spec.md` に記録する。
+
+#### 作業中に発生した不具合と対処
+
+- `Button` の `Label` をComponent Setの共有Component Propertyとして公開したところ、4つのVariant全てのテキストが1つ目のVariantの文言に統一されてしまった（Component Set内でプロパティ名が衝突し共有されたため）。プロパティを削除し、各Variantに固定テキストを直接設定する方式に戻した
+- `TextField` の `Has Icon=False` バリアントが、クローン元（モーダルの入力欄。元は親のautolayoutに対して`FILL`サイジングだった）の設定を引き継いだ結果、1px幅に潰れた。`layoutSizingHorizontal/Vertical` を `FIXED` に変更し、元のサイズに `resize()` して修正した
+- ページネーションの「次へ」ボタンに、誤って「前へ」と同じ左向き矢印のVariantを適用してしまった。`Variant=Next` を新たに作成し、矢印アイコンのベクターを `relativeTransform` で水平反転して修正した
+- Component Set内で一部のVariantにのみ追加のVariantプロパティ（例: `Direction`）を持たせようとしたところ、「Component set has existing errors」で操作が失敗した。Component Set内の全Variantは同じプロパティキーの組み合わせを持つ必要があるため、単一の `Variant` プロパティの値を増やす（`Nav`→`Prev`/`Next`に分割）方式に変更した
+
 ## ディレクトリ構成への変更（案）
 
 ```

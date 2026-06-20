@@ -33,7 +33,29 @@
 - [x] `IconButton`: Figma側のVariantプロパティ `Icon`（`Close`/`Trash`）に合わせ、コード側を `children` 受け渡しから `icon: 'close' | 'trash'` propに変更する（`web/frontend/src/components/ui/IconButton.tsx`、`FeedManagementModal.tsx` の呼び出し2箇所を追随）
 - [x] `SelectField`: ラベルをTEXTタイプのComponent Property `Label` として公開する（生のテキストレイヤー直接編集から変更）。コード側に対応する `label` propは追加しない（`<select>` の表示文字列はブラウザが選択中の `<option>` から自動描画するため、明示的なpropが実際には使われない。`design.md` 参照）
 
+## 追加の共通コンポーネント抽出（2026-06-20 再改訂）
+
+- [x] `ui/Button.tsx` を作成し、Header の3ボタン（Fetch/Bookmark/FeedManagement）・Feed Management Modalの追加ボタンを統合（`icon`/`variant`/`active`/`spinning`/`badge` props）
+- [x] `ui/TextField.tsx` を作成し、検索欄・URL入力欄を統合（`hasIcon` prop）
+- [x] `ui/Table.tsx`（外枠・ヘッダ背景・行区切り線の共通シェル）を作成し、`ArticleTable.tsx` に適用（`bg-[rgba(...)]` 任意値も `bg-surface-raised/*` に修正）
+- [x] `FeedManagementModal.tsx` のフィード一覧をdivによる擬似テーブルから実際の `<table>` に修正し、`Table` シェルを適用
+- [x] `ui/PageButton.tsx` を作成し `Pagination.tsx` を更新（`variant: 'nav' | 'number'`）
+- [x] `npx tsc --noEmit && npm run test && npm run build && npm run lint`（すべて成功。CSSサイズの微増は`FeedManagementModal`のテーブル化に伴う想定内の変化）
+
+## Figma側: 追加コンポーネント化・フレーム整理（2026-06-20 再改訂）
+
+- [x] `Button`（Component Set: `Icon`×`Style`）を既存4ボタンから作成し、インスタンスに置き換え（作成時にLabelプロパティ共有による文言統一バグが発生→プロパティを削除し固定テキストに修正）
+- [x] `TextField`（Component Set: `Has Icon`）を作成し、検索欄・URL欄をインスタンスに置き換え（`Has Icon=False`が1px幅に潰れるバグ→`layoutSizingHorizontal/Vertical`を`FIXED`に修正）
+- [x] `PageButton`（Component Set: `Variant`=Prev/Number/Next）を作成し、ページネーションをインスタンスに置き換え（Next用に左矢印を流用してしまうバグ→ベクターを水平反転して`Variant=Next`を新規作成）
+- [x] `ArticleTable`・Feed Management Modalのテーブル部分の外枠・ヘッダ背景を`Design Tokens`変数にバインド（Componentとしては作成せず、色のみ統一）
+- [x] `Index`→`ArticleListPage`、`SearchFilterBar`/`ArticleTable`/`Pagination`/`Footer`のフレーム名をコードのコンポーネント名に整理
+- [x] `get_screenshot` で各箇所の見た目に変化がないことを確認
+
+## デザイン仕様書
+
+- [x] `docs/component-spec.md` を新規作成し、Figma Component ↔ コードコンポーネントの対応表（props・既知の差異）を記録
+
 ## 確認
 
-- [x] `npx tsc --noEmit && npm run test && npm run build`（すべて成功。`npm run lint` も確認。ビルド後のCSSサイズは変化なし）
+- [x] `npx tsc --noEmit && npm run test && npm run build`（すべて成功。`npm run lint` も確認）
 - [ ] 既存画面の見た目に変化がないことを目視確認（ユーザー自身、`CLAUDE.md` の方針通り）
