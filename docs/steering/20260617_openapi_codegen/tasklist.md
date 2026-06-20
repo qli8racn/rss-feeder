@@ -46,4 +46,13 @@
   - `go build ./...` / `go vet ./...` / `go test $(go list ./... | grep -v internal/driver/anthropic)` で確認
   - `curl` で実機確認：不正なクエリ（`sort=invalid_field`・`per_page=abc`）・ボディ不足（`POST /api/feeds`）が
     `400` で弾かれること、仕様外パスが `404`、正常リクエストと `/`（SPA）が影響を受けないことを確認
-- [ ] `oapi-codegen` の `chi-server` 生成によるルーティング自動生成への移行検討
+- [x] `oapi-codegen` の `chi-server` 生成によるルーティング自動生成への移行検討
+  - 2026-06-20: 検討の結果、見送り（ユーザー判断）。理由は以下の通り
+    - 現在は usecase ごとにクロージャを返す関数（`ListArticlesHandler(uc *usecase.ListUsecase) http.HandlerFunc` 等）
+      というシンプルなDIパターンだが、`chi-server` は単一の `ServerInterface` を1つの構造体に実装させる方式のため、
+      全8エンドポイント分のハンドラを1つの `Server` 構造体にまとめる大規模な書き換えが必要になる
+    - `chi-server` 移行で主に削減できるのは `article.go` の `parseListQuery` 等によるクエリパラメータの手動パースだが、
+      直前に追加した [[20260617_openapi_codegen/tasklist|リクエスト検証ミドルウェア]]（`internal/adapter/handler/web/validator.go`）で
+      クエリ・ボディの妥当性チェックは既にカバーされており、追加で得られる削減効果は小さい
+    - 現状のエンドポイント数（8件）では移行コストが効果を上回ると判断した
+    - エンドポイント数が大きく増える、またはハンドラの手動パース・バリデーションが複雑化した場合は再検討する
