@@ -36,5 +36,14 @@
   - `domain/filter.ts`・`ArticleTable.tsx`・`ArticleListPage.tsx`・`ArticleListTemplate.tsx`・
     `SearchFilterBar.tsx`・`FeedManagementModal.tsx` のimport元を `domain/article`・`domain/feed` に変更
   - `npx tsc -b --noEmit` / `npm run test` / `npm run build` で確認
-- [ ] サーバー側のリクエスト・レスポンスのスキーマバリデーション（ミドルウェア等）の追加
+- [x] サーバー側のリクエスト・レスポンスのスキーマバリデーション（ミドルウェア等）の追加
+  - リクエスト検証のみ実装（レスポンスは生成型 `openapi.Article` 等の使用で形状を保証する前提のため対象外、ユーザー判断）
+  - `github.com/oapi-codegen/nethttp-middleware`（`kin-openapi` ベース）を追加し、
+    `internal/adapter/handler/web/validator.go` に `NewRequestValidatorMiddleware(specPath string)` を実装
+  - `cmd/web/main.go` に `--openapi-spec`（デフォルト `docs/openapi.yaml`）フラグを追加し、
+    既存の `/api/...` ルートを `r.Route("/api", ...)` のサブルーターにまとめてミドルウェアを適用
+    （仕様外パスは404を返すため、`/*` の静的ファイル配信を巻き込まないよう `/api` 配下に限定）
+  - `go build ./...` / `go vet ./...` / `go test $(go list ./... | grep -v internal/driver/anthropic)` で確認
+  - `curl` で実機確認：不正なクエリ（`sort=invalid_field`・`per_page=abc`）・ボディ不足（`POST /api/feeds`）が
+    `400` で弾かれること、仕様外パスが `404`、正常リクエストと `/`（SPA）が影響を受けないことを確認
 - [ ] `oapi-codegen` の `chi-server` 生成によるルーティング自動生成への移行検討

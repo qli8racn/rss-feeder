@@ -30,7 +30,7 @@ rss-feeder [--rss-agent-path <path>] <command> [flags]
 
 ```bash
 go build -o bin/web ./cmd/web
-./bin/web [--port <port>] [--static-dir <dir>] [--rss-agent-path <path>] [--feed-discovery-concurrency <n>]
+./bin/web [--port <port>] [--static-dir <dir>] [--openapi-spec <path>] [--rss-agent-path <path>] [--feed-discovery-concurrency <n>]
 ```
 
 | メソッド・パス | 概要 | フェーズ |
@@ -54,6 +54,13 @@ go build -o bin/web ./cmd/web
 `POST /api/feeds` のAIフォールバック（`bin/rss-agent discover-feed` をサブプロセス実行する箇所）専用のフラグ。
 `cmd/web` は Anthropic SDK に直接依存せず、サブプロセス経由でのみ Claude を利用する
 （詳細は `docs/steering/20260619_feed_url_discovery/design.md` を参照）。
+
+`--openapi-spec`（デフォルト `docs/openapi.yaml`）は `/api` 配下のリクエスト検証ミドルウェア
+（`internal/adapter/handler/web/validator.go`・`NewRequestValidatorMiddleware`）が読み込む仕様ファイルのパス。
+`github.com/oapi-codegen/nethttp-middleware`（`kin-openapi` ベース）を使い、クエリ・パスパラメータ・リクエストボディを
+仕様と照合し、不一致は `400` で弾く（仕様外のパスは `404`）。`/*` の静的ファイル配信を巻き込まないよう、
+chi の `/api` サブルーターにのみ適用する。レスポンス自体のスキーマ検証は行わない
+（生成型 `openapi.Article` 等を使うことで形状は保証される、という前提）。
 
 フロントエンド（`web/frontend/`、Vite + React + TypeScript）は `npm run build` で `web/static/` に出力する。
 
@@ -271,6 +278,7 @@ rss-feeder/
 | `github.com/go-chi/cors` | CORS ミドルウェア | figma-mcp 製フロントエンドを別ポートで開発する際の CORS 対応 |
 | `github.com/spf13/viper` | 設定ファイル読み込み | `config.yml` から `ANTHROPIC_API_KEY` 等を読み込む |
 | `github.com/oapi-codegen/oapi-codegen/v2`（tool） | OpenAPI → Go 型生成 | `docs/openapi.yaml` から `internal/adapter/handler/web/openapi` の型を生成。`go.mod` の `tool` ディレクティブで管理し、ランタイム依存にはしない |
+| `github.com/oapi-codegen/nethttp-middleware`・`github.com/getkin/kin-openapi` | OpenAPI リクエストバリデーション | `cmd/web` の `/api` 配下でクエリ・パスパラメータ・リクエストボディを `docs/openapi.yaml` と照合するミドルウェア（`internal/adapter/handler/web/validator.go`） |
 | `golang.org/x/net` | HTML パース（`golang.org/x/net/html`） | フィードURL自動探索の標準探索（`<link rel="alternate">` 抽出）で使用。元々間接依存だったものを直接依存に変更 |
 
 ---
