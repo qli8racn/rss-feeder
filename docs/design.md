@@ -10,7 +10,7 @@ rss-feeder <command> [flags]
 
 | コマンド | 概要 | フェーズ |
 |--------|------|---------|
-| `add-feed <url>` | RSS フィード URL を DB に登録 | 8 |
+| `add-feed <url>` | 入力 URL からフィード URL を自動探索（直接判定→標準探索→AIフォールバック）し、DB に登録 | 8 |
 | `list-feeds` | 登録済みフィード一覧を表示 | 8 |
 | `remove-feed <id>` | フィードを削除（関連記事も連動削除） | 8 |
 | `fetch` | 登録済みフィードを DB から読み込み、記事を取得して DB に保存 | 2・3 |
@@ -25,7 +25,7 @@ rss-feeder <command> [flags]
 
 ```bash
 go build -o bin/web ./cmd/web
-./bin/web [--port <port>] [--static-dir <dir>]
+./bin/web [--port <port>] [--static-dir <dir>] [--rss-agent-path <path>] [--feed-discovery-concurrency <n>]
 ```
 
 | メソッド・パス | 概要 | フェーズ |
@@ -35,10 +35,20 @@ go build -o bin/web ./cmd/web
 | `POST /api/articles/{id}/bookmark` | 記事のお気に入りをトグル（`audit_log` 記録含む） | 9 |
 | `GET /api/categories` | 設定済みカテゴリの一覧（DISTINCT） | 9 |
 | `POST /api/articles/fetch` | 登録済み全フィードを取得して DB に保存（CLI の `fetch` と同じ `FetchUsecase.ExecuteAll` を呼び出す） | 9 |
+| `GET /api/feeds` | 登録済みフィード一覧 | — |
+| `POST /api/feeds` | 入力 URL からフィード URL を自動探索し DB に登録（CLI の `add-feed` と同じ探索フロー。タイムアウト時は `504`） | — |
+| `DELETE /api/feeds/{id}` | フィードを削除（関連記事も連動削除） | — |
 | `/*`（メソッド不問） | `--static-dir` で指定したディレクトリ配下の静的ファイル配信（フロントエンドビルド成果物。`r.Handle` で登録） | 9 |
 
-詳細仕様は `docs/steering/20260614_web_view/` を参照（`POST /api/articles/fetch` はフェーズ完了後に追加されたため当該ドキュメントには未記載）。
+詳細仕様は `docs/steering/20260614_web_view/`（記事系エンドポイント）・`docs/steering/20260619_feed_management_ui/`（フィード系エンドポイント）・
+`docs/steering/20260619_feed_url_discovery/`（フィードURL自動探索）を参照
+（`POST /api/articles/fetch` はフェーズ完了後に追加されたため当該ドキュメントには未記載）。
 ハンドラの実体は `internal/adapter/handler/web/`（`ListArticlesHandler` 等）で、ルート登録自体は `cmd/web/main.go` が行う。
+
+`--rss-agent-path`（デフォルト `bin/rss-agent`）・`--feed-discovery-concurrency`（デフォルト `2`）は
+`POST /api/feeds` のAIフォールバック（`bin/rss-agent discover-feed` をサブプロセス実行する箇所）専用のフラグ。
+`cmd/web` は Anthropic SDK に直接依存せず、サブプロセス経由でのみ Claude を利用する
+（詳細は `docs/steering/20260619_feed_url_discovery/design.md` を参照）。
 
 フロントエンド（`web/frontend/`、Vite + React + TypeScript）は `npm run build` で `web/static/` に出力する。
 
@@ -73,6 +83,7 @@ rss-agent <command> [flags]
 | `summarize` | `--feed <url>`, `--limit <n>`（デフォルト 10） | 最新記事を AI で要約 |
 | `preference` | — | ブックマーク済み記事から趣向を分析 |
 | `enrich` | `--limit <n>`（デフォルト 10）, `--force` | 記事に要約・カテゴリを付与してDBに保存 |
+| `discover-feed <url>` | — | URL の HTML から Claude にフィード URL を推測させる（`cmd/web` のサブプロセス・`rss-feeder add-feed` のAIフォールバックから利用。単独実行も可） |
 
 `ANTHROPIC_API_KEY` が必要（`internal/config/config.yml` の `anthropic_api_key` または環境変数）。
 `cmd/agent/main.go` がエントリポイントで、起動時に `internal/config.Load()` を呼び、
@@ -82,7 +93,7 @@ rss-agent <command> [flags]
 > `ANTHROPIC_API_KEY` は claude.ai（コンシューマー向けチャット）のログイン情報ではなく、
 > Claude Console（https://console.anthropic.com）の「API Keys」から発行する API キーを使用する。
 
-各エージェントのモデル選定方針：単純な要約・分類タスク（`summarize`/`enrich`）は
+各エージェントのモデル選定方針：単純な要約・分類タスク（`summarize`/`enrich`/`discover-feed`）は
 `claude-haiku-4-5`、ブックマークの傾向分析という難易度の高いタスク（`preference`）は
 `claude-opus-4-8` + adaptive thinking を使用する。コスト・実行時間のチューニング方針・
 詳細は `docs/steering/20260617_agent_cost_tuning/` を参照。
@@ -95,6 +106,11 @@ OOM が発生する場合はパッケージ並列数を制限する：
 ```bash
 GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -p 1 -o bin/rss-agent ./cmd/agent
 ```
+
+`cmd/rss-feeder` も `add-feed` のAIフォールバック（フィードURL自動探索）のために Anthropic SDK に
+直接依存しており、同じ CGO + Anthropic SDK の組み合わせのため上記と同様のビルド対策が必要になる場合がある
+（`cmd/web` は Claude を直接呼ばずサブプロセス経由のため対象外）。詳細は
+`docs/steering/20260619_feed_url_discovery/` を参照。
 
 ---
 
@@ -115,7 +131,7 @@ driver                                            → adapter(interface)
 rss-feeder/
 ├── cmd/
 │   ├── rss-feeder/
-│   │   └── main.go                              # Composition Root・samber/do コンテナ構築・サブコマンド登録
+│   │   └── main.go                              # Composition Root・samber/do コンテナ構築・サブコマンド登録。Anthropic SDK に直接依存し、DiscoverFeedUsecase を feeddiscovery.Agent として渡す discoverFeedAgent アダプタ（インプロセス実装）を定義
 │   ├── web/
 │   │   └── main.go                              # Composition Root・samber/do コンテナ構築・chi router 構築（ルート定義）
 │   └── agent/
@@ -146,7 +162,9 @@ rss-feeder/
 │   │   ├── maintenance.go                       # DB VACUUM・整合性チェック
 │   │   ├── summarize.go                         # 記事要約（SummarizeAgent への薄いラッパー）
 │   │   ├── preference.go                        # 趣向分析（PreferenceAgent への薄いラッパー）
-│   │   └── enrich.go                            # 要約・カテゴリ付与（EnrichAgent への薄いラッパー）
+│   │   ├── enrich.go                            # 要約・カテゴリ付与（EnrichAgent への薄いラッパー）
+│   │   ├── discover_feed.go                     # DiscoverFeedUsecase（HTML取得→Claude問い合わせ→RSSReaderで再検証）
+│   │   └── resolve_feed_url.go                  # ResolveFeedURLUsecase（直接判定→標準探索→AIフォールバックの探索フロー、findFeedLink純粋関数）
 │   ├── adapter/
 │   │   ├── driver/
 │   │   │   ├── readerdb/
@@ -160,10 +178,15 @@ rss-feeder/
 │   │   │   │       └── feed.go                 # FeedRepository interface（ErrAlreadyExists・ErrNotFound 定義）
 │   │   │   ├── rss/
 │   │   │   │   └── rss_reader.go               # RSSReader interface
+│   │   │   ├── htmlfetch/
+│   │   │   │   └── htmlfetch.go                # Fetcher interface（HTML取得）
+│   │   │   ├── feeddiscovery/
+│   │   │   │   └── feeddiscovery.go            # Agent interface・ErrAgentUnavailable（実装は cmd/web=サブプロセス、cmd/rss-feeder=インプロセスで異なる）
 │   │   │   └── anthropic/
 │   │   │       ├── summarize.go                # SummarizeAgent interface・SummarizeOptions
 │   │   │       ├── preference.go                # PreferenceAgent interface
-│   │   │       └── enrich.go                    # EnrichAgent interface・EnrichOptions
+│   │   │       ├── enrich.go                    # EnrichAgent interface・EnrichOptions
+│   │   │       └── discover_feed.go             # FeedDiscoveryAgent interface
 │   │   └── handler/
 │   │       ├── cli/                             # rss-feeder（cobra）向けハンドラ
 │   │       │   ├── fetch.go                     # cobra コマンド → ListFeedsUsecase + FetchUsecase 呼び出し
@@ -184,14 +207,16 @@ rss-feeder/
 │   │       │   ├── article.go                    # ListArticlesHandler・SearchArticlesHandler・BookmarkArticleHandler（DTO は openapi パッケージの生成型）
 │   │       │   ├── category.go                   # ListCategoriesHandler
 │   │       │   ├── fetch.go                       # FetchLatestHandler（最新フィード取得）
+│   │       │   ├── feed.go                        # ListFeedsHandler・AddFeedHandler（ResolveFeedURLUsecase経由）・RemoveFeedHandler
 │   │       │   └── openapi/                       # docs/openapi.yaml から生成された型（oapi-codegen、DO NOT EDIT）
 │   │       │       ├── config.yaml                # oapi-codegen 設定（models のみ生成）
 │   │       │       ├── generate.go                # go:generate ディレクティブ
-│   │       │       └── types.gen.go                # Article・PagedArticles・FetchResult・Error 等
+│   │       │       └── types.gen.go                # Article・PagedArticles・FetchResult・Error・Feed 等
 │   │       └── agent/                            # rss-agent（cobra）向けハンドラ
 │   │           ├── summarize.go                   # summarize サブコマンド（--feed/--limit フラグ）
 │   │           ├── preference.go                  # preference サブコマンド
-│   │           └── enrich.go                      # enrich サブコマンド（--limit/--force フラグ）
+│   │           ├── enrich.go                      # enrich サブコマンド（--limit/--force フラグ）
+│   │           └── discover_feed.go               # discover-feed <url> サブコマンド（rss-agent単独実行用）
 │   └── driver/
 │       ├── readerdb/                            # reader.db への接続・リポジトリ実装
 │       │   ├── client.go                        # DB 接続（sql.Open のみ）
@@ -205,11 +230,16 @@ rss-feeder/
 │       │       └── feed.go                     # FeedRepository 実装
 │       ├── rss/
 │       │   └── reader.go                       # RSSReader 実装（gofeed による HTTP Fetch）
+│       ├── htmlfetch/
+│       │   └── htmlfetch.go                    # Fetcher 実装（net/http、タイムアウト15秒・サイズ上限5MB）
+│       ├── feeddiscovery/
+│       │   └── subprocess.go                   # Agent 実装（cmd/web専用。セマフォで同時実行数を制限し bin/rss-agent discover-feed をサブプロセス実行）
 │       └── anthropic/                           # Claude API 連携（エージェント機能。adapter/driver/anthropic の各 interface を実装）
 │           ├── loop.go                          # エージェントループ（runAgentLoop・toArticleJSONList）
 │           ├── preference.go                    # preferenceAgent（PreferenceAgent 実装）
 │           ├── summarize.go                     # summarizeAgent（SummarizeAgent 実装）
-│           └── enrich.go                        # enrichAgent（EnrichAgent 実装、DB保存）
+│           ├── enrich.go                        # enrichAgent（EnrichAgent 実装、DB保存）
+│           └── discover_feed.go                 # feedDiscoveryAgent（FeedDiscoveryAgent 実装、claude-haiku-4-5）
 ├── reader.db                                    # SQLite データベース（gitignore）
 ├── go.mod
 └── go.sum
@@ -225,11 +255,12 @@ rss-feeder/
 | `github.com/mmcdole/gofeed` | RSS/Atom パース | RSS 2.0・Atom 両対応、メンテ活発 |
 | `github.com/mattn/go-sqlite3` | SQLite ドライバ | CGO 使用。devcontainer に GCC あり・純 Go 版は コンパイル時メモリ不足のため除外 |
 | `github.com/samber/do/v2` | DI コンテナ | CLI 向きのシンプルな API、コード生成不要 |
-| `github.com/anthropics/anthropic-sdk-go` | Claude API クライアント | エージェント機能・記事要約で使用 |
+| `github.com/anthropics/anthropic-sdk-go` | Claude API クライアント | エージェント機能・記事要約・フィードURL自動探索（`cmd/agent`・`cmd/rss-feeder` が直接依存。`cmd/web` は使用せずサブプロセス経由） |
 | `github.com/go-chi/chi/v5` | HTTP ルーター | Web ビュー（`cmd/web`）のルーティング・ミドルウェア |
 | `github.com/go-chi/cors` | CORS ミドルウェア | figma-mcp 製フロントエンドを別ポートで開発する際の CORS 対応 |
 | `github.com/spf13/viper` | 設定ファイル読み込み | `config.yml` から `ANTHROPIC_API_KEY` 等を読み込む |
 | `github.com/oapi-codegen/oapi-codegen/v2`（tool） | OpenAPI → Go 型生成 | `docs/openapi.yaml` から `internal/adapter/handler/web/openapi` の型を生成。`go.mod` の `tool` ディレクティブで管理し、ランタイム依存にはしない |
+| `golang.org/x/net` | HTML パース（`golang.org/x/net/html`） | フィードURL自動探索の標準探索（`<link rel="alternate">` 抽出）で使用。元々間接依存だったものを直接依存に変更 |
 
 ---
 

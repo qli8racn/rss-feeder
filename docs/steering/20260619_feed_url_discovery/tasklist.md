@@ -38,20 +38,25 @@
 
 ## OpenAPI・ドキュメント
 
-- [ ] `docs/openapi.yaml` の `POST /api/feeds` に `504` レスポンスを追加
-- [ ] `go generate ./internal/adapter/handler/web/openapi/...` で型再生成
-- [ ] `cd web/frontend && npm run generate:api` で型再生成（フロントエンドの手書きコードは変更不要の想定）
-- [ ] `docs/design.md` のコマンド一覧・パッケージ構成・依存ライブラリ表を更新
+- [x] `docs/openapi.yaml` の `POST /api/feeds` に `504` レスポンスを追加（`components/responses/GatewayTimeout` を新規定義）
+- [x] `go generate ./internal/adapter/handler/web/openapi/...` で型再生成（`GatewayTimeout` 型を追加）
+- [x] `cd web/frontend && npm run generate:api` で型再生成（フロントエンドの手書きコードは変更不要。`tsc --noEmit`・`npm run test` で確認済み）
+- [x] `docs/design.md` のコマンド一覧・パッケージ構成・依存ライブラリ表を更新（`/api/feeds` 系エンドポイント・`discover-feed` コマンド・新規ファイルツリー・`golang.org/x/net` 等を追加。フィード管理UIフェーズで未反映だった `/api/feeds` 系も合わせて追記）
 
 ## 確認
 
-- [ ] `go build ./...` / `go vet ./...` / `go test ./...`
-- [ ] `go build -o bin/rss-agent ./cmd/agent` `go build -o bin/web ./cmd/web` `go build -o bin/rss-feeder ./cmd/rss-feeder`
-- [ ] `curl` で `POST /api/feeds`（`cmd/web`）に以下を入力し、それぞれ期待通りの結果になることを確認
-  - RSS/Atomフィードの直接URL（ステップ1で即解決）
-  - `<link rel="alternate">` を持つ通常サイトURL（ステップ2で解決）
-  - 標準探索では見つからないが Claude なら見つかる想定のURL（ステップ3で解決、`bin/rss-agent` 必要）
-  - フィードが存在しないURL（全ステップ失敗 → 400）
-  - `bin/rss-agent` を一時的にリネームした状態での通常サイトURL追加（ステップ3が`ErrAgentUnavailable`で失敗し全滅 → 400、エラーで落ちないことを確認）
-  - `--feed-discovery-concurrency` の上限を超える数のステップ3対象リクエストを同時に投げ、後続リクエストが空きを待ってから処理されること（タイムアウトしてもクラッシュしないこと）を確認
-- [ ] `bin/rss-feeder add-feed <url>` で同様のURLパターンを確認（`bin/rss-agent` を削除した状態でも、インプロセス実装のため通常サイトURLのAI探索が機能することを確認）
+- [x] `go build ./...` / `go vet ./...` / `go test ./...`
+- [x] `go build -o bin/rss-agent ./cmd/agent` `go build -o bin/web ./cmd/web` `go build -o bin/rss-feeder ./cmd/rss-feeder`
+- [x] `curl` で `POST /api/feeds`（`cmd/web`）の実機能確認（ローカルでテスト起動し検証。完了後サーバーは停止済み）
+  - [x] RSS/Atomフィードの直接URL（`https://hnrss.org/frontpage`）→ステップ1で即解決
+  - [x] `<link rel="alternate">` を持つ通常サイトURL（`https://www.theverge.com/`）→ステップ2で相対URL（`/rss/index.xml`）を絶対URLに解決
+  - [x] 標準探索では見つからないURL（`https://qiita.com`）→ステップ3でClaudeが呼ばれる（`$0.0206`課金を確認）ことを確認。
+    今回は推測URL（`/feed.atom`）が実際には404で存在せず、再検証で弾かれて400になった（「Claudeの推測が常に正しいわけではない」を再検証ステップが正しく防いでいることの確認にもなった）
+  - [ ] 標準探索では見つからないが Claude が実際に正しいフィードURLを発見できる想定のURLでの成功パターン（未確認。上記の通り簡単には見つからなかったため保留）
+  - [ ] フィードが存在しないURL（全ステップ失敗 → 400）の単独確認（上記qiita.comのケースで結果的に確認済みだが、フィード自体が存在しないケースは未確認）
+  - [ ] `bin/rss-agent` を一時的にリネームした状態での通常サイトURL追加（`ErrAgentUnavailable`経路）
+  - [ ] `--feed-discovery-concurrency` の上限を超える同時リクエストの挙動
+- [ ] `bin/rss-feeder add-feed <url>` での同様の確認（`bin/rss-agent` 削除状態でのインプロセスAI探索）
+
+> 残りの未確認項目は、外部サイトへの追加アクセスとAPIコストを伴うため保留した（ユーザー判断）。
+> 本番運用前に必要であれば手動で確認すること。
