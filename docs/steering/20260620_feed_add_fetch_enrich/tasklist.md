@@ -2,10 +2,10 @@
 
 ## enrich のフィード絞り込み対応
 
-- [ ] `internal/adapter/driver/anthropic/enrich.go` の `EnrichOptions` に `FeedURL string` フィールドを追加
-- [ ] `internal/driver/anthropic/enrich.go` の `Run` 内 `Force` 分岐を `a.repo.FetchLatest(ctx, opts.Limit, opts.FeedURL)` に変更
-- [ ] `internal/driver/anthropic/enrich_test.go` に `FeedURL` 指定時のテストケースを追加
-- [ ] `internal/adapter/handler/agent/enrich.go` の `NewEnrichCommand` に `--feed` フラグを追加し `EnrichOptions.FeedURL` に渡す
+- [x] `internal/adapter/driver/anthropic/enrich.go` の `EnrichOptions` に `FeedURL string` フィールドを追加
+- [x] `internal/driver/anthropic/enrich.go` の `Run` 内 `Force` 分岐を `a.repo.FetchLatest(ctx, opts.Limit, opts.FeedURL)` に変更
+- [x] `internal/driver/anthropic/enrich_test.go` に `FeedURL` 指定時のテストケースを追加
+- [x] `internal/adapter/handler/agent/enrich.go` の `NewEnrichCommand` に `--feed` フラグを追加し `EnrichOptions.FeedURL` に渡す
 
 ## enrich 用サブプロセス機構（新設）
 

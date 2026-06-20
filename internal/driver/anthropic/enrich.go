@@ -62,7 +62,7 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 	var articles []domain.Article
 	var err error
 	if opts.Force {
-		articles, err = a.repo.FetchLatest(ctx, opts.Limit, "")
+		articles, err = a.repo.FetchLatest(ctx, opts.Limit, opts.FeedURL)
 	} else {
 		articles, err = a.repo.FindWithoutSummary(ctx, opts.Limit)
 	}
