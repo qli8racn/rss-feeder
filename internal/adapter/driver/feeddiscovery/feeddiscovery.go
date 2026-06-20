@@ -9,7 +9,7 @@ import (
 var ErrAgentUnavailable = errors.New("rss-agent is not available")
 
 // Agent はURLからRSS/AtomフィードのURLを推測する。
-// 実装は cmd/web（サブプロセス経由）と cmd/rss-feeder（インプロセス）で異なる。
+// cmd/web・cmd/rss-feeder とも同じサブプロセス実装（bin/rss-agent discover-feed）を使う。
 type Agent interface {
 	Discover(ctx context.Context, url string) (feedURL string, err error)
 }

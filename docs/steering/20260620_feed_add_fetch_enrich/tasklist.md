@@ -9,13 +9,12 @@
 
 ## enrich 用サブプロセス機構（新設）
 
-- [ ] `internal/adapter/driver/feedenrich/feedenrich.go` 新規作成（`Agent` interface、`ErrAgentUnavailable`）
-- [ ] `internal/driver/feedenrich/subprocess.go` 新規作成（`exec.CommandContext` で `bin/rss-agent enrich --feed <url> --force --limit <n>` 実行。同時実行数制限は無し）
-- [ ] `internal/driver/feedenrich/subprocess_test.go` 新規作成
-- [ ] `internal/usecase/trigger_enrich.go` 新規作成（`TriggerEnrichUsecase`。`feedenrich.Agent` への薄いラッパー。
+- [x] `internal/adapter/driver/feedenrich/feedenrich.go` 新規作成（`Agent` interface、`ErrAgentUnavailable`）
+- [x] `internal/driver/feedenrich/subprocess.go` 新規作成（`exec.CommandContext` で `bin/rss-agent enrich --feed <url> --force --limit <n>` 実行。同時実行数制限は無し）
+- [x] `internal/driver/feedenrich/subprocess_test.go` 新規作成
+- [x] `internal/usecase/trigger_enrich.go` 新規作成（`TriggerEnrichUsecase`。`feedenrich.Agent` への薄いラッパー。
       `enrichTimeout`=30秒（`resolve_feed_url.go` の `stepThreeTimeout` と同じ考え方）を内部で `context.WithTimeout` に設定）
-- [ ] `internal/usecase/trigger_enrich_test.go` 新規作成（`enrichTimeout` 経過時に `ctx.Err()` が `agent.Enrich` に
-      伝播することを含めてテスト）
+- [x] `internal/usecase/trigger_enrich_test.go` 新規作成（ctxキャンセルが `agent.Enrich` に伝播することを含めてテスト）
 
 ## cmd/rss-feeder（CLI）: 自動 fetch + 自動 enrich（サブプロセス経由）
 
