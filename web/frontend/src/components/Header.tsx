@@ -1,5 +1,6 @@
 import { memo } from 'react'
-import { BookmarkIcon, ListIcon, RefreshIcon, RssIcon } from './icons'
+import { RssIcon } from './icons'
+import Button from './ui/Button'
 
 interface HeaderProps {
   bookmarkedCount: number
@@ -27,37 +28,15 @@ function Header({
         </h1>
       </div>
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onFetchLatest}
-          disabled={fetching}
-          className="flex items-center gap-1.5 rounded border border-slate-400/10 px-3 py-1.5 font-mono text-caption text-slate-500 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <RefreshIcon className={`size-3 ${fetching ? 'animate-spin' : ''}`} />
-          <span>{fetching ? '取得中...' : '最新フィードを取得'}</span>
-        </button>
-        <button
-          type="button"
-          onClick={onToggleBookmarkedOnly}
-          aria-pressed={bookmarkedOnly}
-          className={`flex items-center gap-1.5 rounded border px-3 py-1.5 font-mono text-caption transition-colors ${
-            bookmarkedOnly ? 'border-amber-500/60 text-amber-400' : 'border-slate-400/10 text-slate-500'
-          }`}
-        >
-          <BookmarkIcon filled={bookmarkedOnly} className="size-3" />
-          <span>ブックマーク</span>
-          <span className="rounded bg-surface-raised px-1.5 py-0.5 text-micro font-bold text-slate-500">
-            {bookmarkedCount}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={onOpenFeedManagement}
-          className="flex items-center gap-1.5 rounded border border-slate-400/10 px-3 py-1.5 font-mono text-caption text-slate-500"
-        >
-          <ListIcon className="size-3" />
-          <span>フィード管理</span>
-        </button>
+        <Button icon="refresh" onClick={onFetchLatest} disabled={fetching} spinning={fetching}>
+          {fetching ? '取得中...' : '最新フィードを取得'}
+        </Button>
+        <Button icon="bookmark" onClick={onToggleBookmarkedOnly} active={bookmarkedOnly} badge={bookmarkedCount}>
+          ブックマーク
+        </Button>
+        <Button icon="list" onClick={onOpenFeedManagement}>
+          フィード管理
+        </Button>
       </div>
     </header>
   )

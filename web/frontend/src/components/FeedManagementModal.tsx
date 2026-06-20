@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { addFeed, fetchFeeds, removeFeed } from '../api'
 import type { Feed } from '../types'
-import { PlusIcon } from './icons'
 import IconButton from './ui/IconButton'
+import TextField from './ui/TextField'
+import Button from './ui/Button'
+import Table, { TABLE_HEADER_ROW_CLASS, TABLE_ROW_CLASS } from './ui/Table'
 
 interface FeedManagementModalProps {
   open: boolean
@@ -80,22 +82,16 @@ function FeedManagementModal({ open, onClose }: FeedManagementModalProps) {
           onSubmit={handleAdd}
           className="flex items-center gap-2 border-b border-slate-400/10 px-[18px] py-3.5"
         >
-          <input
-            type="text"
+          <TextField
+            className="flex-1"
             value={newUrl}
             onChange={(e) => setNewUrl(e.target.value)}
             placeholder="https://example.com/feed.xml"
             disabled={submitting}
-            className="flex-1 rounded border border-slate-400/10 bg-surface-raised px-3 py-2 text-caption text-slate-200 placeholder:text-slate-500/60 focus:outline-none disabled:opacity-50"
           />
-          <button
-            type="submit"
-            disabled={submitting || !newUrl.trim()}
-            className="flex items-center gap-1.5 whitespace-nowrap rounded border border-slate-400/10 bg-surface-raised px-3 py-2 font-mono text-caption text-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <PlusIcon className="size-3" />
-            <span>{submitting ? '追加中...' : '追加'}</span>
-          </button>
+          <Button icon="plus" type="submit" variant="filled" disabled={submitting || !newUrl.trim()}>
+            {submitting ? '追加中...' : '追加'}
+          </Button>
         </form>
 
         {error && <p className="px-[18px] py-2 text-small text-rose-400">{error}</p>}
@@ -107,36 +103,38 @@ function FeedManagementModal({ open, onClose }: FeedManagementModalProps) {
             登録済みのフィードがありません。上の入力欄から追加してください。
           </p>
         ) : (
-          <div>
-            <div className="flex items-center gap-3 bg-surface-raised/60 px-[18px] py-2.5 font-mono text-micro text-slate-500">
-              <span className={URL_COL_CLASS}>URL</span>
-              <span className="flex-1">タイトル</span>
-              <span className={LAST_FETCHED_COL_CLASS}>最終取得</span>
-              <span className={ACTION_COL_CLASS} />
-            </div>
-            {feeds.map((feed) => (
-              <div
-                key={feed.id}
-                className="flex items-center gap-3 border-b border-slate-400/10 px-[18px] py-3"
-              >
-                <span className={`${URL_COL_CLASS} break-all font-mono text-micro text-slate-500`}>
-                  {feed.feed_url}
-                </span>
-                <span className="flex-1 text-caption text-slate-200/90">
-                  {feed.title || '(未取得)'}
-                </span>
-                <span className={`${LAST_FETCHED_COL_CLASS} font-mono text-micro text-slate-500`}>
-                  {formatLastFetched(feed.last_fetched)}
-                </span>
-                <IconButton
-                  icon="trash"
-                  onClick={() => handleRemove(feed)}
-                  ariaLabel={`${feed.feed_url} を削除`}
-                  className={ACTION_COL_CLASS}
-                />
-              </div>
-            ))}
-          </div>
+          <Table>
+            <thead>
+              <tr className={TABLE_HEADER_ROW_CLASS}>
+                <th className={`${URL_COL_CLASS} py-2.5 pl-[18px] pr-3 text-left font-mono text-micro text-slate-500`}>
+                  URL
+                </th>
+                <th className="py-2.5 pr-3 text-left font-mono text-micro text-slate-500">タイトル</th>
+                <th className={`${LAST_FETCHED_COL_CLASS} py-2.5 pr-3 text-left font-mono text-micro text-slate-500`}>
+                  最終取得
+                </th>
+                <th className={`${ACTION_COL_CLASS} py-2.5 pr-[18px]`} />
+              </tr>
+            </thead>
+            <tbody>
+              {feeds.map((feed) => (
+                <tr key={feed.id} className={TABLE_ROW_CLASS}>
+                  <td className="break-all py-3 pl-[18px] pr-3 align-top font-mono text-micro text-slate-500">
+                    {feed.feed_url}
+                  </td>
+                  <td className="py-3 pr-3 align-top text-caption text-slate-200/90">
+                    {feed.title || '(未取得)'}
+                  </td>
+                  <td className="py-3 pr-3 align-top font-mono text-micro text-slate-500">
+                    {formatLastFetched(feed.last_fetched)}
+                  </td>
+                  <td className="py-3 pr-[18px] align-top">
+                    <IconButton icon="trash" onClick={() => handleRemove(feed)} ariaLabel={`${feed.feed_url} を削除`} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
         )}
       </div>
     </div>

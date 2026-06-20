@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from 'react'
-import { SearchIcon } from './icons'
 import SelectField from './ui/SelectField'
+import TextField from './ui/TextField'
 import { PER_PAGE_OPTIONS } from '../types'
 import type { PerPage } from '../types'
 
@@ -42,16 +42,13 @@ function SearchFilterBar({
       }}
       className="flex flex-col gap-3 sm:flex-row sm:items-start"
     >
-      <div className="relative flex-1">
-        <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="タイトル・メディア・サマリーで検索..."
-          className="w-full rounded border border-slate-400/10 bg-surface-raised py-2 pl-9 pr-4 text-body text-slate-200 placeholder:text-slate-500 focus:outline-none"
-        />
-      </div>
+      <TextField
+        className="flex-1"
+        hasIcon
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="タイトル・メディア・サマリーで検索..."
+      />
       <div className="flex gap-2">
         <SelectField value={category} onChange={(e) => onCategoryChange(e.target.value)}>
           <option value="">すべてのカテゴリ</option>
