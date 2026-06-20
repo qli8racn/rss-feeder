@@ -12,11 +12,14 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/samber/do/v2"
 
+	"github.com/qli8racn/rss-feeder/internal/adapter/driver/htmlfetch"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	auditlogrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/auditlog"
 	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/adapter/handler/web"
+	driverfeeddiscovery "github.com/qli8racn/rss-feeder/internal/driver/feeddiscovery"
+	driverhtmlfetch "github.com/qli8racn/rss-feeder/internal/driver/htmlfetch"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerdb/auditlog"
@@ -29,6 +32,8 @@ import (
 func main() {
 	port := flag.Int("port", 8080, "HTTP サーバーのポート番号")
 	staticDir := flag.String("static-dir", "web/static", "フロントエンド静的ファイルのディレクトリ")
+	rssAgentPath := flag.String("rss-agent-path", "bin/rss-agent", "フィードURL自動探索のAIフォールバックに使う rss-agent バイナリのパス")
+	feedDiscoveryConcurrency := flag.Int("feed-discovery-concurrency", 2, "フィードURL自動探索のAIフォールバック（rss-agentサブプロセス）の同時実行数の上限")
 	flag.Parse()
 
 	i := do.New()
@@ -37,6 +42,7 @@ func main() {
 	do.Provide(i, dbrepoauditlog.NewRepository)
 	do.Provide(i, dbrepofeed.NewRepository)
 	do.Provide(i, driverrss.NewReader)
+	do.Provide(i, driverhtmlfetch.NewFetcher)
 
 	db := do.MustInvoke[*sql.DB](i)
 	if err := migration.Run(db); err != nil {
@@ -56,6 +62,12 @@ func main() {
 	addFeedUC := usecase.NewAddFeedUsecase(do.MustInvoke[feedrepo.Repository](i))
 	listFeedsUC := usecase.NewListFeedsUsecase(do.MustInvoke[feedrepo.Repository](i))
 	removeFeedUC := usecase.NewRemoveFeedUsecase(do.MustInvoke[feedrepo.Repository](i))
+	feedDiscoveryAgent := driverfeeddiscovery.NewSubprocessAgent(*rssAgentPath, *feedDiscoveryConcurrency)
+	resolveFeedURLUC := usecase.NewResolveFeedURLUsecase(
+		do.MustInvoke[adapterrss.RSSReader](i),
+		do.MustInvoke[htmlfetch.Fetcher](i),
+		feedDiscoveryAgent,
+	)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -71,7 +83,7 @@ func main() {
 	r.Post("/api/articles/{id}/bookmark", web.BookmarkArticleHandler(bookmarkUC, auditUC))
 	r.Get("/api/categories", web.ListCategoriesHandler(categoriesUC))
 	r.Get("/api/feeds", web.ListFeedsHandler(listFeedsUC))
-	r.Post("/api/feeds", web.AddFeedHandler(addFeedUC))
+	r.Post("/api/feeds", web.AddFeedHandler(addFeedUC, resolveFeedURLUC))
 	r.Delete("/api/feeds/{id}", web.RemoveFeedHandler(removeFeedUC))
 	r.Handle("/*", http.FileServer(http.Dir(*staticDir)))
 

@@ -21,16 +21,15 @@
 - [x] `internal/usecase/resolve_feed_url.go` 新規作成（`ResolveFeedURLUsecase`・`findFeedLink` 純粋関数・`ErrFeedNotFound`。ステップ3呼び出しに30秒タイムアウトを設定、各ステップの失敗はログに残す）
 - [x] `internal/usecase/resolve_feed_url_test.go` 新規作成
 - [ ] `internal/adapter/handler/cli/add_feed.go` 修正（`ResolveFeedURLUsecase` → `AddFeedUsecase` の順で呼び出す）
-  - 保留: `cmd/web`・`cmd/rss-feeder` 側で `feeddiscovery.Agent` の具象実装（サブプロセス／インプロセス）が揃ってから main.go の DI とまとめて変更する（先に変更すると一時的にビルドが壊れるため）
-- [ ] `internal/adapter/handler/web/feed.go` 修正（同上、`ErrFeedNotFound` を 400 に、タイムアウトを 504 にマッピング）
-  - 同上の理由で保留
+  - 保留: `cmd/rss-feeder` 側で `feeddiscovery.Agent` のインプロセス実装が揃ってから main.go の DI とまとめて変更する（先に変更すると一時的にビルドが壊れるため）
+- [x] `internal/adapter/handler/web/feed.go` 修正（`ResolveFeedURLUsecase` → `AddFeedUsecase` の順で呼び出す。タイムアウトを 504 に、それ以外の解決失敗を 400 にマッピング。`addFeedTimeout`=80秒を `AddFeedHandler` 内で設定）
 
 ## cmd/web 側（サブプロセス経由、同時実行数制限）
 
 - [x] `internal/adapter/driver/feeddiscovery/feeddiscovery.go` 新規作成（`Agent` interface、`ErrAgentUnavailable`）
-- [ ] `internal/driver/feeddiscovery/subprocess.go` 新規作成（セマフォで同時実行数を制限した上で `exec.CommandContext` で `bin/rss-agent discover-feed` 実行）
-- [ ] `internal/driver/feeddiscovery/subprocess_test.go` 新規作成（同時実行数の上限挙動を含む）
-- [ ] `cmd/web/main.go` に DI 登録・`--rss-agent-path`（デフォルト `bin/rss-agent`）・`--feed-discovery-concurrency`（デフォルト2）フラグ追加・`AddFeedHandler` 呼び出しに80秒の `context.WithTimeout` を追加
+- [x] `internal/driver/feeddiscovery/subprocess.go` 新規作成（セマフォで同時実行数を制限した上で `exec.CommandContext` で `bin/rss-agent discover-feed` 実行）
+- [x] `internal/driver/feeddiscovery/subprocess_test.go` 新規作成（同時実行数の上限挙動を含む）
+- [x] `cmd/web/main.go` に DI 登録・`--rss-agent-path`（デフォルト `bin/rss-agent`）・`--feed-discovery-concurrency`（デフォルト2）フラグ追加
 
 ## cmd/rss-feeder 側（インプロセス、Anthropic SDK に直接依存）
 
