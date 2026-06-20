@@ -83,7 +83,7 @@ func main() {
 	r.Post("/api/articles/{id}/bookmark", web.BookmarkArticleHandler(bookmarkUC, auditUC))
 	r.Get("/api/categories", web.ListCategoriesHandler(categoriesUC))
 	r.Get("/api/feeds", web.ListFeedsHandler(listFeedsUC))
-	r.Post("/api/feeds", web.AddFeedHandler(addFeedUC, resolveFeedURLUC))
+	r.Post("/api/feeds", web.AddFeedHandler(addFeedUC, resolveFeedURLUC, fetchUC))
 	r.Delete("/api/feeds/{id}", web.RemoveFeedHandler(removeFeedUC))
 	r.Handle("/*", http.FileServer(http.Dir(*staticDir)))
 

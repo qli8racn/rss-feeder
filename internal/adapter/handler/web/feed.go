@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -58,7 +59,11 @@ func ListFeedsHandler(uc *usecase.ListFeedsUsecase) http.HandlerFunc {
 
 // AddFeedHandler は POST /api/feeds を処理する。
 // 入力URLを resolveFeedURLUC でフィードURLに解決した上で addFeedUC に渡す。
-func AddFeedHandler(addFeedUC *usecase.AddFeedUsecase, resolveFeedURLUC *usecase.ResolveFeedURLUsecase) http.HandlerFunc {
+// 登録成功後、そのフィードの記事取得（fetchUC）を行う。失敗してもフィード登録自体の
+// レスポンスは変えず、best-effortとしてログに記録するのみ（要約・カテゴライズの自動実行は
+// cmd/rss-feeder のみで行い、cmd/web では行わない。docs/steering/20260620_feed_add_fetch_enrich/
+// requirements.md のアーキテクチャ上の制約を参照）。
+func AddFeedHandler(addFeedUC *usecase.AddFeedUsecase, resolveFeedURLUC *usecase.ResolveFeedURLUsecase, fetchUC *usecase.FetchUsecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req openapi.AddFeedRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -91,6 +96,10 @@ func AddFeedHandler(addFeedUC *usecase.AddFeedUsecase, resolveFeedURLUC *usecase
 			}
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
+		}
+
+		if _, err := fetchUC.Execute(ctx, []string{resolvedURL}); err != nil {
+			log.Printf("[add_feed] 記事の取得に失敗しました %s: %v", resolvedURL, err)
 		}
 
 		writeJSON(w, http.StatusCreated, toFeedDTO(*feed))

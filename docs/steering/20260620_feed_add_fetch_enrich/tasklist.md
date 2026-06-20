@@ -26,9 +26,9 @@
 
 ## cmd/web: 自動 fetch のみ
 
-- [ ] `internal/adapter/handler/web/feed.go` の `AddFeedHandler` に `fetchUC` を追加し、
+- [x] `internal/adapter/handler/web/feed.go` の `AddFeedHandler` に `fetchUC` を追加し、
       登録成功後に fetch を呼ぶ（失敗は `log.Printf` で記録、処理は続行。enrich は呼ばない）
-- [ ] `cmd/web/main.go` の `web.AddFeedHandler(...)` 呼び出しに既存の `fetchUC` を追加で渡す
+- [x] `cmd/web/main.go` の `web.AddFeedHandler(...)` 呼び出しに既存の `fetchUC` を追加で渡す
 
 ## 確認
 
