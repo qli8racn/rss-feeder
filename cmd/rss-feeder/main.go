@@ -17,6 +17,7 @@ import (
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/adapter/handler/cli"
 	driverfeeddiscovery "github.com/qli8racn/rss-feeder/internal/driver/feeddiscovery"
+	driverfeedenrich "github.com/qli8racn/rss-feeder/internal/driver/feedenrich"
 	driverhtmlfetch "github.com/qli8racn/rss-feeder/internal/driver/htmlfetch"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
@@ -91,6 +92,8 @@ func main() {
 		do.MustInvoke[htmlfetch.Fetcher](i),
 		feedDiscoveryAgent,
 	)
+	feedEnrichAgent := driverfeedenrich.NewSubprocessAgent(*rssAgentPath)
+	triggerEnrichUC := usecase.NewTriggerEnrichUsecase(feedEnrichAgent)
 
 	root := &cobra.Command{
 		Use:   "rss-feeder",
@@ -107,7 +110,7 @@ func main() {
 		cli.NewAuditCommand(auditUC),
 		cli.NewMaintenanceCommand(maintenanceUC),
 		cli.NewSearchCommand(searchUC),
-		cli.NewAddFeedCommand(addFeedUC, resolveFeedURLUC),
+		cli.NewAddFeedCommand(addFeedUC, resolveFeedURLUC, fetchUC, triggerEnrichUC),
 		cli.NewListFeedsCommand(listFeedsUC),
 		cli.NewRemoveFeedCommand(removeFeedUC),
 	)

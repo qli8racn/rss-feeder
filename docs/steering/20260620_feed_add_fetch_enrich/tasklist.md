@@ -18,11 +18,11 @@
 
 ## cmd/rss-feeder（CLI）: 自動 fetch + 自動 enrich（サブプロセス経由）
 
-- [ ] `internal/adapter/handler/cli/add_feed.go` の `NewAddFeedCommand` に `fetchUC`・`triggerEnrichUC` を追加し、
+- [x] `internal/adapter/handler/cli/add_feed.go` の `NewAddFeedCommand` に `fetchUC`・`triggerEnrichUC` を追加し、
       登録成功後に fetch→（保存件数>0なら）enrichトリガーを呼ぶ（失敗は標準エラー出力に警告、処理は続行）
-- [ ] `cmd/rss-feeder/main.go` に `--rss-agent-path`（デフォルト `bin/rss-agent`）フラグを追加し、
-      `feeddiscovery.Agent`・`feedenrich.Agent` を両方サブプロセス実装で構築（Anthropic SDK 関連の import は撤去。
-      `docs/steering/20260619_feed_url_discovery/tasklist.md` の「アーキテクチャ変更」と合わせて実施する）
+- [x] `cmd/rss-feeder/main.go` に `feedenrich.Agent` をサブプロセス実装で構築し `triggerEnrichUC` を `NewAddFeedCommand` に渡す
+      （`--rss-agent-path` フラグ自体は `docs/steering/20260619_feed_url_discovery/` のアーキテクチャ変更で追加済みのため、
+      ここでは既存フラグを再利用するのみ）
 
 ## cmd/web: 自動 fetch のみ
 
