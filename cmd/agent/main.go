@@ -21,16 +21,9 @@ import (
 )
 
 func main() {
-	cfg, err := config.Load()
-	if err != nil {
+	if err := config.SetupAnthropicAPIKey(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
-	}
-	if cfg.AnthropicAPIKey != "" {
-		if err := os.Setenv("ANTHROPIC_API_KEY", cfg.AnthropicAPIKey); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
 	}
 
 	i := do.New()

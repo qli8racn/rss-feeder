@@ -20,8 +20,7 @@
 
 - [x] `internal/usecase/resolve_feed_url.go` 新規作成（`ResolveFeedURLUsecase`・`findFeedLink` 純粋関数・`ErrFeedNotFound`。ステップ3呼び出しに30秒タイムアウトを設定、各ステップの失敗はログに残す）
 - [x] `internal/usecase/resolve_feed_url_test.go` 新規作成
-- [ ] `internal/adapter/handler/cli/add_feed.go` 修正（`ResolveFeedURLUsecase` → `AddFeedUsecase` の順で呼び出す）
-  - 保留: `cmd/rss-feeder` 側で `feeddiscovery.Agent` のインプロセス実装が揃ってから main.go の DI とまとめて変更する（先に変更すると一時的にビルドが壊れるため）
+- [x] `internal/adapter/handler/cli/add_feed.go` 修正（`ResolveFeedURLUsecase` → `AddFeedUsecase` の順で呼び出す）
 - [x] `internal/adapter/handler/web/feed.go` 修正（`ResolveFeedURLUsecase` → `AddFeedUsecase` の順で呼び出す。タイムアウトを 504 に、それ以外の解決失敗を 400 にマッピング。`addFeedTimeout`=80秒を `AddFeedHandler` 内で設定）
 
 ## cmd/web 側（サブプロセス経由、同時実行数制限）
@@ -33,9 +32,9 @@
 
 ## cmd/rss-feeder 側（インプロセス、Anthropic SDK に直接依存）
 
-- [ ] `cmd/rss-feeder/main.go` に `htmlfetch.Fetcher` ・ `adapteranthropic.FeedDiscoveryAgent` ・ `DiscoverFeedUsecase` を DI 登録
-- [ ] `cmd/rss-feeder/main.go` 内に `DiscoverFeedUsecase` を `feeddiscovery.Agent` として渡すための小さなアダプタ型を定義（専用パッケージは作らない。コンポジションルートのため層違反にならない）
-- [ ] `cmd/rss-feeder/main.go` に `ResolveFeedURLUsecase` を DI 登録し `add-feed` サブコマンドに渡す（`--rss-agent-path` 等のフラグは不要）
+- [x] `cmd/rss-feeder/main.go` に `htmlfetch.Fetcher` ・ `adapteranthropic.FeedDiscoveryAgent` ・ `DiscoverFeedUsecase` を DI 登録（`config.Load()` で `ANTHROPIC_API_KEY` を設定する処理も `cmd/agent/main.go` から移植）
+- [x] `cmd/rss-feeder/main.go` 内に `DiscoverFeedUsecase` を `feeddiscovery.Agent` として渡すための小さなアダプタ型（`discoverFeedAgent`）を定義（専用パッケージは作らない。コンポジションルートのため層違反にならない。`var _ feeddiscovery.Agent = (*discoverFeedAgent)(nil)` でコンパイル時にインターフェース充足を確認）
+- [x] `cmd/rss-feeder/main.go` に `ResolveFeedURLUsecase` を DI 登録し `add-feed` サブコマンドに渡す（`--rss-agent-path` 等のフラグは不要）
 
 ## OpenAPI・ドキュメント
 

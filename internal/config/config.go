@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/viper"
 )
@@ -32,4 +33,19 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// SetupAnthropicAPIKey は config.yml から AnthropicAPIKey を読み込み、
+// 設定されていれば ANTHROPIC_API_KEY 環境変数にセットする。
+// cmd/agent ・ cmd/rss-feeder の両方が Anthropic SDK に直接依存し、
+// 起動時に同じ初期化処理を必要とするため共通化する。
+func SetupAnthropicAPIKey() error {
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	if cfg.AnthropicAPIKey == "" {
+		return nil
+	}
+	return os.Setenv("ANTHROPIC_API_KEY", cfg.AnthropicAPIKey)
 }
