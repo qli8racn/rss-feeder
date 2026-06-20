@@ -1,5 +1,6 @@
 import { memo } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon } from './icons'
+import { ChevronLeftIcon, ChevronRightIcon } from '../atoms/icons'
+import PageButton from '../molecules/PageButton'
 
 interface PaginationProps {
   page: number
@@ -23,38 +24,22 @@ function Pagination({ page, totalPages, onPageChange }: PaginationProps) {
 
   return (
     <div className="flex items-center justify-center gap-2 pt-6">
-      <button
-        type="button"
-        disabled={page <= 1}
-        onClick={() => onPageChange(page - 1)}
-        aria-label="前のページ"
-        className="rounded border border-slate-400/10 p-2 disabled:opacity-30"
-      >
+      <PageButton variant="nav" disabled={page <= 1} onClick={() => onPageChange(page - 1)} ariaLabel="前のページ">
         <ChevronLeftIcon className="size-3.5 text-slate-400" />
-      </button>
+      </PageButton>
       {getPageNumbers(page, totalPages).map((p) => (
-        <button
-          key={p}
-          type="button"
-          onClick={() => onPageChange(p)}
-          className={`size-8 rounded border font-mono text-[11px] ${
-            p === page
-              ? 'border-amber-500/60 bg-amber-500/10 text-amber-400'
-              : 'border-slate-400/10 text-slate-500'
-          }`}
-        >
+        <PageButton key={p} variant="number" active={p === page} onClick={() => onPageChange(p)}>
           {p}
-        </button>
+        </PageButton>
       ))}
-      <button
-        type="button"
+      <PageButton
+        variant="nav"
         disabled={page >= totalPages}
         onClick={() => onPageChange(page + 1)}
-        aria-label="次のページ"
-        className="rounded border border-slate-400/10 p-2 disabled:opacity-30"
+        ariaLabel="次のページ"
       >
         <ChevronRightIcon className="size-3.5 text-slate-400" />
-      </button>
+      </PageButton>
     </div>
   )
 }

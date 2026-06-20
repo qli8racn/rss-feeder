@@ -163,11 +163,16 @@ func TestAggregateChunkOutcomes_AllFail(t *testing.T) {
 type fakeRepo struct {
 	articlerepo.Repository
 	findWithoutSummary func(ctx context.Context, limit int) ([]domain.Article, error)
+	fetchLatest        func(ctx context.Context, limit int, feedURL string) ([]domain.Article, error)
 	updateBatch        func(ctx context.Context, updates []articlerepo.EnrichmentUpdate) error
 }
 
 func (f *fakeRepo) FindWithoutSummary(ctx context.Context, limit int) ([]domain.Article, error) {
 	return f.findWithoutSummary(ctx, limit)
+}
+
+func (f *fakeRepo) FetchLatest(ctx context.Context, limit int, feedURL string) ([]domain.Article, error) {
+	return f.fetchLatest(ctx, limit, feedURL)
 }
 
 func (f *fakeRepo) UpdateEnrichmentBatch(ctx context.Context, updates []articlerepo.EnrichmentUpdate) error {
@@ -434,6 +439,32 @@ func TestBuildEnrichmentUpdates_DedupesRepeatedIDs(t *testing.T) {
 	}
 	if got[0].Summary != "first" {
 		t.Errorf("buildEnrichmentUpdates: got summary %q, want first occurrence to win", got[0].Summary)
+	}
+}
+
+func TestEnrichAgent_Run_ForceWithFeedURLScopesFetchLatest(t *testing.T) {
+	// Force=true かつ FeedURL 指定時、FetchLatest がその feedURL で呼ばれることを確認する
+	// （フィード追加時の自動enrichが、対象フィードの記事のみに絞り込めることの検証）。
+	articles := articlesWithIDs(1, 2)
+	var gotFeedURL string
+	repo := &fakeRepo{
+		fetchLatest: func(_ context.Context, _ int, feedURL string) ([]domain.Article, error) {
+			gotFeedURL = feedURL
+			return articles, nil
+		},
+		updateBatch: func(_ context.Context, _ []articlerepo.EnrichmentUpdate) error { return nil },
+	}
+	agent := &enrichAgent{
+		client: &fakeMessageCreator{new: echoSuccess(t, anthropic.Usage{InputTokens: 10, OutputTokens: 5})},
+		repo:   repo,
+	}
+
+	_, err := agent.Run(context.Background(), adapteranthropic.EnrichOptions{Limit: 2, Force: true, FeedURL: "https://example.com/feed"})
+	if err != nil {
+		t.Fatalf("Run: unexpected error: %v", err)
+	}
+	if gotFeedURL != "https://example.com/feed" {
+		t.Errorf("FetchLatest: got feedURL %q, want %q", gotFeedURL, "https://example.com/feed")
 	}
 }
 

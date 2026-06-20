@@ -12,12 +12,13 @@ import (
 func NewEnrichCommand(uc *usecase.EnrichUsecase) *cobra.Command {
 	var limit int
 	var force bool
+	var feedURL string
 
 	cmd := &cobra.Command{
 		Use:   "enrich",
 		Short: "記事に要約・カテゴリを付与してDBに保存する",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			n, err := uc.Execute(cmd.Context(), anthropic.EnrichOptions{Limit: limit, Force: force})
+			n, err := uc.Execute(cmd.Context(), anthropic.EnrichOptions{Limit: limit, Force: force, FeedURL: feedURL})
 			// 一部バッチのみ失敗した場合も処理件数を表示する。何も処理対象がなかった
 			// （n==0かつエラーなし）場合も実行確認のため表示する。
 			if n > 0 || err == nil {
@@ -28,6 +29,7 @@ func NewEnrichCommand(uc *usecase.EnrichUsecase) *cobra.Command {
 	}
 	cmd.Flags().IntVar(&limit, "limit", 10, "処理件数")
 	cmd.Flags().BoolVar(&force, "force", false, "要約済みの記事も含め、最新記事を対象に再処理する")
+	cmd.Flags().StringVar(&feedURL, "feed", "", "対象を絞り込むフィードURL（省略時は全フィード対象）")
 
 	return cmd
 }

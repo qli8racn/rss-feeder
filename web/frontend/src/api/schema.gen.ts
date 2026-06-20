@@ -244,6 +244,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description フィードURLの探索がタイムアウトした */
+        GatewayTimeout: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: {
         /** @description 記事の絞り込みモード */
@@ -430,6 +439,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];
+            504: components["responses"]["GatewayTimeout"];
         };
     };
     removeFeed: {

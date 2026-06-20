@@ -151,6 +151,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         "500":
           $ref: '#/components/responses/InternalServerError'
+        "504":
+          $ref: '#/components/responses/GatewayTimeout'
 
   /api/feeds/{id}:
     delete:
@@ -264,6 +266,12 @@ components:
             $ref: '#/components/schemas/Error'
     InternalServerError:
       description: サーバー内部エラー
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    GatewayTimeout:
+      description: フィードURLの探索がタイムアウトした
       content:
         application/json:
           schema:

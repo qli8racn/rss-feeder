@@ -146,6 +146,9 @@ type BadRequest = Error
 // Conflict defines model for Conflict.
 type Conflict = Error
 
+// GatewayTimeout defines model for GatewayTimeout.
+type GatewayTimeout = Error
+
 // InternalServerError defines model for InternalServerError.
 type InternalServerError = Error
 

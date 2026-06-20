@@ -1,8 +1,10 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -14,6 +16,11 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/domain"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
+
+// addFeedTimeout はフィードURLの探索（直接判定→標準探索→AIフォールバック）から
+// 登録までの全体タイムアウト。直列実行される各ステップの既存タイムアウトの合計
+// （30+15+30秒 ≒ 75秒）に安全マージンを加えた値。
+const addFeedTimeout = 80 * time.Second
 
 func toFeedDTO(f domain.Feed) openapi.Feed {
 	var lastFetched *time.Time
@@ -51,7 +58,12 @@ func ListFeedsHandler(uc *usecase.ListFeedsUsecase) http.HandlerFunc {
 }
 
 // AddFeedHandler は POST /api/feeds を処理する。
-func AddFeedHandler(uc *usecase.AddFeedUsecase) http.HandlerFunc {
+// 入力URLを resolveFeedURLUC でフィードURLに解決した上で addFeedUC に渡す。
+// 登録成功後、そのフィードの記事取得（fetchUC）を行う。失敗してもフィード登録自体の
+// レスポンスは変えず、best-effortとしてログに記録するのみ（要約・カテゴライズの自動実行は
+// cmd/rss-feeder のみで行い、cmd/web では行わない。docs/steering/20260620_feed_add_fetch_enrich/
+// requirements.md のアーキテクチャ上の制約を参照）。
+func AddFeedHandler(addFeedUC *usecase.AddFeedUsecase, resolveFeedURLUC *usecase.ResolveFeedURLUsecase, fetchUC *usecase.FetchUsecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req openapi.AddFeedRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -63,7 +75,20 @@ func AddFeedHandler(uc *usecase.AddFeedUsecase) http.HandlerFunc {
 			return
 		}
 
-		feed, err := uc.Execute(r.Context(), req.FeedURL)
+		ctx, cancel := context.WithTimeout(r.Context(), addFeedTimeout)
+		defer cancel()
+
+		resolvedURL, err := resolveFeedURLUC.Execute(ctx, req.FeedURL)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				writeJSONError(w, http.StatusGatewayTimeout, "フィードURLの探索がタイムアウトしました")
+				return
+			}
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		feed, err := addFeedUC.Execute(ctx, resolvedURL)
 		if err != nil {
 			if errors.Is(err, feedrepo.ErrAlreadyExists) {
 				writeJSONError(w, http.StatusConflict, err.Error())
@@ -71,6 +96,10 @@ func AddFeedHandler(uc *usecase.AddFeedUsecase) http.HandlerFunc {
 			}
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
+		}
+
+		if _, err := fetchUC.Execute(ctx, []string{resolvedURL}); err != nil {
+			log.Printf("[add_feed] 記事の取得に失敗しました %s: %v", resolvedURL, err)
 		}
 
 		writeJSON(w, http.StatusCreated, toFeedDTO(*feed))

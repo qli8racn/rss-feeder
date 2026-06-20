@@ -2,18 +2,23 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"log"
 	"os"
 
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/qli8racn/rss-feeder/internal/adapter/driver/htmlfetch"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	auditlogrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/auditlog"
 	dbmaintrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/dbmaintenance"
 	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/adapter/handler/cli"
+	driverfeeddiscovery "github.com/qli8racn/rss-feeder/internal/driver/feeddiscovery"
+	driverfeedenrich "github.com/qli8racn/rss-feeder/internal/driver/feedenrich"
+	driverhtmlfetch "github.com/qli8racn/rss-feeder/internal/driver/htmlfetch"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerdb/auditlog"
@@ -25,6 +30,9 @@ import (
 )
 
 func main() {
+	rssAgentPath := flag.String("rss-agent-path", "bin/rss-agent", "フィードURL自動探索のAIフォールバックに使う rss-agent バイナリのパス")
+	flag.Parse()
+
 	i := do.New()
 
 	do.Provide(i, readerdb.NewClient)
@@ -33,6 +41,7 @@ func main() {
 	do.Provide(i, driverrss.NewReader)
 	do.Provide(i, dbrepoauditlog.NewRepository)
 	do.Provide(i, dbrepodbmaint.NewMaintainer)
+	do.Provide(i, driverhtmlfetch.NewFetcher)
 
 	db := do.MustInvoke[*sql.DB](i)
 	if err := migration.Run(db); err != nil {
@@ -77,6 +86,14 @@ func main() {
 	removeFeedUC := usecase.NewRemoveFeedUsecase(
 		do.MustInvoke[feedrepo.Repository](i),
 	)
+	feedDiscoveryAgent := driverfeeddiscovery.NewSubprocessAgent(*rssAgentPath, 1)
+	resolveFeedURLUC := usecase.NewResolveFeedURLUsecase(
+		do.MustInvoke[adapterrss.RSSReader](i),
+		do.MustInvoke[htmlfetch.Fetcher](i),
+		feedDiscoveryAgent,
+	)
+	feedEnrichAgent := driverfeedenrich.NewSubprocessAgent(*rssAgentPath)
+	triggerEnrichUC := usecase.NewTriggerEnrichUsecase(feedEnrichAgent)
 
 	root := &cobra.Command{
 		Use:   "rss-feeder",
@@ -93,7 +110,7 @@ func main() {
 		cli.NewAuditCommand(auditUC),
 		cli.NewMaintenanceCommand(maintenanceUC),
 		cli.NewSearchCommand(searchUC),
-		cli.NewAddFeedCommand(addFeedUC),
+		cli.NewAddFeedCommand(addFeedUC, resolveFeedURLUC, fetchUC, triggerEnrichUC),
 		cli.NewListFeedsCommand(listFeedsUC),
 		cli.NewRemoveFeedCommand(removeFeedUC),
 	)
