@@ -1,17 +1,14 @@
 package main
 
 import (
-	"context"
 	"database/sql"
-	"fmt"
+	"flag"
 	"log"
 	"os"
 
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
 
-	adapteranthropic "github.com/qli8racn/rss-feeder/internal/adapter/driver/anthropic"
-	"github.com/qli8racn/rss-feeder/internal/adapter/driver/feeddiscovery"
 	"github.com/qli8racn/rss-feeder/internal/adapter/driver/htmlfetch"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	auditlogrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/auditlog"
@@ -19,8 +16,7 @@ import (
 	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/adapter/handler/cli"
-	"github.com/qli8racn/rss-feeder/internal/config"
-	driveranthropic "github.com/qli8racn/rss-feeder/internal/driver/anthropic"
+	driverfeeddiscovery "github.com/qli8racn/rss-feeder/internal/driver/feeddiscovery"
 	driverhtmlfetch "github.com/qli8racn/rss-feeder/internal/driver/htmlfetch"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
@@ -32,27 +28,9 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
 
-// discoverFeedAgent は DiscoverFeedUsecase（インプロセスでClaudeを呼ぶ）を
-// feeddiscovery.Agent として ResolveFeedURLUsecase に渡すためのアダプタ。
-// cmd/web はサブプロセス経由（internal/driver/feeddiscovery.NewSubprocessAgent）だが、
-// cmd/rss-feeder は Anthropic SDK に直接依存してよいため、インプロセスで委譲するだけのこの型を
-// コンポジションルート（本ファイル）に定義する（専用パッケージを作ると driver→usecase の依存方向に
-// なってしまうため、main.go 内に留める）。
-type discoverFeedAgent struct {
-	uc *usecase.DiscoverFeedUsecase
-}
-
-var _ feeddiscovery.Agent = (*discoverFeedAgent)(nil)
-
-func (a *discoverFeedAgent) Discover(ctx context.Context, url string) (string, error) {
-	return a.uc.Execute(ctx, url)
-}
-
 func main() {
-	if err := config.SetupAnthropicAPIKey(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	rssAgentPath := flag.String("rss-agent-path", "bin/rss-agent", "フィードURL自動探索のAIフォールバックに使う rss-agent バイナリのパス")
+	flag.Parse()
 
 	i := do.New()
 
@@ -63,7 +41,6 @@ func main() {
 	do.Provide(i, dbrepoauditlog.NewRepository)
 	do.Provide(i, dbrepodbmaint.NewMaintainer)
 	do.Provide(i, driverhtmlfetch.NewFetcher)
-	do.Provide(i, driveranthropic.NewFeedDiscoveryAgent)
 
 	db := do.MustInvoke[*sql.DB](i)
 	if err := migration.Run(db); err != nil {
@@ -108,15 +85,11 @@ func main() {
 	removeFeedUC := usecase.NewRemoveFeedUsecase(
 		do.MustInvoke[feedrepo.Repository](i),
 	)
-	discoverFeedUC := usecase.NewDiscoverFeedUsecase(
-		do.MustInvoke[htmlfetch.Fetcher](i),
-		do.MustInvoke[adapteranthropic.FeedDiscoveryAgent](i),
-		do.MustInvoke[adapterrss.RSSReader](i),
-	)
+	feedDiscoveryAgent := driverfeeddiscovery.NewSubprocessAgent(*rssAgentPath, 1)
 	resolveFeedURLUC := usecase.NewResolveFeedURLUsecase(
 		do.MustInvoke[adapterrss.RSSReader](i),
 		do.MustInvoke[htmlfetch.Fetcher](i),
-		&discoverFeedAgent{uc: discoverFeedUC},
+		feedDiscoveryAgent,
 	)
 
 	root := &cobra.Command{

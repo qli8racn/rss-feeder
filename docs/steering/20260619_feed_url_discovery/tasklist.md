@@ -41,9 +41,9 @@
 Anthropic SDK への直接依存を `cmd/agent` に一本化する方針に変更したため、上記「cmd/rss-feeder 側（インプロセス）」を撤回し、
 `cmd/web` と同じサブプロセス実装に差し替える（`docs/steering/20260619_feed_url_discovery/design.md` 改訂箇所を参照）。
 
-- [ ] `cmd/rss-feeder/main.go` から `adapteranthropic`・`driveranthropic`・`config.SetupAnthropicAPIKey()` 呼び出し・`discoverFeedAgent` アダプタ型・`discoverFeedUC` を削除
-- [ ] `cmd/rss-feeder/main.go` に `--rss-agent-path`（デフォルト `bin/rss-agent`）フラグを追加し、`driverfeeddiscovery.NewSubprocessAgent(*rssAgentPath, 1)` を構築して `ResolveFeedURLUsecase` に渡す
-- [ ] `go build ./...` / `go vet ./...` / `go test ./...` で確認
+- [x] `cmd/rss-feeder/main.go` から `adapteranthropic`・`driveranthropic`・`config.SetupAnthropicAPIKey()` 呼び出し・`discoverFeedAgent` アダプタ型・`discoverFeedUC` を削除
+- [x] `cmd/rss-feeder/main.go` に `--rss-agent-path`（デフォルト `bin/rss-agent`）フラグを追加し、`driverfeeddiscovery.NewSubprocessAgent(*rssAgentPath, 1)` を構築して `ResolveFeedURLUsecase` に渡す
+- [x] `go build ./...` / `go vet ./...` / `go test ./...` で確認
 
 ## OpenAPI・ドキュメント
 
