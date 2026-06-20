@@ -125,7 +125,7 @@ function App() {
   )
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-slate-200">
+    <div className="min-h-screen bg-surface-base text-slate-200">
       <Header
         bookmarkedCount={bookmarkedTotal}
         bookmarkedOnly={bookmarkedOnly}
@@ -145,7 +145,7 @@ function App() {
           perPage={perPage}
           onPerPageChange={handlePerPageChange}
         />
-        <div className="mt-4 flex items-center justify-between text-[12px] text-slate-500">
+        <div className="mt-4 flex items-center justify-between text-small text-slate-500">
           <span>{total} 件</span>
           <span>
             {page} / {totalPages} ページ

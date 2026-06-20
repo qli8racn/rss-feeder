@@ -1,5 +1,6 @@
 import { memo, useEffect, useState } from 'react'
-import { ChevronDownIcon, SearchIcon } from './icons'
+import { SearchIcon } from './icons'
+import SelectField from './ui/SelectField'
 import { PER_PAGE_OPTIONS } from '../types'
 import type { PerPage } from '../types'
 
@@ -48,39 +49,25 @@ function SearchFilterBar({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="タイトル・メディア・サマリーで検索..."
-          className="w-full rounded border border-slate-400/10 bg-[#1e2733] py-2 pl-9 pr-4 text-[13px] text-slate-200 placeholder:text-slate-500 focus:outline-none"
+          className="w-full rounded border border-slate-400/10 bg-surface-raised py-2 pl-9 pr-4 text-body text-slate-200 placeholder:text-slate-500 focus:outline-none"
         />
       </div>
       <div className="flex gap-2">
-        <div className="relative">
-          <select
-            value={category}
-            onChange={(e) => onCategoryChange(e.target.value)}
-            className="appearance-none rounded border border-slate-400/10 bg-[#1e2733] py-2 pl-3 pr-8 font-mono text-[11px] text-slate-200 focus:outline-none"
-          >
-            <option value="">すべてのカテゴリ</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2 text-slate-500" />
-        </div>
-        <div className="relative">
-          <select
-            value={perPage}
-            onChange={(e) => onPerPageChange(Number(e.target.value) as PerPage)}
-            className="appearance-none rounded border border-slate-400/10 bg-[#1e2733] py-2 pl-3 pr-8 font-mono text-[11px] text-slate-200 focus:outline-none"
-          >
-            {PER_PAGE_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n}件
-              </option>
-            ))}
-          </select>
-          <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2 text-slate-500" />
-        </div>
+        <SelectField value={category} onChange={(e) => onCategoryChange(e.target.value)}>
+          <option value="">すべてのカテゴリ</option>
+          {categories.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField value={perPage} onChange={(e) => onPerPageChange(Number(e.target.value) as PerPage)}>
+          {PER_PAGE_OPTIONS.map((n) => (
+            <option key={n} value={n}>
+              {n}件
+            </option>
+          ))}
+        </SelectField>
       </div>
     </form>
   )

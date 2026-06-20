@@ -25,7 +25,7 @@
 - 重複しているスタイルパターン（アイコンボタン等）を共通コンポーネントに抽出する（対象範囲は `design.md` / `tasklist.md` で定める）
 - Figma側で、上記で抽出した共通コンポーネントに対応する要素をコンポーネント化する（Main Component + Variants）
 - Figma Code Connect（`.figma.tsx`）で、Figma上でコンポーネント化した要素と対応するReactコンポーネントをマッピングする
-- 整理後も `npx tsc --noEmit` / `npm run test` / `npm run build` が通り、画面の見た目（DOM構造・スタイルの見え方）が変化しないこと
+- 整理後も `npx tsc --noEmit` / `npm run test` / `npm run build` が通り、画面の見た目（DOM構造・スタイルの見え方）が変化しないこと（フォントサイズについては0.5px未満の近似値統合は許容する。`design.md` 参照）
 
 ## スコープ外
 

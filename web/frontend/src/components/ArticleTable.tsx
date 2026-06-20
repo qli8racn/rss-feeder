@@ -42,7 +42,7 @@ function ArticleTable({
     // 空状態: テーブルの形を模したスケルトン風プレースホルダー（docs/web-ui-spec.md 参照）
     return (
       <div className="rounded border border-slate-400/10 bg-[rgba(30,39,51,0.3)] py-24 text-center">
-        <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">
+        <p className="font-mono text-caption uppercase tracking-widest text-slate-500">
           該当する記事がありません
         </p>
       </div>
@@ -54,7 +54,7 @@ function ArticleTable({
       <table className="w-full table-fixed text-left">
         <thead>
           <tr className="border-b border-slate-400/10 bg-[rgba(30,39,51,0.6)]">
-            <th className="w-10 px-3 py-3 font-mono text-[11px] uppercase tracking-wider text-slate-500">
+            <th className="w-10 px-3 py-3 font-mono text-caption uppercase tracking-wider text-slate-500">
               #
             </th>
             <th className="w-8 py-3" />
@@ -66,10 +66,10 @@ function ArticleTable({
                 <button
                   type="button"
                   onClick={() => handleHeaderClick(col.field)}
-                  className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-slate-500 hover:text-slate-300"
+                  className="flex items-center gap-1 font-mono text-caption uppercase tracking-wider text-slate-500 hover:text-slate-300"
                 >
                   {col.label}
-                  {sort === col.field && <span className="text-[10px]">{order === 'asc' ? '▲' : '▼'}</span>}
+                  {sort === col.field && <span className="text-micro">{order === 'asc' ? '▲' : '▼'}</span>}
                 </button>
               </th>
             ))}
@@ -80,7 +80,7 @@ function ArticleTable({
             const style = categoryStyle(article.category)
             return (
               <tr key={article.id} className="border-b border-slate-400/10 last:border-b-0">
-                <td className="px-3 py-4 align-top font-mono text-[11px] text-slate-500/50">
+                <td className="px-3 py-4 align-top font-mono text-caption text-slate-500/50">
                   {String((page - 1) * perPage + i + 1).padStart(2, '0')}
                 </td>
                 <td className="py-4 align-top">
@@ -96,14 +96,14 @@ function ArticleTable({
                     href={article.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-[13px] font-medium text-slate-200 hover:underline"
+                    className="text-body font-medium text-slate-200 hover:underline"
                   >
                     {article.title}
                   </a>
                   {article.summary && (
-                    <p className="mt-1 line-clamp-1 text-[11px] text-slate-500">{article.summary}</p>
+                    <p className="mt-1 line-clamp-1 text-caption text-slate-500">{article.summary}</p>
                   )}
-                  <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-slate-500 md:hidden">
+                  <div className="mt-1 flex flex-wrap gap-3 text-caption text-slate-500 md:hidden">
                     {article.publisher && <span>{article.publisher}</span>}
                     {article.category && (
                       <span className="rounded px-1.5" style={{ color: style.text, backgroundColor: style.bg }}>
@@ -113,20 +113,20 @@ function ArticleTable({
                     <span>{formatDate(article.published_at)}</span>
                   </div>
                 </td>
-                <td className="hidden py-4 align-top text-[11px] text-slate-500 md:table-cell">
+                <td className="hidden py-4 align-top text-caption text-slate-500 md:table-cell">
                   {article.publisher}
                 </td>
                 <td className="hidden py-4 align-top md:table-cell">
                   {article.category && (
                     <span
-                      className="rounded px-2 py-1 text-[11px]"
+                      className="rounded px-2 py-1 text-caption"
                       style={{ color: style.text, backgroundColor: style.bg }}
                     >
                       {article.category}
                     </span>
                   )}
                 </td>
-                <td className="hidden py-4 align-top font-mono text-[11px] text-slate-500 md:table-cell">
+                <td className="hidden py-4 align-top font-mono text-caption text-slate-500 md:table-cell">
                   {formatDate(article.published_at)}
                 </td>
               </tr>

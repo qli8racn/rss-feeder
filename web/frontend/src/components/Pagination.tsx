@@ -37,7 +37,7 @@ function Pagination({ page, totalPages, onPageChange }: PaginationProps) {
           key={p}
           type="button"
           onClick={() => onPageChange(p)}
-          className={`size-8 rounded border font-mono text-[11px] ${
+          className={`size-8 rounded border font-mono text-caption ${
             p === page
               ? 'border-amber-500/60 bg-amber-500/10 text-amber-400'
               : 'border-slate-400/10 text-slate-500'
