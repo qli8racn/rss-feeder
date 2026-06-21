@@ -27,6 +27,20 @@ APIコストの発生や意図しないコード変更PRの作成につながる
 > そのため `comment`/`review` を優先し、コメント・レビュー自体が存在しない `issues` イベント
 > （Issue本文がトリガー）でのみ `issue.author_association` にフォールバックする順序にしている。
 
+### `auto-pr.yml` との競合防止
+
+`auto-pr.yml` は PR作成時に `anthropics/claude-code-action` を使ってPRへのコメント（`gh pr comment`）を投稿する。
+このコメント作成は `issue_comment` イベントを発火させるため、コメント本文に `@claude` という文字列が
+含まれていると `claude.yml` が再度起動してしまう可能性がある。
+
+通常は `auto-pr.yml` が `GH_TOKEN: ${{ github.token }}`（`github-actions[bot]`）でコメントを投稿するため、
+そのコメントの `author_association` は `NONE` となり上記の権限チェックで素通りはしない。しかし、
+将来 `.github/workflows` へのpush制限を回避する目的などでPAT（コラボレーター権限）に切り替えた場合、
+`author_association` が `COLLABORATOR` 等になり権限チェックを通過してしまう可能性がある。
+
+この依存を排除するため、`if` 条件の先頭に `github.actor != 'github-actions[bot]'` を明示的に追加し、
+bot自身が起こしたイベントでは `author_association` の値に関わらず起動しないようにしている。
+
 ### permissions と `actions: read`
 
 `anthropics/claude-code-action` の公式ドキュメント（`docs/setup.md`）が示す基本構成は
@@ -38,6 +52,34 @@ Claudeが `mcp__github_ci__get_ci_status` / `get_workflow_run_details` / `downlo
 ### バージョン指定
 
 `@beta` ではなく `@v1`（現行の正式リリース）を指定する。
+
+## ワークフロー構成（`.github/workflows/auto-pr.yml`）
+
+```
+trigger: push（main以外のブランチ。claude/** は対象外）
+  └─ 同じブランチのPRが存在しない場合
+       ├─ コミット一覧 + `git diff --stat` からPR descriptionを生成してdraft PRを作成
+       └─ anthropics/claude-code-action@v1 を実行
+            ├─ PR descriptionの先頭に「## Claude による変更概要」セクションを追記
+            └─ コードレビュー結果をPRコメントとして投稿
+```
+
+### `claude.yml` が作成するブランチとのスコープ分離
+
+`anthropics/claude-code-action` はIssueメンション経由で実装を依頼された場合、ブランチ作成からPR作成までを
+自身で完結させる（デフォルトの `branch_prefix: claude/` でブランチを作成し、最後に `gh pr create` する）。
+
+このブランチのpushも `auto-pr.yml` の `push` トリガーに引っかかるため、対策をしないと以下のレースが発生する。
+
+- `claude.yml` のClaudeが先にPRを作成 → `auto-pr.yml` は「既存PRあり」で早期終了する（実害は小さい）
+- `auto-pr.yml` が先にPRを作成 → 汎用的な説明文（コミット一覧＋diff統計）のPRが先に出来てしまい、
+  `auto-pr.yml` 独自のレビューも走る。その後 `claude.yml` 側のClaudeが `gh pr create` すると
+  「既にPRが存在する」エラーになり、Issueへの完了報告が失敗扱いになったり、レビューが二重に走ったりする
+
+タイミング依存のレースを個別にハンドリングするのではなく、根本的にスコープを分離して解決する。
+`auto-pr.yml` の `on.push.branches-ignore` に `claude/**` を追加し、Issueメンション経由でClaudeが
+作成したブランチは最初から `auto-pr.yml` の対象から除外する。これにより、そのブランチのPR作成・
+レビューは `claude.yml` 側のClaudeセッションが一貫して担当する。
 
 ## 認証・GitHub App（リポジトリ外の手動作業）
 
