@@ -151,8 +151,14 @@
     （`cmd/web`・`cmd/rss-feeder`・`cmd/agent`が共通で使う`NewClient`のみ。テスト用の
     `NewInMemoryDB`・`article_test.go`等のファイルベース一時DBは対象外）
   - 実機確認：`PRAGMA journal_mode`/`PRAGMA busy_timeout` で `wal`/`5000` が反映されることを確認
-- [ ] `summarize`/`preference` への並列処理の適用（`messageCreator` の共有化で土台はできたが、
-  バッチ分割自体は未実装）
+- [x] `summarize`/`preference` への並列処理の適用 → **対応しない**と判断
+  - 実装を再確認した結果、`enrich`とは構造が異なることが判明：`enrich`は記事を複数バッチに
+    分割し構造化JSONを並列取得・マージするが、`summarize`/`preference`は1回のAPI呼び出し
+    （ツール呼び出し1往復）で全対象記事をまとめて1つの自然文の要約・分析にする設計
+  - 現状の件数上限（`summarize`は`--limit`デフォルト10件、`preference`は`maxBookmarkedArticles`=50件）
+    では1回のAPI呼び出しで十分高速・低コストであり、並列化するには記事をバッチ分割した上で
+    複数の自然文要約を結合する処理（または追加のマージ用API呼び出し）が必要になり、出力の
+    一貫性低下・コスト増のトレードオフがメリットを上回ると判断し、現状維持とした
 - [x] MaxTokens切り詰め検知後の自動分割リトライ
   - `errMaxTokensTruncated` sentinelエラーを追加し、`summarizeAndCategorize`がMaxTokens
     切り詰めを検知した際に`%w`でラップして返すように変更（文字列マッチではなく`errors.Is`で
