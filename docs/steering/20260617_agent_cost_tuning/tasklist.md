@@ -118,11 +118,61 @@
 
 ## フォローアップ（このフェーズ外）
 
-- [ ] モデル価格改定時に `modelPricing` を更新する運用の整理（変更検知の仕組みは設けない）
-- [ ] バッチサイズ・並列度の CLI フラグ化
-- [ ] レート制限（429）検知時のバックオフ・リトライ
-- [ ] SQLite の WAL モード化・`busy_timeout` 設定（今回はDB書き込みのチャンク単位トランザクション
+- [x] モデル価格改定時に `modelPricing` を更新する運用の整理（変更検知の仕組みは設けない）
+  - `docs/design.md` に運用手順（Anthropicの価格ページを確認し `usage.go` の `modelPricing` を
+    手動更新するだけでよいこと）を追記。コード変更は無し
+- [x] バッチサイズ・並列度の CLI フラグ化
+  - `adapteranthropic.EnrichOptions` に `BatchSize`・`Concurrency`（0以下ならデフォルト値）を追加
+  - `enrich.go` の定数を `enrichBatchSize`/`enrichConcurrency` → `defaultEnrichBatchSize`/
+    `defaultEnrichConcurrency` にリネームし、`opts` 経由の値を優先するよう `Run` を変更
+  - `cmd/agent` の `enrich` サブコマンドに `--batch-size`・`--concurrency` フラグを追加
+    （`internal/adapter/handler/agent/enrich.go`）
+  - カスタム値が実際に反映されることを確認するテストを追加
+    （`TestEnrichAgent_Run_CustomBatchSizeOverridesDefault`・
+    `TestEnrichAgent_Run_CustomConcurrencyOverridesDefault`）
+  - `GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -p 1 -o bin/rss-agent ./cmd/agent`・
+    同テスト・`enrich --help` で実機確認
+- [x] レート制限（429）検知時のバックオフ・リトライ
+  - `anthropic-sdk-go`は429・5xx・接続エラー時にRetry-After（Retry-After-Ms）ヘッダーに
+    従った指数バックオフで自動リトライする仕組みを標準搭載していることを確認
+    （`internal/requestconfig/requestconfig.go`の`shouldRetry`/`retryDelay`）。
+    アプリ側でバックオフ処理を自前実装するのは車輪の再発明と判断し、見送った
+  - `usage.go`に`newAnthropicClient`を追加し、`option.WithMaxRetries(maxAPIRetries)`
+    （5回。SDKデフォルトの2回より手厚い値。`enrich`の並列バッチ実行で複数リクエストが
+    同時に飛ぶ場合でもレート制限を吸収しやすくする狙い）を全エージェント共通で設定
+  - `preference.go`/`summarize.go`/`discover_feed.go`/`enrich.go`の
+    `anthropic.NewClient()`を`newAnthropicClient()`に統一（DRY化も兼ねる）
+  - `GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -p 1 -o bin/rss-agent ./cmd/agent`・
+    既存テストで動作確認（SDK内部のリトライ機構自体はSDK側でテスト済みのため、
+    薄いラッパーである`newAnthropicClient`に対する新規テストは追加していない）
+- [x] SQLite の WAL モード化・`busy_timeout` 設定（今回はDB書き込みのチャンク単位トランザクション
   化で軽減。チャンクサイズが大きい場合のロック保持時間は依然残る）
-- [ ] `summarize`/`preference` への並列処理の適用（`messageCreator` の共有化で土台はできたが、
-  バッチ分割自体は未実装）
-- [ ] MaxTokens切り詰め検知後の自動分割リトライ（現状は専用エラーメッセージのみ）
+  - `internal/driver/readerdb/client.go` の DSN に `_journal_mode=WAL&_busy_timeout=5000` を追加
+    （`cmd/web`・`cmd/rss-feeder`・`cmd/agent`が共通で使う`NewClient`のみ。テスト用の
+    `NewInMemoryDB`・`article_test.go`等のファイルベース一時DBは対象外）
+  - 実機確認：`PRAGMA journal_mode`/`PRAGMA busy_timeout` で `wal`/`5000` が反映されることを確認
+- [x] `summarize`/`preference` への並列処理の適用 → **対応しない**と判断
+  - 実装を再確認した結果、`enrich`とは構造が異なることが判明：`enrich`は記事を複数バッチに
+    分割し構造化JSONを並列取得・マージするが、`summarize`/`preference`は1回のAPI呼び出し
+    （ツール呼び出し1往復）で全対象記事をまとめて1つの自然文の要約・分析にする設計
+  - 現状の件数上限（`summarize`は`--limit`デフォルト10件、`preference`は`maxBookmarkedArticles`=50件）
+    では1回のAPI呼び出しで十分高速・低コストであり、並列化するには記事をバッチ分割した上で
+    複数の自然文要約を結合する処理（または追加のマージ用API呼び出し）が必要になり、出力の
+    一貫性低下・コスト増のトレードオフがメリットを上回ると判断し、現状維持とした
+- [x] MaxTokens切り詰め検知後の自動分割リトライ
+  - `errMaxTokensTruncated` sentinelエラーを追加し、`summarizeAndCategorize`がMaxTokens
+    切り詰めを検知した際に`%w`でラップして返すように変更（文字列マッチではなく`errors.Is`で
+    判定できるようにした）
+  - `summarizeAndCategorizeWithSplitRetry`を追加：`errMaxTokensTruncated`を検知した場合、
+    チャンクを半分に分割して再帰的に再試行する（`minSplitRetrySize`=1まで分割し、それでも
+    解消しない場合は分割を諦めてエラーを返す。本文自体が大きすぎることが原因と判断）
+  - 分割した一方が成功・他方が失敗しても、成功分の結果は保持する（既存の部分成功方針を
+    分割リトライ内でも維持）。失敗した試行分のUsageも課金が発生しているため合算する
+  - `Run()`内のチャンク処理を`summarizeAndCategorize`の直接呼び出しから
+    `summarizeAndCategorizeWithSplitRetry`経由に変更
+  - テスト追加：`TestSummarizeAndCategorizeWithSplitRetry_RecoversFromMaxTokensBySplitting`
+    （分割により最終的に全件成功）・`TestSummarizeAndCategorizeWithSplitRetry_GivesUpAtMinSplitSize`
+    （1件まで分割しても解消しない場合にエラーを返し、API呼び出し回数も期待通りであること）
+  - 既存の`TestEnrichAgent_Run_PartialChunkFailureStillSavesSuccessfulChunks`は
+    StopReasonをMaxTokens以外（EndTurn）に変更し、分割リトライとは独立した
+    「チャンク全体が失敗するケース」のテストとして維持

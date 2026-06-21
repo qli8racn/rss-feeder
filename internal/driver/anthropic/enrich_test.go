@@ -256,7 +256,7 @@ func echoSuccess(t *testing.T, usage anthropic.Usage) func(context.Context, anth
 }
 
 func TestEnrichAgent_Run_MultipleChunksSucceed(t *testing.T) {
-	// enrichBatchSize(40) を超える件数を渡し、複数バッチに分割されても全件処理されることを確認する。
+	// defaultEnrichBatchSize(40) を超える件数を渡し、複数バッチに分割されても全件処理されることを確認する。
 	articles := articlesWithIDs(rangeIDs(1, 90)...)
 	var gotUpdates []articlerepo.EnrichmentUpdate
 	repo := &fakeRepo{
@@ -285,6 +285,116 @@ func TestEnrichAgent_Run_MultipleChunksSucceed(t *testing.T) {
 	}
 }
 
+func TestEnrichAgent_Run_CustomBatchSizeOverridesDefault(t *testing.T) {
+	// --batch-size 相当の opts.BatchSize を指定した場合、defaultEnrichBatchSize(40) ではなく
+	// 指定値でチャンク分割されることを、API呼び出し回数（チャンク数）で確認する。
+	articles := articlesWithIDs(rangeIDs(1, 10)...)
+	repo := &fakeRepo{
+		findWithoutSummary: func(_ context.Context, _ int) ([]domain.Article, error) { return articles, nil },
+		updateBatch:        func(_ context.Context, _ []articlerepo.EnrichmentUpdate) error { return nil },
+	}
+	var calls int32
+	agent := &enrichAgent{
+		client: &fakeMessageCreator{new: func(c context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error) {
+			atomic.AddInt32(&calls, 1)
+			return echoSuccess(t, anthropic.Usage{})(c, body, opts...)
+		}},
+		repo: repo,
+	}
+
+	opts := enrichOptions(10)
+	opts.BatchSize = 3
+	n, err := agent.Run(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Run: unexpected error: %v", err)
+	}
+	if n != 10 {
+		t.Errorf("Run: got n=%d, want 10", n)
+	}
+	// 10件を3件ずつに分割すると4チャンク（3,3,3,1）になるはず。
+	if got := atomic.LoadInt32(&calls); got != 4 {
+		t.Errorf("Run: got %d API calls, want 4 (10 articles / batch-size 3)", got)
+	}
+}
+
+func TestEnrichAgent_Run_CustomConcurrencyOverridesDefault(t *testing.T) {
+	// --concurrency 相当の opts.Concurrency を指定した場合、defaultEnrichConcurrency(4) ではなく
+	// 指定値が同時実行数の上限として使われることを確認する
+	// （TestEnrichAgent_Run_StopsDispatchingAfterCancel と同じ手法：ctxキャンセルでブロックさせ、
+	// 上限を超えたチャンクがディスパッチされないことを呼び出し回数で検証する）。
+	articles := articlesWithIDs(rangeIDs(1, 200)...) // defaultEnrichBatchSize=40で5チャンク
+	repo := &fakeRepo{
+		findWithoutSummary: func(_ context.Context, _ int) ([]domain.Article, error) { return articles, nil },
+		updateBatch:        func(_ context.Context, _ []articlerepo.EnrichmentUpdate) error { return nil },
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	var calls int32
+	agent := &enrichAgent{
+		client: &fakeMessageCreator{new: func(c context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error) {
+			atomic.AddInt32(&calls, 1)
+			cancel()
+			return echoSuccess(t, anthropic.Usage{})(c, body, opts...)
+		}},
+		repo: repo,
+	}
+
+	opts := enrichOptions(200)
+	opts.Concurrency = 2
+	if _, err := agent.Run(ctx, opts); err == nil {
+		t.Fatal("Run: want non-nil error when ctx is canceled mid-dispatch")
+	}
+	if got := atomic.LoadInt32(&calls); got != 2 {
+		t.Errorf("Run: got %d API calls, want exactly 2 (custom concurrency limit)", got)
+	}
+}
+
+func TestSummarizeAndCategorizeWithSplitRetry_RecoversFromMaxTokensBySplitting(t *testing.T) {
+	// 4件まとめてリクエストするとMaxTokens切り詰めで失敗するが、2件以下に分割すれば
+	// 成功するfakeクライアントで、分割リトライにより最終的に全件処理されることを確認する。
+	agent := &enrichAgent{
+		client: &fakeMessageCreator{new: func(ctx context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error) {
+			ids := requestedIDs(body)
+			if len(ids) > 2 {
+				return fakeMessage(t, "invalid json", anthropic.Usage{InputTokens: 10, OutputTokens: 2}, anthropic.StopReasonMaxTokens), nil
+			}
+			return echoSuccess(t, anthropic.Usage{InputTokens: 10, OutputTokens: 5})(ctx, body, opts...)
+		}},
+	}
+
+	results, _, err := agent.summarizeAndCategorizeWithSplitRetry(context.Background(), articlesWithIDs(1, 2, 3, 4))
+	if err != nil {
+		t.Fatalf("summarizeAndCategorizeWithSplitRetry: unexpected error: %v", err)
+	}
+	if len(results) != 4 {
+		t.Errorf("summarizeAndCategorizeWithSplitRetry: got %d results, want 4", len(results))
+	}
+}
+
+func TestSummarizeAndCategorizeWithSplitRetry_GivesUpAtMinSplitSize(t *testing.T) {
+	// 1件にまで分割してもMaxTokens切り詰めが解消しない場合、それ以上は分割せずエラーを返す
+	// （本文が大きすぎることが原因であり、分割では解決しないと判断するケース）。
+	var calls int32
+	agent := &enrichAgent{
+		client: &fakeMessageCreator{new: func(ctx context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error) {
+			atomic.AddInt32(&calls, 1)
+			return fakeMessage(t, "invalid json", anthropic.Usage{InputTokens: 10, OutputTokens: 2}, anthropic.StopReasonMaxTokens), nil
+		}},
+	}
+
+	_, _, err := agent.summarizeAndCategorizeWithSplitRetry(context.Background(), articlesWithIDs(1, 2))
+	if err == nil {
+		t.Fatal("summarizeAndCategorizeWithSplitRetry: want non-nil error when even a single article hits MaxTokens")
+	}
+	if !errors.Is(err, errMaxTokensTruncated) {
+		t.Errorf("summarizeAndCategorizeWithSplitRetry: got err=%v, want errMaxTokensTruncated", err)
+	}
+	// 2件 → 1件+1件の3回呼ばれ、それぞれが1件まで分割された時点で諦めて終わるはず
+	// （1件はminSplitRetrySizeのため、さらに半分(0件)には分割しない）。
+	if got := atomic.LoadInt32(&calls); got != 3 {
+		t.Errorf("Run: got %d API calls, want 3 (1 for the original 2-article batch, 1 each for the two 1-article retries)", got)
+	}
+}
+
 func TestEnrichAgent_Run_PartialChunkFailureStillSavesSuccessfulChunks(t *testing.T) {
 	// 90件 = 3チャンク（40,40,10）。2番目のチャンクだけJSON解析に失敗させ、
 	// 1番目・3番目のチャンクの結果は保存され、エラーも返ることを確認する（部分成功）。
@@ -300,12 +410,16 @@ func TestEnrichAgent_Run_PartialChunkFailureStillSavesSuccessfulChunks(t *testin
 	// チャンクは並列に実行されるため呼び出し順は保証されない。リクエスト内容
 	// （2番目のチャンクに含まれるID=41）で判定することで、どの順に実行されても
 	// 「2番目のチャンクだけ失敗する」を確定的に再現できる。
+	// StopReasonはMaxTokens以外（EndTurn）にすることで、分割リトライ
+	// （summarizeAndCategorizeWithSplitRetry）が発動せず、チャンク全体が
+	// そのまま失敗するケースをテストする（MaxTokens起因の分割リトライ自体は
+	// TestSummarizeAndCategorizeWithSplitRetry_* で別途テストする）。
 	agent := &enrichAgent{
 		client: &fakeMessageCreator{new: func(ctx context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error) {
 			ids := requestedIDs(body)
 			for _, id := range ids {
 				if id == 41 {
-					return fakeMessage(t, "invalid json", anthropic.Usage{InputTokens: 10, OutputTokens: 2}, anthropic.StopReasonMaxTokens), nil
+					return fakeMessage(t, "invalid json", anthropic.Usage{InputTokens: 10, OutputTokens: 2}, anthropic.StopReasonEndTurn), nil
 				}
 			}
 			return echoSuccess(t, anthropic.Usage{InputTokens: 10, OutputTokens: 5})(ctx, body, opts...)
@@ -410,8 +524,8 @@ func TestEnrichAgent_Run_StopsDispatchingAfterContextCanceled(t *testing.T) {
 	if err == nil {
 		t.Fatal("Run: want non-nil error when ctx is canceled mid-dispatch")
 	}
-	if got := atomic.LoadInt32(&calls); got != enrichConcurrency {
-		t.Errorf("Run: got %d API calls, want exactly %d (concurrency limit; 5th chunk should never be dispatched)", got, enrichConcurrency)
+	if got := atomic.LoadInt32(&calls); got != defaultEnrichConcurrency {
+		t.Errorf("Run: got %d API calls, want exactly %d (concurrency limit; 5th chunk should never be dispatched)", got, defaultEnrichConcurrency)
 	}
 }
 

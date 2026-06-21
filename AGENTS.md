@@ -66,7 +66,7 @@ bin/rss-feeder backfill-metadata          # 既存記事の出版元・サムネ
 ```bash
 bin/rss-agent summarize [--feed <url>] [--limit <n>]  # 最新記事を AI で要約
 bin/rss-agent preference                               # ブックマークから趣向を分析
-bin/rss-agent enrich [--limit <n>] [--force]           # 記事に要約・カテゴリを付与してDBに保存
+bin/rss-agent enrich [--limit <n>] [--force] [--batch-size <n>] [--concurrency <n>]  # 記事に要約・カテゴリを付与してDBに保存
 ```
 
 `ANTHROPIC_API_KEY` が必要（`config.yml` の `anthropic_api_key` または環境変数で設定）。

@@ -97,7 +97,7 @@ rss-agent <command> [flags]
 |------------|----------------------------------------|------------------------|
 | `summarize` | `--feed <url>`, `--limit <n>`（デフォルト 10） | 最新記事を AI で要約 |
 | `preference` | — | ブックマーク済み記事から趣向を分析 |
-| `enrich` | `--limit <n>`（デフォルト 10）, `--force`, `--feed <url>`（フィード単位で絞り込み） | 記事に要約・カテゴリを付与してDBに保存（`rss-feeder add-feed` の自動enrichからサブプロセス経由で利用。単独実行も可） |
+| `enrich` | `--limit <n>`（デフォルト 10）, `--force`, `--feed <url>`（フィード単位で絞り込み）, `--batch-size <n>`（デフォルト 40）, `--concurrency <n>`（デフォルト 4） | 記事に要約・カテゴリを付与してDBに保存（`rss-feeder add-feed` の自動enrichからサブプロセス経由で利用。単独実行も可） |
 | `discover-feed <url>` | — | URL の HTML から Claude にフィード URL を推測させる（`cmd/web`・`cmd/rss-feeder` 双方のサブプロセスから利用。単独実行も可） |
 
 `ANTHROPIC_API_KEY` が必要（`internal/config/config.yml` の `anthropic_api_key` または環境変数）。
@@ -112,6 +112,22 @@ rss-agent <command> [flags]
 `claude-haiku-4-5`、ブックマークの傾向分析という難易度の高いタスク（`preference`）は
 `claude-opus-4-8` + adaptive thinking を使用する。コスト・実行時間のチューニング方針・
 詳細は `docs/steering/20260617_agent_cost_tuning/` を参照。
+
+各コマンド実行時、標準エラー出力に `[rss-agent] model=... input=... output=... cost=$... elapsed=...`
+の1行ログを出す（`internal/driver/anthropic/usage.go` の `logUsage`）。概算費用は
+`modelPricing`（同ファイル）の1MトークンあたりUSD単価から計算する。
+
+**運用：Anthropicの価格改定時の対応** 自動検知の仕組みは設けていないため、
+[Anthropicの価格ページ](https://www.anthropic.com/pricing)を確認のうえ、
+`internal/driver/anthropic/usage.go` の `modelPricing` を手動で更新する
+（モデルを追加する場合は同マップにエントリを追加するだけでよい。コード変更は他に不要）。
+
+**レート制限（429）への対応** `anthropic-sdk-go` は429・5xx・接続エラー時に
+`Retry-After`（または`Retry-After-Ms`）ヘッダーに従った指数バックオフでリトライする
+仕組みを標準で内蔵しているため、アプリ側でバックオフ処理を自前実装していない。
+全エージェント共通の `newAnthropicClient`（`usage.go`）でリトライ回数をSDKデフォルトの
+2回より手厚い `maxAPIRetries`（5回）に設定し、`enrich` の並列バッチ実行で複数リクエストが
+同時に飛ぶ場合でもレート制限を吸収しやすくしている。
 
 #### ビルド
 
@@ -233,11 +249,11 @@ rss-feeder/
 │   │       └── agent/                            # rss-agent（cobra）向けハンドラ
 │   │           ├── summarize.go                   # summarize サブコマンド（--feed/--limit フラグ）
 │   │           ├── preference.go                  # preference サブコマンド
-│   │           ├── enrich.go                      # enrich サブコマンド（--limit/--force/--feed フラグ）
+│   │           ├── enrich.go                      # enrich サブコマンド（--limit/--force/--feed/--batch-size/--concurrency フラグ）
 │   │           └── discover_feed.go               # discover-feed <url> サブコマンド（rss-agent単独実行用）
 │   └── driver/
 │       ├── readerdb/                            # reader.db への接続・リポジトリ実装
-│       │   ├── client.go                        # DB 接続（sql.Open のみ）
+│       │   ├── client.go                        # DB 接続（WALモード・busy_timeout=5000ms 設定）
 │       │   ├── article/
 │       │   │   └── article.go                  # ArticleRepository 実装（SQL 文はここ）
 │       │   ├── auditlog/

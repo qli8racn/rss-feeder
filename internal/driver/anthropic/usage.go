@@ -17,6 +17,20 @@ type messageCreator interface {
 	New(ctx context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error)
 }
 
+// maxAPIRetries は429（レート制限）・5xx・接続エラー時にSDKが自動でリトライする最大回数。
+// SDKは標準でRetry-After（またはRetry-After-Ms）ヘッダーに従った指数バックオフで
+// リトライする仕組みを内蔵しているため、アプリ側でバックオフ処理を自前実装する必要はない
+// （参照: anthropic-sdk-go/internal/requestconfig/requestconfig.go の shouldRetry/retryDelay）。
+// SDKのデフォルト値（2回）はenrichの並列バッチ実行（同時に複数リクエストが飛ぶ）で
+// レート制限に達しやすいことを踏まえ、新規記事の自動enrich等で人手によるリトライが
+// 難しい場面でも自然に吸収できるよう、デフォルトより手厚く設定する。
+const maxAPIRetries = 5
+
+// newAnthropicClient は全エージェント共通のリトライ設定を適用した anthropic.Client を返す。
+func newAnthropicClient() anthropic.Client {
+	return anthropic.NewClient(option.WithMaxRetries(maxAPIRetries))
+}
+
 // modelPricing は 1M トークンあたりの USD 単価（入力・出力）。
 // 価格改定時はここを更新する。
 var modelPricing = map[string]struct{ Input, Output float64 }{

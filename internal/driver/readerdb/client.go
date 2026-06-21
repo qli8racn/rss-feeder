@@ -7,8 +7,14 @@ import (
 	"github.com/samber/do/v2"
 )
 
+// dsn は WAL モード（複数コネクションからの同時読み書きで読み取りをブロックしない）と
+// busy_timeout（書き込みロック競合時に即座に SQLITE_BUSY を返さず、指定msだけ待ってリトライする）
+// を設定する。cmd/web・cmd/rss-feeder・cmd/agent の enrich（並列バッチ）等から同時に
+// DB へアクセスされる可能性があるため。
+const dsn = "reader.db?_journal_mode=WAL&_busy_timeout=5000"
+
 func NewClient(_ do.Injector) (*sql.DB, error) {
-	return sql.Open("sqlite3", "reader.db")
+	return sql.Open("sqlite3", dsn)
 }
 
 func NewInMemoryDB() (*sql.DB, error) {
