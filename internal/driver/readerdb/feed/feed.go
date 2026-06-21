@@ -100,8 +100,21 @@ func (r *repository) ListAll(ctx context.Context) ([]domain.Feed, error) {
 	return feeds, rows.Err()
 }
 
+// Remove はフィードと、それに紐づく記事を削除する。SQLiteのforeign_keys制約は
+// 有効化していない（audit_log.article_idなど他のFKにも影響するため）ため、
+// articlesの削除はON DELETE CASCADEに頼らずトランザクション内で明示的に行う。
 func (r *repository) Remove(ctx context.Context, id int64) error {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM feeds WHERE id = ?`, id)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM articles WHERE feed_id = ?`, id); err != nil {
+		return err
+	}
+
+	res, err := tx.ExecContext(ctx, `DELETE FROM feeds WHERE id = ?`, id)
 	if err != nil {
 		return err
 	}
@@ -112,5 +125,5 @@ func (r *repository) Remove(ctx context.Context, id int64) error {
 	if affected == 0 {
 		return feedrepo.ErrNotFound
 	}
-	return nil
+	return tx.Commit()
 }

@@ -198,6 +198,38 @@ func TestFeedRepository_Remove_DeletesFeed(t *testing.T) {
 	}
 }
 
+func TestFeedRepository_Remove_DeletesAssociatedArticles(t *testing.T) {
+	// articles.feed_id の FOREIGN KEY には ON DELETE CASCADE を付けていない
+	// （foreign_keys プラグマを有効化していないため）。Remove がトランザクション内で
+	// articles を明示的に削除することを確認する。
+	ctx := context.Background()
+	r := newRepo(t)
+
+	if err := r.Register(ctx, "https://example.com/feed"); err != nil {
+		t.Fatalf("Register setup: %v", err)
+	}
+	found, err := r.FindByURL(ctx, "https://example.com/feed")
+	if err != nil || found == nil {
+		t.Fatalf("FindByURL setup: found=%v err=%v", found, err)
+	}
+	if _, err := r.db.ExecContext(ctx, `INSERT INTO articles (feed_id, url, title) VALUES (?, ?, ?)`,
+		found.ID, "https://example.com/feed/article1", "記事1"); err != nil {
+		t.Fatalf("insert article setup: %v", err)
+	}
+
+	if err := r.Remove(ctx, found.ID); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+
+	var count int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM articles WHERE feed_id = ?`, found.ID).Scan(&count); err != nil {
+		t.Fatalf("count articles after Remove: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Remove: got %d articles remaining for removed feed, want 0", count)
+	}
+}
+
 func TestFeedRepository_Remove_ErrNotFound(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)

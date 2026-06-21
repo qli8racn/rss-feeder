@@ -28,7 +28,7 @@ func Run(db *sql.DB) error {
 			thumbnail_url TEXT,
 			summary       TEXT,
 			category      TEXT,
-			FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
+			FOREIGN KEY(feed_id) REFERENCES feeds(id)
 		);
 		CREATE TABLE IF NOT EXISTS audit_log (
 			id         INTEGER PRIMARY KEY AUTOINCREMENT,
