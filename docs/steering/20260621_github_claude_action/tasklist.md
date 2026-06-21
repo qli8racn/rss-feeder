@@ -30,6 +30,6 @@
 
 ## 確認（追加分）
 
-- [ ] 通常のブランチpushで `auto-pr.yml` がPR description付きのdraft PRを作成することを確認
-- [ ] 作成されたPRに `@claude このPRをレビューして` とコメントし、`claude.yml` が起動してレビューが投稿されることを確認
-- [ ] Issueで `@claude` に実装を依頼し、Claudeが `claude/` ブランチでPRを作成した際に `auto-pr.yml` が起動しないことを確認
+- [x] 通常のブランチpushで `auto-pr.yml` がPR description付きのdraft PRを作成することを確認
+- [x] 作成されたPRに `@claude このPRをレビューして` とコメントし、`claude.yml` が起動してレビューが投稿されることを確認
+- [x] Issueで `@claude` に実装を依頼し、Claudeが `claude/` ブランチでPRを作成した際に `auto-pr.yml` が起動しないことを確認
