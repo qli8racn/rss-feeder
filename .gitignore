@@ -1,5 +1,6 @@
 # Binary
-bin/
+/bin/*
+!/bin/.gitkeep
 
 # SQLite databases
 *.db
@@ -15,7 +16,8 @@ bin/
 Thumbs.db
 
 # poll-feeds.sh のログ
-/logs/
+/logs/*
+!/logs/.gitkeep
 
 # Local config (contains secrets)
 /internal/config/config.yml
