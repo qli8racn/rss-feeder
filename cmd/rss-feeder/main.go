@@ -89,6 +89,11 @@ func main() {
 	categoriesUC := usecase.NewListCategoriesUsecase(
 		do.MustInvoke[articlerepo.Repository](i),
 	)
+	backfillMetadataUC := usecase.NewBackfillMetadataUsecase(
+		do.MustInvoke[articlerepo.Repository](i),
+		do.MustInvoke[feedrepo.Repository](i),
+		do.MustInvoke[adapterrss.RSSReader](i),
+	)
 	feedDiscoveryAgent := driverfeeddiscovery.NewSubprocessAgent(*rssAgentPath, 1)
 	resolveFeedURLUC := usecase.NewResolveFeedURLUsecase(
 		do.MustInvoke[adapterrss.RSSReader](i),
@@ -117,6 +122,7 @@ func main() {
 		cli.NewListFeedsCommand(listFeedsUC),
 		cli.NewRemoveFeedCommand(removeFeedUC),
 		cli.NewCategoriesCommand(categoriesUC),
+		cli.NewBackfillMetadataCommand(backfillMetadataUC),
 	)
 
 	if err := root.Execute(); err != nil {

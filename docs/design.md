@@ -24,6 +24,7 @@ rss-feeder [--rss-agent-path <path>] <command> [flags]
 | `reset` | お気に入り以外の記事を削除 | 6 |
 | `search <keyword> [--bookmarked] [--category <name>]` | キーワードで記事を全文検索。`--category` でカテゴリ絞り込み | 7・10 |
 | `categories` | 記事に付与済みのカテゴリ一覧を表示（DISTINCT） | 10 |
+| `backfill-metadata` | 登録済みフィードを再取得し、既存記事の出版元・サムネイルが未設定の場合のみ補完する | 10 |
 
 各コマンドの詳細仕様は `docs/steering/` 以下の各フェーズディレクトリを参照。
 

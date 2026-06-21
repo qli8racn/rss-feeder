@@ -58,6 +58,7 @@ bin/rss-feeder bookmark <id>
 bin/rss-feeder reset [-y]
 bin/rss-feeder search <keyword> [--bookmarked] [--category <name>]
 bin/rss-feeder categories                 # 記事に付与済みのカテゴリ一覧
+bin/rss-feeder backfill-metadata          # 既存記事の出版元・サムネイルを補完（再取得で判明した分のみ）
 ```
 
 ### rss-agent

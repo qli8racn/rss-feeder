@@ -479,6 +479,87 @@ func TestArticleRepository_UpdateEnrichmentBatch_FailureRollsBackEarlierRows(t *
 	}
 }
 
+func TestArticleRepository_UpdateMetadataBatch_FillsEmptyOnly(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	// 1件目は既に publisher・thumbnail_url が空のまま保存された「既存記事」を再現
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	// 2件目は既に publisher のみ設定済み（thumbnail_url は未設定）
+	a2 := makeArticle("https://example.com/2")
+	a2.Publisher = "既存の出版元"
+	if err := r.Save(ctx, a2); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	n, err := r.UpdateMetadataBatch(ctx, []articlerepo.MetadataUpdate{
+		{URL: "https://example.com/1", Publisher: "新しい出版元", ThumbnailURL: "https://example.com/thumb1.jpg"},
+		{URL: "https://example.com/2", Publisher: "上書きされないはず", ThumbnailURL: "https://example.com/thumb2.jpg"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateMetadataBatch: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("RowsAffected: got %d, want 2", n)
+	}
+
+	all, _ := r.FindAll(ctx)
+	byURL := map[string]domain.Article{}
+	for _, a := range all {
+		byURL[a.URL] = a
+	}
+
+	a1 := byURL["https://example.com/1"]
+	if a1.Publisher != "新しい出版元" || a1.ThumbnailURL != "https://example.com/thumb1.jpg" {
+		t.Errorf("article1: got publisher=%q thumbnail=%q", a1.Publisher, a1.ThumbnailURL)
+	}
+
+	updated2 := byURL["https://example.com/2"]
+	if updated2.Publisher != "既存の出版元" {
+		t.Errorf("article2.Publisher: 既存値が上書きされた: got %q", updated2.Publisher)
+	}
+	if updated2.ThumbnailURL != "https://example.com/thumb2.jpg" {
+		t.Errorf("article2.ThumbnailURL: got %q, want thumb2.jpg", updated2.ThumbnailURL)
+	}
+}
+
+func TestArticleRepository_UpdateMetadataBatch_SkipsFullyEnrichedArticles(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	a := makeArticle("https://example.com/1")
+	a.Publisher = "既存の出版元"
+	a.ThumbnailURL = "https://example.com/existing-thumb.jpg"
+	if err := r.Save(ctx, a); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	n, err := r.UpdateMetadataBatch(ctx, []articlerepo.MetadataUpdate{
+		{URL: "https://example.com/1", Publisher: "新しい出版元", ThumbnailURL: "https://example.com/new-thumb.jpg"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateMetadataBatch: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("RowsAffected: got %d, want 0（両列とも設定済みなので対象外）", n)
+	}
+}
+
+func TestArticleRepository_UpdateMetadataBatch_Empty(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	n, err := r.UpdateMetadataBatch(ctx, nil)
+	if err != nil {
+		t.Errorf("UpdateMetadataBatch(nil): got error %v, want nil", err)
+	}
+	if n != 0 {
+		t.Errorf("RowsAffected: got %d, want 0", n)
+	}
+}
+
 func TestArticleRepository_FindWithoutSummary(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)

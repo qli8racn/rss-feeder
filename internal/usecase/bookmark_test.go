@@ -55,6 +55,9 @@ func (m *mockBookmarkArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []a
 func (m *mockBookmarkArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {
 	return nil, nil
 }
+func (m *mockBookmarkArticleRepo) UpdateMetadataBatch(_ context.Context, _ []articlerepo.MetadataUpdate) (int64, error) {
+	return 0, nil
+}
 func (m *mockBookmarkArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.Article, error) {
 	return nil, nil
 }

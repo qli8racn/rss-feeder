@@ -45,4 +45,12 @@
   - 新規 `rss-feeder categories` コマンドを追加（既存の `usecase.ListCategoriesUsecase` を CLI から呼び出す。
     元々 Web API（`GET /api/categories`）専用で CLI からは未登録だった）
   - `printArticleTable`（`internal/adapter/handler/cli/table.go`）にカテゴリ列を追加
-- [ ] ~~既存記事への `publisher` / `thumbnail_url` バックフィル~~（対応しない）
+- [x] 既存記事への `publisher` / `thumbnail_url` バックフィル
+  - `articlerepo.Repository` に `UpdateMetadataBatch`（URLで記事を特定し、`publisher`/`thumbnail_url` が
+    空文字の列のみ列単位で補完。既存値は上書きしない。何度実行しても安全）を追加
+  - `usecase.BackfillMetadataUsecase` 新規作成：登録済み全フィードを再取得し、`UpdateMetadataBatch` で補完
+    （RSSフィードは最新の一部記事しか配信しないため、フィードから外れた古い記事は対象外になる制約あり）
+  - 新規 `rss-feeder backfill-metadata` コマンドを追加
+  - `go build ./...` / `go vet ./...` / `go test $(go list ./... | grep -v internal/driver/anthropic)` で確認
+  - 実機確認：実データで実行し、出版元が未設定だった既存記事（135件）が補完されることを確認
+    （サムネイルは登録済みフィードがいずれも提供していなかったため0件のまま。仕様通りの挙動）
