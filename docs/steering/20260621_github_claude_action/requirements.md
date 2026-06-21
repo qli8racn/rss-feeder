@@ -10,6 +10,13 @@ GitHub の Issue / PR 上で `@claude` をメンションすると、Claude Code
 - これに加えて、GitHub上でIssueを起票し `@claude` メンションで対応を依頼する経路を追加し、Issue起票からPR作成までをGitHub上で完結できるようにする
 - 公式の `anthropics/claude-code-action`（GitHub Action）を利用する
 
+## コードレビューの方式
+
+コードレビューは `@claude このPRをレビューして` のような**メンション起点**でのみ行う（既存の `issue_comment` /
+`pull_request_review_comment` トリガーでカバーされるため追加実装は不要）。PRオープン・更新時に
+メンション無しで自動的にレビューを走らせる方式（`on: pull_request: types: [opened, synchronize]` +
+`prompt:` で無条件にレビュー指示を送る構成）は採用しない。
+
 ## 受け入れ条件
 
 - `.github/workflows/claude.yml` を新規作成し、以下のイベントで `@claude` を含むコメント・本文をトリガーとする
@@ -34,3 +41,5 @@ GitHub の Issue / PR 上で `@claude` をメンションすると、Claude Code
 - `@claude` メンション専用の Issue テンプレート整備
 - セルフホストランナーでの実行
 - `CLAUDE_CODE_OAUTH_TOKEN`（Pro/Max契約者向けOAuth認証）の導入（まずは既存の `ANTHROPIC_API_KEY` 運用に統一する）
+- `pull_request` イベント（`opened`/`synchronize`）を起点とした、メンション不要の自動コードレビュー
+  （PRごとに無条件でAPIコストが発生するため見送り。レビューは `@claude` メンションで都度依頼する運用とする）
