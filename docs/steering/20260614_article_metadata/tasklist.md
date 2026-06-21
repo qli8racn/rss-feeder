@@ -58,3 +58,15 @@
   - `go build ./...` / `go vet ./...` / `go test $(go list ./... | grep -v internal/driver/anthropic)` で確認
   - 実機確認：実データで実行し、出版元が未設定だった既存記事（135件）が補完されることを確認
     （サムネイルは登録済みフィードがいずれも提供していなかったため0件のまま。仕様通りの挙動）
+  - 2026-06-21: 実運用で2件の不整合を発見・修正
+    1. サムネイルを提供しないフィード（今回の全フィード）に対して`backfill-metadata`を再実行すると、
+       新しい値も空文字のまま`WHERE`句にマッチし続け、毎回「補完 N件」と誤報告されていた。
+       `UpdateMetadataBatch`のSQLを「新しい値が空でない場合のみ」マッチするよう修正
+       （`AND :publisher != ''`等を追加。パラメータも`sql.Named`に変更し可読性を確保）
+    2. `migration.go`の`ALTER TABLE ... ADD COLUMN`で追加した既存行は`publisher`/`thumbnail_url`が
+       空文字ではなくNULLになるため、`publisher = ''`の比較ではNULL行（実データで81件）を検出できていなかった。
+       `COALESCE(publisher, '') = ''`に修正してNULLも空として扱うようにした
+    - 上記2点を再現するテストを追加（`TestArticleRepository_UpdateMetadataBatch_SkipsWhenNewValueAlsoEmpty`・
+      `TestArticleRepository_UpdateMetadataBatch_FillsNullColumns`）
+    - 修正後もNULL記事のうち実際に補完できたのは0件だった（該当記事がいずれも2026-06-08時点の古い記事で、
+      現在のRSSフィードの配信範囲外のため。ドキュメント記載済みの既知の制約であり新たな問題ではない）

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
@@ -544,6 +545,60 @@ func TestArticleRepository_UpdateMetadataBatch_SkipsFullyEnrichedArticles(t *tes
 	}
 	if n != 0 {
 		t.Errorf("RowsAffected: got %d, want 0（両列とも設定済みなので対象外）", n)
+	}
+}
+
+func TestArticleRepository_UpdateMetadataBatch_SkipsWhenNewValueAlsoEmpty(t *testing.T) {
+	// publisher は補完済みだが thumbnail_url は未設定のまま、というケースで
+	// 再取得したフィードがそもそもサムネイルを提供しない（新しい値も空文字）場合は対象外とする。
+	// そうしないと、何度実行しても毎回「補完」件数として数えられてしまう（実運用で発覚した不整合）。
+	ctx := context.Background()
+	r := newRepo(t)
+
+	a := makeArticle("https://example.com/1")
+	a.Publisher = "既存の出版元"
+	if err := r.Save(ctx, a); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	n, err := r.UpdateMetadataBatch(ctx, []articlerepo.MetadataUpdate{
+		{URL: "https://example.com/1", Publisher: "上書きされないはず", ThumbnailURL: ""},
+	})
+	if err != nil {
+		t.Fatalf("UpdateMetadataBatch: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("RowsAffected: got %d, want 0（新しい値も空文字なので対象外）", n)
+	}
+}
+
+func TestArticleRepository_UpdateMetadataBatch_FillsNullColumns(t *testing.T) {
+	// migration.go の `ALTER TABLE ... ADD COLUMN` で追加した既存行は publisher/thumbnail_url が
+	// 空文字ではなく NULL になる（記事メタデータ拡充フェーズ以前に保存された記事を再現）。
+	// COALESCE なしでは `publisher = ''` が NULL と一致せず対象外になってしまうことの確認。
+	ctx := context.Background()
+	r := newRepo(t)
+
+	if _, err := r.db.ExecContext(ctx, `
+		INSERT INTO articles (feed_id, url, title, content, published_at, fetched_at, publisher, thumbnail_url)
+		VALUES (1, 'https://example.com/1', 'Title', 'body', ?, ?, NULL, NULL)
+	`, time.Now(), time.Now()); err != nil {
+		t.Fatalf("insert with NULL publisher/thumbnail_url: %v", err)
+	}
+
+	n, err := r.UpdateMetadataBatch(ctx, []articlerepo.MetadataUpdate{
+		{URL: "https://example.com/1", Publisher: "新しい出版元", ThumbnailURL: "https://example.com/thumb.jpg"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateMetadataBatch: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("RowsAffected: got %d, want 1", n)
+	}
+
+	all, _ := r.FindAll(ctx)
+	if all[0].Publisher != "新しい出版元" || all[0].ThumbnailURL != "https://example.com/thumb.jpg" {
+		t.Errorf("got publisher=%q thumbnail=%q", all[0].Publisher, all[0].ThumbnailURL)
 	}
 }
 

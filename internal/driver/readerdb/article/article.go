@@ -176,8 +176,12 @@ func (r *repository) FindWithoutSummary(ctx context.Context, limit int) ([]domai
 }
 
 // UpdateMetadataBatch は既存記事への出版元・サムネイルのバックフィル用。
-// publisher・thumbnail_url は列ごとに「現在空文字の場合のみ」更新し、既に値がある列は上書きしない
-// （何度実行しても安全、かつ手動で編集された値を壊さない）。
+// publisher・thumbnail_url は列ごとに「現在空（NULL または空文字）、かつ新しい値が空でない場合のみ」更新し、
+// 既に値がある列は上書きしない（何度実行しても安全、かつ手動で編集された値を壊さない）。
+// `ALTER TABLE ... ADD COLUMN`（migration.go）で追加した既存行は NULL になるため、
+// 空文字判定だけでは検出できず COALESCE で NULL も空として扱う。
+// 新しい値も空（フィードがそもそもサムネイルを提供しない等）の場合は対象外とする
+// （WHERE句に含めないと、永遠に「補完」件数として数えられてしまう）。
 func (r *repository) UpdateMetadataBatch(ctx context.Context, updates []articlerepo.MetadataUpdate) (int64, error) {
 	if len(updates) == 0 {
 		return 0, nil
@@ -190,9 +194,13 @@ func (r *repository) UpdateMetadataBatch(ctx context.Context, updates []articler
 
 	stmt, err := tx.PrepareContext(ctx, `
 		UPDATE articles SET
-			publisher = CASE WHEN publisher = '' THEN ? ELSE publisher END,
-			thumbnail_url = CASE WHEN thumbnail_url = '' THEN ? ELSE thumbnail_url END
-		WHERE url = ? AND (publisher = '' OR thumbnail_url = '')
+			publisher = CASE WHEN COALESCE(publisher, '') = '' AND :publisher != '' THEN :publisher ELSE publisher END,
+			thumbnail_url = CASE WHEN COALESCE(thumbnail_url, '') = '' AND :thumbnail_url != '' THEN :thumbnail_url ELSE thumbnail_url END
+		WHERE url = :url
+			AND (
+				(COALESCE(publisher, '') = '' AND :publisher != '')
+				OR (COALESCE(thumbnail_url, '') = '' AND :thumbnail_url != '')
+			)
 	`)
 	if err != nil {
 		return 0, err
@@ -201,7 +209,11 @@ func (r *repository) UpdateMetadataBatch(ctx context.Context, updates []articler
 
 	var total int64
 	for _, u := range updates {
-		res, err := stmt.ExecContext(ctx, u.Publisher, u.ThumbnailURL, u.URL)
+		res, err := stmt.ExecContext(ctx,
+			sql.Named("publisher", u.Publisher),
+			sql.Named("thumbnail_url", u.ThumbnailURL),
+			sql.Named("url", u.URL),
+		)
 		if err != nil {
 			return 0, fmt.Errorf("記事 %s の更新に失敗しました: %w", u.URL, err)
 		}
