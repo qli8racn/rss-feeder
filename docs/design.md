@@ -113,6 +113,15 @@ rss-agent <command> [flags]
 `claude-opus-4-8` + adaptive thinking を使用する。コスト・実行時間のチューニング方針・
 詳細は `docs/steering/20260617_agent_cost_tuning/` を参照。
 
+各コマンド実行時、標準エラー出力に `[rss-agent] model=... input=... output=... cost=$... elapsed=...`
+の1行ログを出す（`internal/driver/anthropic/usage.go` の `logUsage`）。概算費用は
+`modelPricing`（同ファイル）の1MトークンあたりUSD単価から計算する。
+
+**運用：Anthropicの価格改定時の対応** 自動検知の仕組みは設けていないため、
+[Anthropicの価格ページ](https://www.anthropic.com/pricing)を確認のうえ、
+`internal/driver/anthropic/usage.go` の `modelPricing` を手動で更新する
+（モデルを追加する場合は同マップにエントリを追加するだけでよい。コード変更は他に不要）。
+
 #### ビルド
 
 CGO（mattn/go-sqlite3）と Anthropic SDK を同時にリンクするためメモリ使用量が大きい。
@@ -237,7 +246,7 @@ rss-feeder/
 │   │           └── discover_feed.go               # discover-feed <url> サブコマンド（rss-agent単独実行用）
 │   └── driver/
 │       ├── readerdb/                            # reader.db への接続・リポジトリ実装
-│       │   ├── client.go                        # DB 接続（sql.Open のみ）
+│       │   ├── client.go                        # DB 接続（WALモード・busy_timeout=5000ms 設定）
 │       │   ├── article/
 │       │   │   └── article.go                  # ArticleRepository 実装（SQL 文はここ）
 │       │   ├── auditlog/

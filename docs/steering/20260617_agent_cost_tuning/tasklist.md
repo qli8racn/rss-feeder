@@ -118,11 +118,17 @@
 
 ## フォローアップ（このフェーズ外）
 
-- [ ] モデル価格改定時に `modelPricing` を更新する運用の整理（変更検知の仕組みは設けない）
+- [x] モデル価格改定時に `modelPricing` を更新する運用の整理（変更検知の仕組みは設けない）
+  - `docs/design.md` に運用手順（Anthropicの価格ページを確認し `usage.go` の `modelPricing` を
+    手動更新するだけでよいこと）を追記。コード変更は無し
 - [ ] バッチサイズ・並列度の CLI フラグ化
 - [ ] レート制限（429）検知時のバックオフ・リトライ
-- [ ] SQLite の WAL モード化・`busy_timeout` 設定（今回はDB書き込みのチャンク単位トランザクション
+- [x] SQLite の WAL モード化・`busy_timeout` 設定（今回はDB書き込みのチャンク単位トランザクション
   化で軽減。チャンクサイズが大きい場合のロック保持時間は依然残る）
+  - `internal/driver/readerdb/client.go` の DSN に `_journal_mode=WAL&_busy_timeout=5000` を追加
+    （`cmd/web`・`cmd/rss-feeder`・`cmd/agent`が共通で使う`NewClient`のみ。テスト用の
+    `NewInMemoryDB`・`article_test.go`等のファイルベース一時DBは対象外）
+  - 実機確認：`PRAGMA journal_mode`/`PRAGMA busy_timeout` で `wal`/`5000` が反映されることを確認
 - [ ] `summarize`/`preference` への並列処理の適用（`messageCreator` の共有化で土台はできたが、
   バッチ分割自体は未実装）
 - [ ] MaxTokens切り詰め検知後の自動分割リトライ（現状は専用エラーメッセージのみ）
