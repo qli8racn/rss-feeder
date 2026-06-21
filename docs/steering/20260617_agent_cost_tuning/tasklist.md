@@ -141,4 +141,20 @@
   - 実機確認：`PRAGMA journal_mode`/`PRAGMA busy_timeout` で `wal`/`5000` が反映されることを確認
 - [ ] `summarize`/`preference` への並列処理の適用（`messageCreator` の共有化で土台はできたが、
   バッチ分割自体は未実装）
-- [ ] MaxTokens切り詰め検知後の自動分割リトライ（現状は専用エラーメッセージのみ）
+- [x] MaxTokens切り詰め検知後の自動分割リトライ
+  - `errMaxTokensTruncated` sentinelエラーを追加し、`summarizeAndCategorize`がMaxTokens
+    切り詰めを検知した際に`%w`でラップして返すように変更（文字列マッチではなく`errors.Is`で
+    判定できるようにした）
+  - `summarizeAndCategorizeWithSplitRetry`を追加：`errMaxTokensTruncated`を検知した場合、
+    チャンクを半分に分割して再帰的に再試行する（`minSplitRetrySize`=1まで分割し、それでも
+    解消しない場合は分割を諦めてエラーを返す。本文自体が大きすぎることが原因と判断）
+  - 分割した一方が成功・他方が失敗しても、成功分の結果は保持する（既存の部分成功方針を
+    分割リトライ内でも維持）。失敗した試行分のUsageも課金が発生しているため合算する
+  - `Run()`内のチャンク処理を`summarizeAndCategorize`の直接呼び出しから
+    `summarizeAndCategorizeWithSplitRetry`経由に変更
+  - テスト追加：`TestSummarizeAndCategorizeWithSplitRetry_RecoversFromMaxTokensBySplitting`
+    （分割により最終的に全件成功）・`TestSummarizeAndCategorizeWithSplitRetry_GivesUpAtMinSplitSize`
+    （1件まで分割しても解消しない場合にエラーを返し、API呼び出し回数も期待通りであること）
+  - 既存の`TestEnrichAgent_Run_PartialChunkFailureStillSavesSuccessfulChunks`は
+    StopReasonをMaxTokens以外（EndTurn）に変更し、分割リトライとは独立した
+    「チャンク全体が失敗するケース」のテストとして維持

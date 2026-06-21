@@ -111,7 +111,7 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results, usage, err := a.summarizeAndCategorize(ctx, chunk)
+			results, usage, err := a.summarizeAndCategorizeWithSplitRetry(ctx, chunk)
 			outcomes[i] = chunkOutcome{results: results, usage: usage, err: err}
 		}()
 	}
@@ -205,6 +205,38 @@ func aggregateChunkOutcomes(outcomes []chunkOutcome) ([]enrichResult, anthropic.
 // 入力トークンを抑えるため、これを超える本文は末尾を切り詰める。
 const maxContentRunes = 2000
 
+// errMaxTokensTruncated は、Claudeのレスポンスが MaxTokens に達して途中で切り詰められたために
+// JSON解析に失敗したことを表すsentinelエラー。summarizeAndCategorizeWithSplitRetry が
+// errors.Is で検知し、チャンクを分割して再試行するかどうかを判断する。
+var errMaxTokensTruncated = errors.New("MaxTokensに達してレスポンスが途中で切り詰められました")
+
+// minSplitRetrySize は分割リトライ時にこれ以下のサイズには分割しない下限。
+// 1記事だけでもMaxTokensに達する場合は、本文（maxContentRunesで切り詰め後）自体が大きすぎる
+// ことが原因であり、それ以上分割しても解決しないため、分割を諦めてエラーを返す。
+const minSplitRetrySize = 1
+
+// summarizeAndCategorizeWithSplitRetry は summarizeAndCategorize を呼び、MaxTokens切り詰めに
+// よる失敗（errMaxTokensTruncated）を検知した場合はチャンクを半分に分割して再試行する
+// （半分ずつでもMaxTokensに達する場合は、minSplitRetrySizeに達するまで再帰的に分割を続ける）。
+// 分割した一方が成功し他方が失敗しても、成功した結果は保持する（チャンク内でも部分成功を許容する）。
+func (a *enrichAgent) summarizeAndCategorizeWithSplitRetry(ctx context.Context, articles []domain.Article) ([]enrichResult, anthropic.Usage, error) {
+	results, usage, err := a.summarizeAndCategorize(ctx, articles)
+	if err == nil {
+		return results, usage, nil
+	}
+	if !errors.Is(err, errMaxTokensTruncated) || len(articles) <= minSplitRetrySize {
+		return nil, usage, err
+	}
+
+	mid := len(articles) / 2
+	leftResults, leftUsage, leftErr := a.summarizeAndCategorizeWithSplitRetry(ctx, articles[:mid])
+	rightResults, rightUsage, rightErr := a.summarizeAndCategorizeWithSplitRetry(ctx, articles[mid:])
+
+	// 分割前の失敗した試行分のUsageも、課金は発生しているため合算する。
+	totalUsage := addUsage(addUsage(usage, leftUsage), rightUsage)
+	return append(leftResults, rightResults...), totalUsage, errors.Join(leftErr, rightErr)
+}
+
 // summarizeAndCategorize は1バッチ分の記事をまとめて Claude に要約・分類させる。
 // 戻り値の Usage は、解析失敗時（resp.Usage は得られているが JSON 解析に失敗した場合）も
 // 呼び出し元でコストを集計できるよう、エラーの有無に関わらず返す。
@@ -250,8 +282,8 @@ func (a *enrichAgent) summarizeAndCategorize(ctx context.Context, articles []dom
 			if err := json.Unmarshal([]byte(extractJSON(tb.Text)), &results); err != nil {
 				if resp.StopReason == anthropic.StopReasonMaxTokens {
 					return nil, usage, fmt.Errorf(
-						"MaxTokens(%d)に達してレスポンスが途中で切り詰められたため解析に失敗しました。enrichBatchSizeを小さくする必要があります: %w",
-						params.MaxTokens, err)
+						"%w（バッチ%d件、MaxTokens=%d）: %w",
+						errMaxTokensTruncated, len(articles), params.MaxTokens, err)
 				}
 				return nil, usage, fmt.Errorf("レスポンスの解析に失敗しました: %w", err)
 			}
