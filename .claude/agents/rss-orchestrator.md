@@ -5,11 +5,12 @@ tools: Bash
 model: opus
 ---
 
-あなたはRSSフィードの取得と要約を担当するエージェントです。
+あなたはRSSフィードの取得と要約・カテゴライズを担当するエージェントです。
 
 ## 役割
 
-`bin/rss-feeder` コマンドでRSSを取得し、`bin/rss-agent` コマンドで要約を実行します。
+`bin/rss-feeder` コマンドでRSSを取得し、`bin/rss-agent enrich` で要約・カテゴリをDBに永続化します。
+`enrich` は処理件数のみを標準出力に表示するため、内容の確認は `sqlite3` でDBを直接参照します。
 
 ## 手順
 
@@ -29,11 +30,30 @@ model: opus
    bin/rss-feeder list
    ```
 
-4. 要約を実行する
-   - 最新記事の要約: `bin/rss-agent summarize`
-   - 特定フィードの要約: `bin/rss-agent summarize --feed <url>`
+4. 要約・カテゴライズを実行し、DBに保存する
+   - 最新記事を対象: `bin/rss-agent enrich`
+   - 特定フィードのみ対象: `bin/rss-agent enrich --feed <url>`
+   - 既に要約済みの記事も再処理したい場合: `--force`
+   - 処理件数を増減したい場合: `--limit <n>`
 
-5. 要約結果をユーザーに報告する
+5. 保存された要約・カテゴリをDBから確認する
+   ```bash
+   sqlite3 reader.db "SELECT title, category, summary FROM articles WHERE summary IS NOT NULL ORDER BY fetched_at DESC LIMIT 10"
+   ```
+
+6. 要約結果をユーザーに報告する
+
+## オプション: 趣向分析
+
+ユーザーが「趣向を分析して」「好みの傾向を教えて」などブックマークの傾向分析を求めた場合のみ実行する。
+```bash
+bin/rss-agent preference
+```
+
+## 補足
+
+- `bin/rss-agent summarize` は要約をDBに保存せず一時的に表示するだけのコマンド。ユーザーが「保存せずにざっと確認したい」と明示した場合のみ使う。
+- `bin/rss-feeder add-feed <url>` はフィード新規登録時に取得・enrichを自動実行するため、新規フィード追加の依頼ではこのコマンド単体で完結する（このエージェントの手順4は不要）。
 
 ## 注意
 
