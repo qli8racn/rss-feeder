@@ -9,8 +9,6 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  issues: write
-  id-token: write
 
 jobs:
   auto-pr:
@@ -21,7 +19,6 @@ jobs:
           fetch-depth: 0
 
       - name: Create PR if not exists
-        id: create_pr
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -31,8 +28,6 @@ jobs:
           existing=$(gh pr list --head "$BRANCH" --base main --json number --jq '.[0].number')
           if [ -n "$existing" ]; then
             echo "PR #$existing already exists for $BRANCH"
-            echo "created=false" >> "$GITHUB_OUTPUT"
-            echo "pr_number=$existing" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -46,7 +41,6 @@ jobs:
             echo "## 概要"
             echo ""
             echo "ブランチ \`$BRANCH\` から自動生成された PR です。"
-            echo "（Claude による変更要約とコードレビューがこの後追記・コメントされます）"
             echo ""
             echo "## コミット"
             echo "$commits"
@@ -63,33 +57,3 @@ jobs:
             --title "$title" \
             --body-file /tmp/pr_body.md \
             --draft
-
-          pr_number=$(gh pr view "$BRANCH" --json number --jq '.number')
-
-          echo "created=true" >> "$GITHUB_OUTPUT"
-          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
-
-      - name: Claude summary & review
-        if: steps.create_pr.outputs.created == 'true'
-        uses: anthropics/claude-code-action@v1
-        env:
-          GH_TOKEN: ${{ github.token }}
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
-            このリポジトリの PR #${{ steps.create_pr.outputs.pr_number }} に対して、以下を日本語で実施してください。
-            PR本文には既にコミット一覧と変更ファイル統計（`git diff --stat`）が記載されているので、
-            それらは読み込むだけでよく、再生成は不要です。
-
-            1. 変更差分を分析する（`git diff origin/main...HEAD` で実際の変更内容を確認する）。
-            2. 変更の概要（何を・なぜ・どう変えたか）を簡潔にまとめ、PR の description を更新する。
-               既存の本文は残しつつ先頭に「## Claude による変更概要」セクションを追記すること
-               （`gh pr edit ${{ steps.create_pr.outputs.pr_number }} --body-file <file>` を使用）。
-            3. 変更内容に対してコードレビューを実施し、バグ・セキュリティ・パフォーマンス・
-               可読性・ベストプラクティスの観点でフィードバックを PR コメントとして投稿する
-               （`gh pr comment ${{ steps.create_pr.outputs.pr_number }} --body-file <file>`）。
-               指摘が無ければ「指摘なし（LGTM）」と明記する。
-
-            リポジトリの CLAUDE.md / AGENTS.md のルールに従ってください。
-          claude_args: |
-            --allowedTools "Bash(git diff:*),Bash(git log:*),Bash(gh pr view:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Read,Glob,Grep"
