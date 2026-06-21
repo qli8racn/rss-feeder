@@ -58,7 +58,7 @@
 ## 確認
 
 - [x] `npx tsc --noEmit && npm run test && npm run build`（すべて成功。`npm run lint` も確認）
-- [ ] 既存画面の見た目に変化がないことを目視確認（ユーザー自身、`CLAUDE.md` の方針通り）
+- [x] 既存画面の見た目に変化がないことを目視確認（ユーザー自身、`CLAUDE.md` の方針通り）
 
 ## Atomic Design再編・追加コンポーネント化（2026-06-20 三次改訂）
 
@@ -82,4 +82,4 @@
 - [x] `bin/rss-agent enrich` で未分類だった記事48件（全227件中）に要約・カテゴリを付与
 - [x] `FeedManagementModal.tsx` の削除ボタン（`IconButton`、実測幅28px）に対し `ACTION_COL_CLASS` が `w-6`（24px）で狭く、`table-fixed` レイアウトで見切れていたバグを `w-8`（32px）に修正
 - [x] `domain/category.ts` に、enrichで新たに付与された9カテゴリ（Business/Career/Security/QA/Entertainment/Education/Sports/Project/Personal）の配色を追加
-- [ ] コードの差分をユーザーが確認し、コミットの承認を得る（自動コミットは行わない方針のため保留）
+- [x] コードの差分をユーザーが確認し、コミットの承認を得る（自動コミットは行わない方針のため保留）
