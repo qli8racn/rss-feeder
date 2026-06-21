@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import type { Article, SortField, SortOrder } from '../../types'
+import type { Article, SortField, SortOrder } from '../../domain/article'
 import { BookmarkIcon } from '../atoms/icons'
 import { formatDate } from '../../domain/date'
 import Table, { TABLE_HEADER_ROW_CLASS, TABLE_ROW_CLASS } from '../molecules/Table'

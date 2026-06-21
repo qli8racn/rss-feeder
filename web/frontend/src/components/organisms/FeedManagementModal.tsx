@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { addFeed, fetchFeeds, removeFeed } from '../../api'
-import type { Feed } from '../../types'
+import type { Feed } from '../../domain/feed'
 import { PlusIcon } from '../atoms/icons'
 import IconButton from '../molecules/IconButton'
 import TextField from '../molecules/TextField'

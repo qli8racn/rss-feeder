@@ -1,5 +1,5 @@
-import { DEFAULT_PER_PAGE, PER_PAGE_OPTIONS, SORT_FIELDS } from '../types'
-import type { PerPage, SortField, SortOrder } from '../types'
+import { DEFAULT_PER_PAGE, PER_PAGE_OPTIONS, SORT_FIELDS } from './article'
+import type { PerPage, SortField, SortOrder } from './article'
 
 export interface FilterState {
   keyword: string

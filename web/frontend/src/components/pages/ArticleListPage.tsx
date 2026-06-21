@@ -3,7 +3,7 @@ import ArticleListTemplate from '../templates/ArticleListTemplate'
 import { fetchArticles, fetchCategories, fetchLatestArticles, searchArticles, toggleBookmark } from '../../api'
 import { parseFilterState } from '../../domain/filter'
 import { syncFilterStateToURL } from '../../usecase/syncFilterStateToURL'
-import type { Article, PerPage, SortField, SortOrder } from '../../types'
+import type { Article, PerPage, SortField, SortOrder } from '../../domain/article'
 
 function ArticleListPage() {
   const [initialFilters] = useState(() => parseFilterState(window.location.search))

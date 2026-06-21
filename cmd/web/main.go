@@ -32,6 +32,7 @@ import (
 func main() {
 	port := flag.Int("port", 8080, "HTTP サーバーのポート番号")
 	staticDir := flag.String("static-dir", "web/static", "フロントエンド静的ファイルのディレクトリ")
+	openapiSpec := flag.String("openapi-spec", "docs/openapi.yaml", "APIリクエストのスキーマ検証に使う OpenAPI 仕様ファイルのパス")
 	rssAgentPath := flag.String("rss-agent-path", "bin/rss-agent", "フィードURL自動探索のAIフォールバックに使う rss-agent バイナリのパス")
 	feedDiscoveryConcurrency := flag.Int("feed-discovery-concurrency", 2, "フィードURL自動探索のAIフォールバック（rss-agentサブプロセス）の同時実行数の上限")
 	flag.Parse()
@@ -69,6 +70,11 @@ func main() {
 		feedDiscoveryAgent,
 	)
 
+	requestValidator, err := web.NewRequestValidatorMiddleware(*openapiSpec)
+	if err != nil {
+		log.Fatalf("failed to build OpenAPI request validator: %v", err)
+	}
+
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -77,14 +83,18 @@ func main() {
 		AllowedMethods: []string{"GET", "POST", "DELETE"},
 	}))
 
-	r.Get("/api/articles", web.ListArticlesHandler(listUC))
-	r.Get("/api/articles/search", web.SearchArticlesHandler(searchUC))
-	r.Post("/api/articles/fetch", web.FetchLatestHandler(fetchUC))
-	r.Post("/api/articles/{id}/bookmark", web.BookmarkArticleHandler(bookmarkUC, auditUC))
-	r.Get("/api/categories", web.ListCategoriesHandler(categoriesUC))
-	r.Get("/api/feeds", web.ListFeedsHandler(listFeedsUC))
-	r.Post("/api/feeds", web.AddFeedHandler(addFeedUC, resolveFeedURLUC, fetchUC))
-	r.Delete("/api/feeds/{id}", web.RemoveFeedHandler(removeFeedUC))
+	r.Route("/api", func(r chi.Router) {
+		// OpenAPI 仕様外のパス（"/*" の静的ファイル配信）が 404 にならないよう、/api 配下にのみ適用する。
+		r.Use(requestValidator)
+		r.Get("/articles", web.ListArticlesHandler(listUC))
+		r.Get("/articles/search", web.SearchArticlesHandler(searchUC))
+		r.Post("/articles/fetch", web.FetchLatestHandler(fetchUC))
+		r.Post("/articles/{id}/bookmark", web.BookmarkArticleHandler(bookmarkUC, auditUC))
+		r.Get("/categories", web.ListCategoriesHandler(categoriesUC))
+		r.Get("/feeds", web.ListFeedsHandler(listFeedsUC))
+		r.Post("/feeds", web.AddFeedHandler(addFeedUC, resolveFeedURLUC, fetchUC))
+		r.Delete("/feeds/{id}", web.RemoveFeedHandler(removeFeedUC))
+	})
 	r.Handle("/*", http.FileServer(http.Dir(*staticDir)))
 
 	addr := fmt.Sprintf(":%d", *port)

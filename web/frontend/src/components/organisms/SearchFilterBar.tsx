@@ -2,8 +2,8 @@ import { memo, useEffect, useState } from 'react'
 import { SearchIcon } from '../atoms/icons'
 import SelectField from '../molecules/SelectField'
 import TextField from '../molecules/TextField'
-import { PER_PAGE_OPTIONS } from '../../types'
-import type { PerPage } from '../../types'
+import { PER_PAGE_OPTIONS } from '../../domain/article'
+import type { PerPage } from '../../domain/article'
 
 const SEARCH_DEBOUNCE_MS = 300
 
