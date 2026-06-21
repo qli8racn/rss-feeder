@@ -37,5 +37,12 @@
     ユーザー判断でデザインなしの簡易実装とした：`ArticleTable.tsx` でタイトル左に
     `size-10` の角丸サムネイル画像を追加（`thumbnail_url` 未設定時は非表示、画像読み込み失敗時も非表示）
   - `npx tsc -b --noEmit` / `npm run test` / `npm run build` で確認
-- [ ] ~~カテゴリ別フィルタ・一覧コマンド~~（対応しない）
+- [x] カテゴリ別フィルタ・一覧コマンド
+  - Web UI のカテゴリフィルタ（`SearchFilterBar`・`GET /api/articles?category=`）は別フェーズで実装済みだった
+  - CLI 側（`rss-feeder`）には無かったため追加：`list`/`search` に `--category` フラグを追加し、
+    既存の `usecase.ListUsecase.ExecuteFiltered` / `SearchUsecase.ExecuteFiltered`（Web側で既に実装済み）を
+    流用（CLI 用に `cliListPerPage = 10000` で実質ページネーション無しの一覧を取得）
+  - 新規 `rss-feeder categories` コマンドを追加（既存の `usecase.ListCategoriesUsecase` を CLI から呼び出す。
+    元々 Web API（`GET /api/categories`）専用で CLI からは未登録だった）
+  - `printArticleTable`（`internal/adapter/handler/cli/table.go`）にカテゴリ列を追加
 - [ ] ~~既存記事への `publisher` / `thumbnail_url` バックフィル~~（対応しない）

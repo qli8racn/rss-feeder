@@ -86,6 +86,9 @@ func main() {
 	removeFeedUC := usecase.NewRemoveFeedUsecase(
 		do.MustInvoke[feedrepo.Repository](i),
 	)
+	categoriesUC := usecase.NewListCategoriesUsecase(
+		do.MustInvoke[articlerepo.Repository](i),
+	)
 	feedDiscoveryAgent := driverfeeddiscovery.NewSubprocessAgent(*rssAgentPath, 1)
 	resolveFeedURLUC := usecase.NewResolveFeedURLUsecase(
 		do.MustInvoke[adapterrss.RSSReader](i),
@@ -113,6 +116,7 @@ func main() {
 		cli.NewAddFeedCommand(addFeedUC, resolveFeedURLUC, fetchUC, triggerEnrichUC),
 		cli.NewListFeedsCommand(listFeedsUC),
 		cli.NewRemoveFeedCommand(removeFeedUC),
+		cli.NewCategoriesCommand(categoriesUC),
 	)
 
 	if err := root.Execute(); err != nil {

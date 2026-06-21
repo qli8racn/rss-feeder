@@ -19,10 +19,11 @@ rss-feeder [--rss-agent-path <path>] <command> [flags]
 | `list-feeds` | 登録済みフィード一覧を表示 | 8 |
 | `remove-feed <id>` | フィードを削除（関連記事も連動削除） | 8 |
 | `fetch` | 登録済みフィードを DB から読み込み、記事を取得して DB に保存 | 2・3 |
-| `list` | DB 保存済みの記事を一覧表示 | 4 |
+| `list [--all\|--bookmarked] [--category <name>]` | DB 保存済みの記事を一覧表示。`--category` でカテゴリ絞り込み | 4・10 |
 | `bookmark <id>` | 記事のお気に入りをトグル（登録/解除） | 5 |
 | `reset` | お気に入り以外の記事を削除 | 6 |
-| `search <keyword>` | キーワードで記事を全文検索 | 7 |
+| `search <keyword> [--bookmarked] [--category <name>]` | キーワードで記事を全文検索。`--category` でカテゴリ絞り込み | 7・10 |
+| `categories` | 記事に付与済みのカテゴリ一覧を表示（DISTINCT） | 10 |
 
 各コマンドの詳細仕様は `docs/steering/` 以下の各フェーズディレクトリを参照。
 
