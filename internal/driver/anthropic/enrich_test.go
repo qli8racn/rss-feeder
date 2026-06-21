@@ -256,7 +256,7 @@ func echoSuccess(t *testing.T, usage anthropic.Usage) func(context.Context, anth
 }
 
 func TestEnrichAgent_Run_MultipleChunksSucceed(t *testing.T) {
-	// enrichBatchSize(40) を超える件数を渡し、複数バッチに分割されても全件処理されることを確認する。
+	// defaultEnrichBatchSize(40) を超える件数を渡し、複数バッチに分割されても全件処理されることを確認する。
 	articles := articlesWithIDs(rangeIDs(1, 90)...)
 	var gotUpdates []articlerepo.EnrichmentUpdate
 	repo := &fakeRepo{
@@ -282,6 +282,69 @@ func TestEnrichAgent_Run_MultipleChunksSucceed(t *testing.T) {
 	}
 	if len(gotUpdates) != 90 {
 		t.Errorf("UpdateEnrichmentBatch: got %d updates, want 90", len(gotUpdates))
+	}
+}
+
+func TestEnrichAgent_Run_CustomBatchSizeOverridesDefault(t *testing.T) {
+	// --batch-size 相当の opts.BatchSize を指定した場合、defaultEnrichBatchSize(40) ではなく
+	// 指定値でチャンク分割されることを、API呼び出し回数（チャンク数）で確認する。
+	articles := articlesWithIDs(rangeIDs(1, 10)...)
+	repo := &fakeRepo{
+		findWithoutSummary: func(_ context.Context, _ int) ([]domain.Article, error) { return articles, nil },
+		updateBatch:        func(_ context.Context, _ []articlerepo.EnrichmentUpdate) error { return nil },
+	}
+	var calls int32
+	agent := &enrichAgent{
+		client: &fakeMessageCreator{new: func(c context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error) {
+			atomic.AddInt32(&calls, 1)
+			return echoSuccess(t, anthropic.Usage{})(c, body, opts...)
+		}},
+		repo: repo,
+	}
+
+	opts := enrichOptions(10)
+	opts.BatchSize = 3
+	n, err := agent.Run(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Run: unexpected error: %v", err)
+	}
+	if n != 10 {
+		t.Errorf("Run: got n=%d, want 10", n)
+	}
+	// 10件を3件ずつに分割すると4チャンク（3,3,3,1）になるはず。
+	if got := atomic.LoadInt32(&calls); got != 4 {
+		t.Errorf("Run: got %d API calls, want 4 (10 articles / batch-size 3)", got)
+	}
+}
+
+func TestEnrichAgent_Run_CustomConcurrencyOverridesDefault(t *testing.T) {
+	// --concurrency 相当の opts.Concurrency を指定した場合、defaultEnrichConcurrency(4) ではなく
+	// 指定値が同時実行数の上限として使われることを確認する
+	// （TestEnrichAgent_Run_StopsDispatchingAfterCancel と同じ手法：ctxキャンセルでブロックさせ、
+	// 上限を超えたチャンクがディスパッチされないことを呼び出し回数で検証する）。
+	articles := articlesWithIDs(rangeIDs(1, 200)...) // defaultEnrichBatchSize=40で5チャンク
+	repo := &fakeRepo{
+		findWithoutSummary: func(_ context.Context, _ int) ([]domain.Article, error) { return articles, nil },
+		updateBatch:        func(_ context.Context, _ []articlerepo.EnrichmentUpdate) error { return nil },
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	var calls int32
+	agent := &enrichAgent{
+		client: &fakeMessageCreator{new: func(c context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error) {
+			atomic.AddInt32(&calls, 1)
+			cancel()
+			return echoSuccess(t, anthropic.Usage{})(c, body, opts...)
+		}},
+		repo: repo,
+	}
+
+	opts := enrichOptions(200)
+	opts.Concurrency = 2
+	if _, err := agent.Run(ctx, opts); err == nil {
+		t.Fatal("Run: want non-nil error when ctx is canceled mid-dispatch")
+	}
+	if got := atomic.LoadInt32(&calls); got != 2 {
+		t.Errorf("Run: got %d API calls, want exactly 2 (custom concurrency limit)", got)
 	}
 }
 
@@ -410,8 +473,8 @@ func TestEnrichAgent_Run_StopsDispatchingAfterContextCanceled(t *testing.T) {
 	if err == nil {
 		t.Fatal("Run: want non-nil error when ctx is canceled mid-dispatch")
 	}
-	if got := atomic.LoadInt32(&calls); got != enrichConcurrency {
-		t.Errorf("Run: got %d API calls, want exactly %d (concurrency limit; 5th chunk should never be dispatched)", got, enrichConcurrency)
+	if got := atomic.LoadInt32(&calls); got != defaultEnrichConcurrency {
+		t.Errorf("Run: got %d API calls, want exactly %d (concurrency limit; 5th chunk should never be dispatched)", got, defaultEnrichConcurrency)
 	}
 }
 

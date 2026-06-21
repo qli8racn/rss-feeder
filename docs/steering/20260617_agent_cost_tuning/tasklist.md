@@ -121,7 +121,17 @@
 - [x] モデル価格改定時に `modelPricing` を更新する運用の整理（変更検知の仕組みは設けない）
   - `docs/design.md` に運用手順（Anthropicの価格ページを確認し `usage.go` の `modelPricing` を
     手動更新するだけでよいこと）を追記。コード変更は無し
-- [ ] バッチサイズ・並列度の CLI フラグ化
+- [x] バッチサイズ・並列度の CLI フラグ化
+  - `adapteranthropic.EnrichOptions` に `BatchSize`・`Concurrency`（0以下ならデフォルト値）を追加
+  - `enrich.go` の定数を `enrichBatchSize`/`enrichConcurrency` → `defaultEnrichBatchSize`/
+    `defaultEnrichConcurrency` にリネームし、`opts` 経由の値を優先するよう `Run` を変更
+  - `cmd/agent` の `enrich` サブコマンドに `--batch-size`・`--concurrency` フラグを追加
+    （`internal/adapter/handler/agent/enrich.go`）
+  - カスタム値が実際に反映されることを確認するテストを追加
+    （`TestEnrichAgent_Run_CustomBatchSizeOverridesDefault`・
+    `TestEnrichAgent_Run_CustomConcurrencyOverridesDefault`）
+  - `GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -p 1 -o bin/rss-agent ./cmd/agent`・
+    同テスト・`enrich --help` で実機確認
 - [ ] レート制限（429）検知時のバックオフ・リトライ
 - [x] SQLite の WAL モード化・`busy_timeout` 設定（今回はDB書き込みのチャンク単位トランザクション
   化で軽減。チャンクサイズが大きい場合のロック保持時間は依然残る）

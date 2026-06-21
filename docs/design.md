@@ -97,7 +97,7 @@ rss-agent <command> [flags]
 |------------|----------------------------------------|------------------------|
 | `summarize` | `--feed <url>`, `--limit <n>`（デフォルト 10） | 最新記事を AI で要約 |
 | `preference` | — | ブックマーク済み記事から趣向を分析 |
-| `enrich` | `--limit <n>`（デフォルト 10）, `--force`, `--feed <url>`（フィード単位で絞り込み） | 記事に要約・カテゴリを付与してDBに保存（`rss-feeder add-feed` の自動enrichからサブプロセス経由で利用。単独実行も可） |
+| `enrich` | `--limit <n>`（デフォルト 10）, `--force`, `--feed <url>`（フィード単位で絞り込み）, `--batch-size <n>`（デフォルト 40）, `--concurrency <n>`（デフォルト 4） | 記事に要約・カテゴリを付与してDBに保存（`rss-feeder add-feed` の自動enrichからサブプロセス経由で利用。単独実行も可） |
 | `discover-feed <url>` | — | URL の HTML から Claude にフィード URL を推測させる（`cmd/web`・`cmd/rss-feeder` 双方のサブプロセスから利用。単独実行も可） |
 
 `ANTHROPIC_API_KEY` が必要（`internal/config/config.yml` の `anthropic_api_key` または環境変数）。
@@ -242,7 +242,7 @@ rss-feeder/
 │   │       └── agent/                            # rss-agent（cobra）向けハンドラ
 │   │           ├── summarize.go                   # summarize サブコマンド（--feed/--limit フラグ）
 │   │           ├── preference.go                  # preference サブコマンド
-│   │           ├── enrich.go                      # enrich サブコマンド（--limit/--force/--feed フラグ）
+│   │           ├── enrich.go                      # enrich サブコマンド（--limit/--force/--feed/--batch-size/--concurrency フラグ）
 │   │           └── discover_feed.go               # discover-feed <url> サブコマンド（rss-agent単独実行用）
 │   └── driver/
 │       ├── readerdb/                            # reader.db への接続・リポジトリ実装

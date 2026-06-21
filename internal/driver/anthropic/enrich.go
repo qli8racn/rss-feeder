@@ -36,17 +36,19 @@ type enrichResult struct {
 	Category string `json:"category"`
 }
 
-// enrichBatchSize は1回のAPI呼び出しで処理する記事数。
+// defaultEnrichBatchSize は1回のAPI呼び出しで処理する記事数のデフォルト値。
 // 40件で output ≈ 3,400〜3,900トークンとなり、4096トークンの上限に対して
-// 安全マージンがあることを実測した上で採用した値。
-const enrichBatchSize = 40
+// 安全マージンがあることを実測した上で採用した値。`--batch-size` で上書きできる。
+const defaultEnrichBatchSize = 40
 
-// enrichConcurrency はバッチを並列実行する際の最大同時実行数。
-const enrichConcurrency = 4
+// defaultEnrichConcurrency はバッチを並列実行する際の最大同時実行数のデフォルト値。
+// `--concurrency` で上書きできる。
+const defaultEnrichConcurrency = 4
 
 // Run は要約・カテゴリが未設定の記事に対して Claude に要約・カテゴリ分類させ、結果を DB に保存する。
 // Force が true の場合は要約済みの記事も含めた最新記事を対象に再処理する。
-// 記事数が enrichBatchSize を超える場合は複数バッチに分割し、enrichConcurrency を
+// 記事数がバッチサイズ（opts.BatchSize、0以下なら defaultEnrichBatchSize）を超える場合は
+// 複数バッチに分割し、並列度（opts.Concurrency、0以下なら defaultEnrichConcurrency）を
 // 上限に並列実行する（1バッチが失敗しても他バッチの処理・DB保存は継続する。DB書き込みも
 // バッチ単位で行うため、1バッチのDB書き込み失敗が他バッチの保存済み結果を巻き込むことはない）。
 // 処理した記事数を返す。
@@ -57,6 +59,14 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 	}
 	if opts.Limit == 0 {
 		opts.Limit = 10
+	}
+	batchSize := opts.BatchSize
+	if batchSize <= 0 {
+		batchSize = defaultEnrichBatchSize
+	}
+	concurrency := opts.Concurrency
+	if concurrency <= 0 {
+		concurrency = defaultEnrichConcurrency
 	}
 
 	var articles []domain.Article
@@ -78,11 +88,11 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 		requested[art.ID] = true
 	}
 
-	chunks := chunkArticles(articles, enrichBatchSize)
+	chunks := chunkArticles(articles, batchSize)
 	outcomes := make([]chunkOutcome, len(chunks))
 
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, enrichConcurrency)
+	sem := make(chan struct{}, concurrency)
 	dispatched := 0
 	for i, chunk := range chunks {
 		// 同時実行数の上限に達している間はここでブロックする。ctxのチェックは
