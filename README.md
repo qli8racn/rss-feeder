@@ -141,3 +141,7 @@ sqlite3 reader.db "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 10"
 
 - [プロダクト要求定義書](docs/product-requirements.md)
 - [機能設計・技術仕様](docs/design.md)
+
+## License
+
+[MIT](LICENSE)
