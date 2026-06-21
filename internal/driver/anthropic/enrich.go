@@ -23,7 +23,7 @@ type enrichAgent struct {
 }
 
 func NewEnrichAgent(i do.Injector) (adapteranthropic.EnrichAgent, error) {
-	client := anthropic.NewClient()
+	client := newAnthropicClient()
 	return &enrichAgent{
 		client: &client.Messages,
 		repo:   do.MustInvoke[articlerepo.Repository](i),

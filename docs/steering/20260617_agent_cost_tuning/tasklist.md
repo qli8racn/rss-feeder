@@ -132,7 +132,19 @@
     `TestEnrichAgent_Run_CustomConcurrencyOverridesDefault`）
   - `GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -p 1 -o bin/rss-agent ./cmd/agent`・
     同テスト・`enrich --help` で実機確認
-- [ ] レート制限（429）検知時のバックオフ・リトライ
+- [x] レート制限（429）検知時のバックオフ・リトライ
+  - `anthropic-sdk-go`は429・5xx・接続エラー時にRetry-After（Retry-After-Ms）ヘッダーに
+    従った指数バックオフで自動リトライする仕組みを標準搭載していることを確認
+    （`internal/requestconfig/requestconfig.go`の`shouldRetry`/`retryDelay`）。
+    アプリ側でバックオフ処理を自前実装するのは車輪の再発明と判断し、見送った
+  - `usage.go`に`newAnthropicClient`を追加し、`option.WithMaxRetries(maxAPIRetries)`
+    （5回。SDKデフォルトの2回より手厚い値。`enrich`の並列バッチ実行で複数リクエストが
+    同時に飛ぶ場合でもレート制限を吸収しやすくする狙い）を全エージェント共通で設定
+  - `preference.go`/`summarize.go`/`discover_feed.go`/`enrich.go`の
+    `anthropic.NewClient()`を`newAnthropicClient()`に統一（DRY化も兼ねる）
+  - `GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -p 1 -o bin/rss-agent ./cmd/agent`・
+    既存テストで動作確認（SDK内部のリトライ機構自体はSDK側でテスト済みのため、
+    薄いラッパーである`newAnthropicClient`に対する新規テストは追加していない）
 - [x] SQLite の WAL モード化・`busy_timeout` 設定（今回はDB書き込みのチャンク単位トランザクション
   化で軽減。チャンクサイズが大きい場合のロック保持時間は依然残る）
   - `internal/driver/readerdb/client.go` の DSN に `_journal_mode=WAL&_busy_timeout=5000` を追加

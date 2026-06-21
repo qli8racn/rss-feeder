@@ -18,7 +18,7 @@ type preferenceAgent struct {
 }
 
 func NewPreferenceAgent(i do.Injector) (adapteranthropic.PreferenceAgent, error) {
-	client := anthropic.NewClient()
+	client := newAnthropicClient()
 	return &preferenceAgent{
 		client: &client.Messages,
 		reader: do.MustInvoke[articlerepo.Repository](i),

@@ -22,7 +22,7 @@ type feedDiscoveryAgent struct {
 }
 
 func NewFeedDiscoveryAgent(_ do.Injector) (adapteranthropic.FeedDiscoveryAgent, error) {
-	client := anthropic.NewClient()
+	client := newAnthropicClient()
 	return &feedDiscoveryAgent{client: &client.Messages}, nil
 }
 

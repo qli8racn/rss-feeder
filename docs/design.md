@@ -122,6 +122,13 @@ rss-agent <command> [flags]
 `internal/driver/anthropic/usage.go` の `modelPricing` を手動で更新する
 （モデルを追加する場合は同マップにエントリを追加するだけでよい。コード変更は他に不要）。
 
+**レート制限（429）への対応** `anthropic-sdk-go` は429・5xx・接続エラー時に
+`Retry-After`（または`Retry-After-Ms`）ヘッダーに従った指数バックオフでリトライする
+仕組みを標準で内蔵しているため、アプリ側でバックオフ処理を自前実装していない。
+全エージェント共通の `newAnthropicClient`（`usage.go`）でリトライ回数をSDKデフォルトの
+2回より手厚い `maxAPIRetries`（5回）に設定し、`enrich` の並列バッチ実行で複数リクエストが
+同時に飛ぶ場合でもレート制限を吸収しやすくしている。
+
 #### ビルド
 
 CGO（mattn/go-sqlite3）と Anthropic SDK を同時にリンクするためメモリ使用量が大きい。

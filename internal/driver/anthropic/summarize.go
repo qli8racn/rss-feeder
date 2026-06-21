@@ -18,7 +18,7 @@ type summarizeAgent struct {
 }
 
 func NewSummarizeAgent(i do.Injector) (adapteranthropic.SummarizeAgent, error) {
-	client := anthropic.NewClient()
+	client := newAnthropicClient()
 	return &summarizeAgent{
 		client: &client.Messages,
 		reader: do.MustInvoke[articlerepo.Repository](i),
