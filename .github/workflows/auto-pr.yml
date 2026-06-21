@@ -4,6 +4,7 @@ on:
   push:
     branches-ignore:
       - main
+      - 'claude/**'
 
 permissions:
   contents: read
@@ -21,6 +22,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           BRANCH="${GITHUB_REF#refs/heads/}"
 
           existing=$(gh pr list --head "$BRANCH" --base main --json number --jq '.[0].number')
@@ -31,9 +33,27 @@ jobs:
 
           title=$(git log -1 --pretty=%s)
 
+          # 変更概要を生成（コミット一覧 + ファイル変更統計）
+          commits=$(git log origin/main.."$BRANCH" --pretty='- %s' || true)
+          stat=$(git diff origin/main..."$BRANCH" --stat || true)
+
+          {
+            echo "## 概要"
+            echo ""
+            echo "ブランチ \`$BRANCH\` から自動生成された PR です。"
+            echo ""
+            echo "## コミット"
+            echo "$commits"
+            echo ""
+            echo "## 変更ファイル"
+            echo '```'
+            echo "$stat"
+            echo '```'
+          } > /tmp/pr_body.md
+
           gh pr create \
             --base main \
             --head "$BRANCH" \
             --title "$title" \
-            --body "Auto-generated PR from branch \`$BRANCH\`." \
+            --body-file /tmp/pr_body.md \
             --draft
