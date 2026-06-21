@@ -12,7 +12,7 @@ mkdir -p "$LOG_DIR"
 cd "$REPO_DIR" || exit 1
 
 log() {
-    printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1" >> "$LOG_FILE"
+    printf '%s %s\n' "$(TZ='Asia/Tokyo' date '+%Y-%m-%d %H:%M:%S %Z')" "$1" >> "$LOG_FILE"
 }
 
 if [ ! -x bin/rss-feeder ] || [ ! -x bin/rss-agent ]; then

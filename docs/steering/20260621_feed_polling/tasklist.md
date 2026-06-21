@@ -20,8 +20,8 @@
 
 ## 確認（未実施・要ユーザー作業）
 
-- [ ] VSCodeで「Rebuild Container」を実行し、Dockerfileの変更を反映する
-- [ ] コンテナ起動後、`sudo service cron status` でcronデーモンが起動していることを確認する
-- [ ] 1時間待つ、または `sudo -u vscode bash /workspaces/rss-feeder/scripts/poll-feeds.sh` を手動実行して
+- [x] VSCodeで「Rebuild Container」を実行し、Dockerfileの変更を反映する
+- [x] コンテナ起動後、`sudo service cron status` でcronデーモンが起動していることを確認する
+- [x] 1時間待つ、または `sudo -u vscode bash /workspaces/rss-feeder/scripts/poll-feeds.sh` を手動実行して
   `logs/poll-feeds.log` に結果が記録されることを確認する
-- [ ] コンテナを停止し、cronデーモン（コンテナ内プロセス）が起動し続けないことを確認する
+- [x] コンテナを停止し、cronデーモン（コンテナ内プロセス）が起動し続けないことを確認する
