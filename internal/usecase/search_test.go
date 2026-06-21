@@ -56,6 +56,9 @@ func (m *mockSearchArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []art
 func (m *mockSearchArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {
 	return nil, nil
 }
+func (m *mockSearchArticleRepo) UpdateMetadataBatch(_ context.Context, _ []articlerepo.MetadataUpdate) (int64, error) {
+	return 0, nil
+}
 func (m *mockSearchArticleRepo) FindFiltered(_ context.Context, filter articlerepo.ListFilter) ([]domain.Article, int64, error) {
 	m.gotFilter = filter
 	return m.filtered, m.filteredTotal, m.filteredErr

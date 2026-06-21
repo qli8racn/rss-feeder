@@ -5,11 +5,17 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/qli8racn/rss-feeder/internal/domain"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
 
+// cliListPerPage は CLI（list/search）でカテゴリ絞り込みを行う際の取得件数上限。
+// CLI にはページネーションの概念がないため、実用上「全件」とみなせる十分大きな値を指定する。
+const cliListPerPage = 10000
+
 func NewListCommand(uc *usecase.ListUsecase) *cobra.Command {
 	var flagAll, flagBookmarked bool
+	var flagCategory string
 
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -23,7 +29,21 @@ func NewListCommand(uc *usecase.ListUsecase) *cobra.Command {
 				mode = usecase.ListModeBookmarked
 			}
 
-			articles, err := uc.Execute(cmd.Context(), mode)
+			var (
+				articles []domain.Article
+				err      error
+			)
+			if flagCategory != "" {
+				articles, _, err = uc.ExecuteFiltered(cmd.Context(), usecase.ListFilterOptions{
+					Mode:     mode,
+					Category: flagCategory,
+					Sort:     "published_at",
+					Order:    "desc",
+					PerPage:  cliListPerPage,
+				})
+			} else {
+				articles, err = uc.Execute(cmd.Context(), mode)
+			}
 			if err != nil {
 				return err
 			}
@@ -40,6 +60,7 @@ func NewListCommand(uc *usecase.ListUsecase) *cobra.Command {
 
 	cmd.Flags().BoolVar(&flagAll, "all", false, "全件表示")
 	cmd.Flags().BoolVar(&flagBookmarked, "bookmarked", false, "お気に入りのみ表示")
+	cmd.Flags().StringVar(&flagCategory, "category", "", "指定したカテゴリの記事のみ表示")
 	cmd.MarkFlagsMutuallyExclusive("all", "bookmarked")
 
 	return cmd

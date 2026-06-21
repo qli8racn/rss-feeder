@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
@@ -476,6 +477,141 @@ func TestArticleRepository_UpdateEnrichmentBatch_FailureRollsBackEarlierRows(t *
 	}
 	if found0.Summary != "" {
 		t.Errorf("1件目はロールバックされ未更新のはず: got summary=%q, want empty", found0.Summary)
+	}
+}
+
+func TestArticleRepository_UpdateMetadataBatch_FillsEmptyOnly(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	// 1件目は既に publisher・thumbnail_url が空のまま保存された「既存記事」を再現
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	// 2件目は既に publisher のみ設定済み（thumbnail_url は未設定）
+	a2 := makeArticle("https://example.com/2")
+	a2.Publisher = "既存の出版元"
+	if err := r.Save(ctx, a2); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	n, err := r.UpdateMetadataBatch(ctx, []articlerepo.MetadataUpdate{
+		{URL: "https://example.com/1", Publisher: "新しい出版元", ThumbnailURL: "https://example.com/thumb1.jpg"},
+		{URL: "https://example.com/2", Publisher: "上書きされないはず", ThumbnailURL: "https://example.com/thumb2.jpg"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateMetadataBatch: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("RowsAffected: got %d, want 2", n)
+	}
+
+	all, _ := r.FindAll(ctx)
+	byURL := map[string]domain.Article{}
+	for _, a := range all {
+		byURL[a.URL] = a
+	}
+
+	a1 := byURL["https://example.com/1"]
+	if a1.Publisher != "新しい出版元" || a1.ThumbnailURL != "https://example.com/thumb1.jpg" {
+		t.Errorf("article1: got publisher=%q thumbnail=%q", a1.Publisher, a1.ThumbnailURL)
+	}
+
+	updated2 := byURL["https://example.com/2"]
+	if updated2.Publisher != "既存の出版元" {
+		t.Errorf("article2.Publisher: 既存値が上書きされた: got %q", updated2.Publisher)
+	}
+	if updated2.ThumbnailURL != "https://example.com/thumb2.jpg" {
+		t.Errorf("article2.ThumbnailURL: got %q, want thumb2.jpg", updated2.ThumbnailURL)
+	}
+}
+
+func TestArticleRepository_UpdateMetadataBatch_SkipsFullyEnrichedArticles(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	a := makeArticle("https://example.com/1")
+	a.Publisher = "既存の出版元"
+	a.ThumbnailURL = "https://example.com/existing-thumb.jpg"
+	if err := r.Save(ctx, a); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	n, err := r.UpdateMetadataBatch(ctx, []articlerepo.MetadataUpdate{
+		{URL: "https://example.com/1", Publisher: "新しい出版元", ThumbnailURL: "https://example.com/new-thumb.jpg"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateMetadataBatch: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("RowsAffected: got %d, want 0（両列とも設定済みなので対象外）", n)
+	}
+}
+
+func TestArticleRepository_UpdateMetadataBatch_SkipsWhenNewValueAlsoEmpty(t *testing.T) {
+	// publisher は補完済みだが thumbnail_url は未設定のまま、というケースで
+	// 再取得したフィードがそもそもサムネイルを提供しない（新しい値も空文字）場合は対象外とする。
+	// そうしないと、何度実行しても毎回「補完」件数として数えられてしまう（実運用で発覚した不整合）。
+	ctx := context.Background()
+	r := newRepo(t)
+
+	a := makeArticle("https://example.com/1")
+	a.Publisher = "既存の出版元"
+	if err := r.Save(ctx, a); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	n, err := r.UpdateMetadataBatch(ctx, []articlerepo.MetadataUpdate{
+		{URL: "https://example.com/1", Publisher: "上書きされないはず", ThumbnailURL: ""},
+	})
+	if err != nil {
+		t.Fatalf("UpdateMetadataBatch: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("RowsAffected: got %d, want 0（新しい値も空文字なので対象外）", n)
+	}
+}
+
+func TestArticleRepository_UpdateMetadataBatch_FillsNullColumns(t *testing.T) {
+	// migration.go の `ALTER TABLE ... ADD COLUMN` で追加した既存行は publisher/thumbnail_url が
+	// 空文字ではなく NULL になる（記事メタデータ拡充フェーズ以前に保存された記事を再現）。
+	// COALESCE なしでは `publisher = ''` が NULL と一致せず対象外になってしまうことの確認。
+	ctx := context.Background()
+	r := newRepo(t)
+
+	if _, err := r.db.ExecContext(ctx, `
+		INSERT INTO articles (feed_id, url, title, content, published_at, fetched_at, publisher, thumbnail_url)
+		VALUES (1, 'https://example.com/1', 'Title', 'body', ?, ?, NULL, NULL)
+	`, time.Now(), time.Now()); err != nil {
+		t.Fatalf("insert with NULL publisher/thumbnail_url: %v", err)
+	}
+
+	n, err := r.UpdateMetadataBatch(ctx, []articlerepo.MetadataUpdate{
+		{URL: "https://example.com/1", Publisher: "新しい出版元", ThumbnailURL: "https://example.com/thumb.jpg"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateMetadataBatch: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("RowsAffected: got %d, want 1", n)
+	}
+
+	all, _ := r.FindAll(ctx)
+	if all[0].Publisher != "新しい出版元" || all[0].ThumbnailURL != "https://example.com/thumb.jpg" {
+		t.Errorf("got publisher=%q thumbnail=%q", all[0].Publisher, all[0].ThumbnailURL)
+	}
+}
+
+func TestArticleRepository_UpdateMetadataBatch_Empty(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+
+	n, err := r.UpdateMetadataBatch(ctx, nil)
+	if err != nil {
+		t.Errorf("UpdateMetadataBatch(nil): got error %v, want nil", err)
+	}
+	if n != 0 {
+		t.Errorf("RowsAffected: got %d, want 0", n)
 	}
 }
 

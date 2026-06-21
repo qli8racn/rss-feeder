@@ -11,8 +11,8 @@ import (
 
 func printArticleTable(articles []domain.Article) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tタイトル\t出版元\t公開日時\t既読\tお気に入り")
-	fmt.Fprintln(w, "---\t--------------------------------\t--------------------\t--------------------\t----\t----------")
+	fmt.Fprintln(w, "ID\tタイトル\t出版元\tカテゴリ\t公開日時\t既読\tお気に入り")
+	fmt.Fprintln(w, "---\t--------------------------------\t--------------------\t----------\t--------------------\t----\t----------")
 	for _, a := range articles {
 		read := "-"
 		if a.Read {
@@ -30,7 +30,11 @@ func printArticleTable(articles []domain.Article) {
 		if publisher == "" {
 			publisher = a.FeedURL
 		}
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Title, publisher, published, read, bookmark)
+		category := a.Category
+		if category == "" {
+			category = "-"
+		}
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Title, publisher, category, published, read, bookmark)
 	}
 	w.Flush()
 }
