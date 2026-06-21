@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import type { Article, SortField, SortOrder } from '../../domain/article'
-import { BookmarkIcon } from '../atoms/icons'
+import { BookmarkIcon, RssIcon } from '../atoms/icons'
 import { formatDate } from '../../domain/date'
 import Table, { TABLE_HEADER_ROW_CLASS, TABLE_ROW_CLASS } from '../molecules/Table'
 import CategoryBadge from '../molecules/CategoryBadge'
@@ -92,17 +92,20 @@ function ArticleTable({
               </td>
               <td className="py-4 align-top">
                 <div className="flex gap-3">
-                  {article.thumbnail_url && (
-                    <img
-                      src={article.thumbnail_url}
-                      alt=""
-                      loading="lazy"
-                      className="size-10 shrink-0 rounded object-cover"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none'
-                      }}
-                    />
-                  )}
+                  <div className="relative size-10 shrink-0 overflow-hidden rounded border border-slate-400/10 bg-surface-raised/30">
+                    <RssIcon className="absolute inset-0 m-auto size-4 text-text-secondary/40" />
+                    {article.thumbnail_url && (
+                      <img
+                        src={article.thumbnail_url}
+                        alt=""
+                        loading="lazy"
+                        className="absolute inset-0 size-10 object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none'
+                        }}
+                      />
+                    )}
+                  </div>
                   <div className="min-w-0">
                     <a
                       href={article.url}

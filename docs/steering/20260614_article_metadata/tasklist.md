@@ -35,7 +35,11 @@
   - サムネイル表示は Figma に対応デザインが存在しない（`docs/web-ui-spec.md` の「スコープ外」記載どおり、
     `ArticleListPage > ArticleTable` の実画面フレームを確認しても表示スペースはない）。
     ユーザー判断でデザインなしの簡易実装とした：`ArticleTable.tsx` でタイトル左に
-    `size-10` の角丸サムネイル画像を追加（`thumbnail_url` 未設定時は非表示、画像読み込み失敗時も非表示）
+    `size-10` の角丸サムネイル画像を追加
+  - 2026-06-21: `thumbnail_url` 未設定時・画像読み込み失敗時のフォールバックとして、
+    既存の`RssIcon`（`atoms/icons.tsx`）を使ったプレースホルダー枠（空状態スケルトンと同系統の
+    `bg-surface-raised/30`・`border-slate-400/10`）を常時表示するよう変更。実画像はその上に
+    `absolute`配置で重ね、読み込み失敗時はimgを非表示にしてプレースホルダーを見せる
   - `npx tsc -b --noEmit` / `npm run test` / `npm run build` で確認
 - [x] カテゴリ別フィルタ・一覧コマンド
   - Web UI のカテゴリフィルタ（`SearchFilterBar`・`GET /api/articles?category=`）は別フェーズで実装済みだった
