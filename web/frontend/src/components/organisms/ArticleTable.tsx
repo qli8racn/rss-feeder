@@ -91,21 +91,36 @@ function ArticleTable({
                 </button>
               </td>
               <td className="py-4 align-top">
-                <a
-                  href={article.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-body font-medium text-text-primary hover:underline"
-                >
-                  {article.title}
-                </a>
-                {article.summary && (
-                  <p className="mt-1 line-clamp-1 text-caption text-text-secondary">{article.summary}</p>
-                )}
-                <div className="mt-1 flex flex-wrap gap-3 text-caption text-text-secondary md:hidden">
-                  {article.publisher && <span>{article.publisher}</span>}
-                  {article.category && <CategoryBadge category={article.category} className="px-1.5" />}
-                  <span>{formatDate(article.published_at)}</span>
+                <div className="flex gap-3">
+                  {article.thumbnail_url && (
+                    <img
+                      src={article.thumbnail_url}
+                      alt=""
+                      loading="lazy"
+                      className="size-10 shrink-0 rounded object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none'
+                      }}
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <a
+                      href={article.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-body font-medium text-text-primary hover:underline"
+                    >
+                      {article.title}
+                    </a>
+                    {article.summary && (
+                      <p className="mt-1 line-clamp-1 text-caption text-text-secondary">{article.summary}</p>
+                    )}
+                    <div className="mt-1 flex flex-wrap gap-3 text-caption text-text-secondary md:hidden">
+                      {article.publisher && <span>{article.publisher}</span>}
+                      {article.category && <CategoryBadge category={article.category} className="px-1.5" />}
+                      <span>{formatDate(article.published_at)}</span>
+                    </div>
+                  </div>
                 </div>
               </td>
               <td className="hidden py-4 align-top text-caption text-text-secondary md:table-cell">
