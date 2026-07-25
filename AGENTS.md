@@ -119,6 +119,6 @@ go test $(go list ./internal/driver/... | grep -v internal/driver/anthropic)
 
 ```bash
 # DB 直接確認
-sqlite3 reader.db "SELECT * FROM articles LIMIT 5"
-sqlite3 reader.db "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 10"
+sqlite3 rss-feeder-db/reader.db "SELECT * FROM articles LIMIT 5"
+sqlite3 rss-feeder-db/reader.db "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 10"
 ```
