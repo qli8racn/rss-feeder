@@ -18,4 +18,4 @@
 ## テスト・確認
 
 - [x] `go build -p 1 -o bin/rss-agent ./cmd/agent` でビルドが通ること
-- [ ] `bin/rss-agent discover` を実行し、推薦フィードリストが出力されること
+- [x] `bin/rss-agent discover` を実行し、推薦フィードリストが出力されること
