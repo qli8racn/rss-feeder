@@ -30,8 +30,6 @@ func NewDiscoverAgent(i do.Injector) (adapteranthropic.DiscoverAgent, error) {
 	}, nil
 }
 
-// maxDiscoverBookmarks はエージェントに渡すブックマーク記事数の上限。
-const maxDiscoverBookmarks = 50
 
 type feedJSON struct {
 	FeedURL string `json:"feed_url"`
@@ -99,8 +97,8 @@ func (a *discoverAgent) Run(ctx context.Context) (string, error) {
 				fmt.Fprintln(os.Stderr, "[discover] ブックマーク記事: 0件（趣向情報なしで推薦）")
 				return "ブックマークされた記事がありません。趣向情報なしで推薦します。", nil
 			}
-			if len(articles) > maxDiscoverBookmarks {
-				articles = articles[:maxDiscoverBookmarks]
+			if len(articles) > maxBookmarks {
+				articles = articles[:maxBookmarks]
 			}
 			fmt.Fprintf(os.Stderr, "[discover] ブックマーク記事: %d件取得\n", len(articles))
 			b, err := json.Marshal(toEnrichedArticleJSONList(articles))

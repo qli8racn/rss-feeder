@@ -35,9 +35,9 @@ const defaultCurateLimit = 30
 // maxCurateLimit は fetch_recent_articles の上限。
 const maxCurateLimit = 100
 
-// maxCurateBookmarks は fetch_bookmarked_articles で取得するブックマーク記事数の上限。
-// preference.go の maxBookmarkedArticles と同様、ブックマーク増加による入力トークン膨張を防ぐ。
-const maxCurateBookmarks = 50
+// maxBookmarks はエージェントに渡すブックマーク記事数の上限。
+// ブックマーク増加による入力トークン膨張を防ぐ。
+const maxBookmarks = 50
 
 type enrichedArticleJSON struct {
 	ID          int64  `json:"id"`
@@ -150,8 +150,8 @@ func (a *curateAgent) Run(ctx context.Context, opts adapteranthropic.CurateOptio
 				fmt.Fprintln(os.Stderr, "[curate] ブックマーク記事: 0件（趣向情報なしで推薦）")
 				return "ブックマークされた記事がありません。趣向情報なしで推薦します。", nil
 			}
-			if len(articles) > maxCurateBookmarks {
-				articles = articles[:maxCurateBookmarks]
+			if len(articles) > maxBookmarks {
+				articles = articles[:maxBookmarks]
 			}
 			fmt.Fprintf(os.Stderr, "[curate] ブックマーク記事: %d件取得\n", len(articles))
 			b, err := json.Marshal(toEnrichedArticleJSONList(articles))

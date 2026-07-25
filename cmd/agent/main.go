@@ -16,7 +16,7 @@ import (
 	driverhtmlfetch "github.com/qli8racn/rss-feeder/internal/driver/htmlfetch"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
-	dbrepoFeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
+	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
 	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
@@ -37,7 +37,7 @@ func main() {
 	do.Provide(i, driveranthropic.NewEnrichAgent)
 	do.Provide(i, driveranthropic.NewFeedDiscoveryAgent)
 	do.Provide(i, driveranthropic.NewCurateAgent)
-	do.Provide(i, dbrepoFeed.NewRepository)
+	do.Provide(i, dbrepofeed.NewRepository)
 	do.Provide(i, driveranthropic.NewDiscoverAgent)
 
 	summarizeUC := usecase.NewSummarizeUsecase(do.MustInvoke[adapteranthropic.SummarizeAgent](i))
