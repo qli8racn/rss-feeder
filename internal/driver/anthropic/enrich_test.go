@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"sync/atomic"
 	"testing"
 
@@ -14,6 +16,11 @@ import (
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	"github.com/qli8racn/rss-feeder/internal/domain"
 )
+
+// discardLogger はテスト出力を汚さない slog.Logger を返す。
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 // fakeFetcher は adapterhtmlfetch.Fetcher を実装するテスト用フェイク。
 type fakeFetcher struct {
@@ -278,6 +285,7 @@ func TestEnrichAgent_Run_MultipleChunksSucceed(t *testing.T) {
 		},
 	}
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		client: &fakeMessageCreator{new: echoSuccess(t, anthropic.Usage{InputTokens: 100, OutputTokens: 50})},
 		repo:   repo,
 	}
@@ -304,6 +312,7 @@ func TestEnrichAgent_Run_CustomBatchSizeOverridesDefault(t *testing.T) {
 	}
 	var calls int32
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		client: &fakeMessageCreator{new: func(c context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error) {
 			atomic.AddInt32(&calls, 1)
 			return echoSuccess(t, anthropic.Usage{})(c, body, opts...)
@@ -339,6 +348,7 @@ func TestEnrichAgent_Run_CustomConcurrencyOverridesDefault(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var calls int32
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		client: &fakeMessageCreator{new: func(c context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error) {
 			atomic.AddInt32(&calls, 1)
 			cancel()
@@ -361,6 +371,7 @@ func TestSummarizeAndCategorizeWithSplitRetry_RecoversFromMaxTokensBySplitting(t
 	// 4件まとめてリクエストするとMaxTokens切り詰めで失敗するが、2件以下に分割すれば
 	// 成功するfakeクライアントで、分割リトライにより最終的に全件処理されることを確認する。
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		client: &fakeMessageCreator{new: func(ctx context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error) {
 			ids := requestedIDs(body)
 			if len(ids) > 2 {
@@ -384,6 +395,7 @@ func TestSummarizeAndCategorizeWithSplitRetry_GivesUpAtMinSplitSize(t *testing.T
 	// （本文が大きすぎることが原因であり、分割では解決しないと判断するケース）。
 	var calls int32
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		client: &fakeMessageCreator{new: func(ctx context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error) {
 			atomic.AddInt32(&calls, 1)
 			return fakeMessage(t, "invalid json", anthropic.Usage{InputTokens: 10, OutputTokens: 2}, anthropic.StopReasonMaxTokens), nil
@@ -424,6 +436,7 @@ func TestEnrichAgent_Run_PartialChunkFailureStillSavesSuccessfulChunks(t *testin
 	// そのまま失敗するケースをテストする（MaxTokens起因の分割リトライ自体は
 	// TestSummarizeAndCategorizeWithSplitRetry_* で別途テストする）。
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		client: &fakeMessageCreator{new: func(ctx context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error) {
 			ids := requestedIDs(body)
 			for _, id := range ids {
@@ -460,6 +473,7 @@ func TestEnrichAgent_Run_DBWriteFailureJoinsBatchErr(t *testing.T) {
 		},
 	}
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		client: &fakeMessageCreator{new: echoSuccess(t, anthropic.Usage{InputTokens: 10, OutputTokens: 5})},
 		repo:   repo,
 	}
@@ -493,6 +507,7 @@ func TestEnrichAgent_Run_OneChunkDBWriteFailsOthersStillSaved(t *testing.T) {
 		},
 	}
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		client: &fakeMessageCreator{new: echoSuccess(t, anthropic.Usage{InputTokens: 10, OutputTokens: 5})},
 		repo:   repo,
 	}
@@ -521,6 +536,7 @@ func TestEnrichAgent_Run_StopsDispatchingAfterContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var calls int32
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		client: &fakeMessageCreator{new: func(c context.Context, body anthropic.MessageNewParams, opts ...option.RequestOption) (*anthropic.Message, error) {
 			atomic.AddInt32(&calls, 1)
 			cancel()
@@ -578,6 +594,7 @@ func TestEnrichAgent_Run_ForceWithFeedURLScopesFetchLatest(t *testing.T) {
 		updateBatch: func(_ context.Context, _ []articlerepo.EnrichmentUpdate) error { return nil },
 	}
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		client: &fakeMessageCreator{new: echoSuccess(t, anthropic.Usage{InputTokens: 10, OutputTokens: 5})},
 		repo:   repo,
 	}
@@ -602,6 +619,7 @@ func TestEnrichAgent_Run_AlreadyCanceledContext(t *testing.T) {
 		},
 	}
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		client: &fakeMessageCreator{new: func(context.Context, anthropic.MessageNewParams, ...option.RequestOption) (*anthropic.Message, error) {
 			called = true
 			return nil, errors.New("should not be called")
@@ -675,13 +693,14 @@ func TestFetchFullContent_UpdatesContentOnSuccess(t *testing.T) {
 		{ID: 1, URL: "https://example.com/1", Content: "original"},
 	}
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		fetcher: &fakeFetcher{
 			fetch: func(_ context.Context, _ string) (string, error) {
 				return `<html><body><article>フルテキスト</article></body></html>`, nil
 			},
 		},
 	}
-	result := agent.fetchFullContent(context.Background(), articles)
+	result := agent.fetchFullContent(context.Background(), discardLogger(), articles)
 	if result[0].Content != "フルテキスト" {
 		t.Errorf("fetchFullContent: Content got %q, want %q", result[0].Content, "フルテキスト")
 	}
@@ -694,6 +713,7 @@ func TestFetchFullContent_SkipsEmptyURL(t *testing.T) {
 	}
 	called := false
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		fetcher: &fakeFetcher{
 			fetch: func(_ context.Context, _ string) (string, error) {
 				called = true
@@ -701,7 +721,7 @@ func TestFetchFullContent_SkipsEmptyURL(t *testing.T) {
 			},
 		},
 	}
-	result := agent.fetchFullContent(context.Background(), articles)
+	result := agent.fetchFullContent(context.Background(), discardLogger(), articles)
 	if called {
 		t.Error("fetchFullContent: fetcher should not be called for empty URL")
 	}
@@ -716,13 +736,14 @@ func TestFetchFullContent_FallbackOnFetchError(t *testing.T) {
 		{ID: 1, URL: "https://example.com/1", Content: "original"},
 	}
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		fetcher: &fakeFetcher{
 			fetch: func(_ context.Context, _ string) (string, error) {
 				return "", errors.New("connection refused")
 			},
 		},
 	}
-	result := agent.fetchFullContent(context.Background(), articles)
+	result := agent.fetchFullContent(context.Background(), discardLogger(), articles)
 	if result[0].Content != "original" {
 		t.Errorf("fetchFullContent: Content got %q, want %q (should fallback on error)", result[0].Content, "original")
 	}
@@ -734,13 +755,14 @@ func TestFetchFullContent_FallbackOnEmptyText(t *testing.T) {
 		{ID: 1, URL: "https://example.com/1", Content: "original"},
 	}
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		fetcher: &fakeFetcher{
 			fetch: func(_ context.Context, _ string) (string, error) {
 				return `<html><body></body></html>`, nil
 			},
 		},
 	}
-	result := agent.fetchFullContent(context.Background(), articles)
+	result := agent.fetchFullContent(context.Background(), discardLogger(), articles)
 	if result[0].Content != "original" {
 		t.Errorf("fetchFullContent: Content got %q, want %q (should fallback when text is empty)", result[0].Content, "original")
 	}
@@ -752,13 +774,14 @@ func TestFetchFullContent_PreservesOtherFields(t *testing.T) {
 		{ID: 42, URL: "https://example.com/1", Title: "タイトル", Content: "original"},
 	}
 	agent := &enrichAgent{
+		logger: discardLogger(),
 		fetcher: &fakeFetcher{
 			fetch: func(_ context.Context, _ string) (string, error) {
 				return `<html><body><article>新しい本文</article></body></html>`, nil
 			},
 		},
 	}
-	result := agent.fetchFullContent(context.Background(), articles)
+	result := agent.fetchFullContent(context.Background(), discardLogger(), articles)
 	if result[0].ID != 42 || result[0].Title != "タイトル" {
 		t.Errorf("fetchFullContent: non-Content fields modified: got %+v", result[0])
 	}

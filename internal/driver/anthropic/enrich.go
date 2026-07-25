@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +24,7 @@ type enrichAgent struct {
 	client  messageCreator
 	repo    articlerepo.Repository
 	fetcher adapterhtmlfetch.Fetcher
+	logger  *slog.Logger
 }
 
 func NewEnrichAgent(i do.Injector) (adapteranthropic.EnrichAgent, error) {
@@ -32,6 +33,7 @@ func NewEnrichAgent(i do.Injector) (adapteranthropic.EnrichAgent, error) {
 		client:  &client.Messages,
 		repo:    do.MustInvoke[articlerepo.Repository](i),
 		fetcher: do.MustInvoke[adapterhtmlfetch.Fetcher](i),
+		logger:  do.MustInvoke[*slog.Logger](i),
 	}, nil
 }
 
@@ -91,7 +93,8 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 	if len(articles) == 0 {
 		return 0, nil
 	}
-	fmt.Fprintf(os.Stderr, "[enrich] 開始しています...（対象: %d件）\n", len(articles))
+	log := a.logger.With("command", "enrich")
+	log.Info("開始しています...", "count", len(articles))
 
 	requested := make(map[int64]bool, len(articles))
 	for _, art := range articles {
@@ -121,7 +124,7 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			enrichedChunk := a.fetchFullContent(ctx, chunk)
+			enrichedChunk := a.fetchFullContent(ctx, log, chunk)
 			results, usage, err := a.summarizeAndCategorizeWithSplitRetry(ctx, enrichedChunk)
 			outcomes[i] = chunkOutcome{results: results, usage: usage, err: err}
 		}()
@@ -132,7 +135,7 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 	}
 
 	_, totalUsage, batchErr := aggregateChunkOutcomes(outcomes)
-	logUsage(anthropic.ModelClaudeHaiku4_5, totalUsage, time.Since(start))
+	logUsage(a.logger, anthropic.ModelClaudeHaiku4_5, totalUsage, time.Since(start))
 
 	// DBへの保存はチャンク単位で行う。1チャンクのDB書き込みが失敗しても、他チャンクで
 	// 既にコミット済みの結果はそのまま残る（チャンク単位の部分成功をDB層でも維持する）。
@@ -328,7 +331,7 @@ func extractJSON(text string) string {
 // Content フィールドを上書きした記事スライスを返す。
 // フェッチ失敗・テキスト抽出結果が空の場合は元の Content を保持する（フォールバック）。
 // URL フェッチは maxFetchConcurrency を上限に並列実行する。
-func (a *enrichAgent) fetchFullContent(ctx context.Context, articles []domain.Article) []domain.Article {
+func (a *enrichAgent) fetchFullContent(ctx context.Context, log *slog.Logger, articles []domain.Article) []domain.Article {
 	result := make([]domain.Article, len(articles))
 	copy(result, articles)
 
@@ -362,7 +365,7 @@ func (a *enrichAgent) fetchFullContent(ctx context.Context, articles []domain.Ar
 		}(i)
 	}
 	wg.Wait()
-	fmt.Fprintf(os.Stderr, "[enrich] フルテキスト取得: %d/%d件成功\n", successCount, len(articles))
+	log.Info("フルテキスト取得", "success", successCount, "total", len(articles))
 	return result
 }
 

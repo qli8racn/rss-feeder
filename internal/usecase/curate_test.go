@@ -41,7 +41,7 @@ func TestCurateUsecase_PassesOptions(t *testing.T) {
 		},
 	})
 
-	_ , _ = uc.Execute(context.Background(), adapteranthropic.CurateOptions{Limit: 10})
+	_, _ = uc.Execute(context.Background(), adapteranthropic.CurateOptions{Limit: 10})
 	if capturedOpts.Limit != 10 {
 		t.Errorf("Limit: got %d, want 10", capturedOpts.Limit)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/samber/do/v2"
@@ -15,6 +16,7 @@ import (
 type preferenceAgent struct {
 	client messageCreator
 	reader articlerepo.Repository
+	logger *slog.Logger
 }
 
 func NewPreferenceAgent(i do.Injector) (adapteranthropic.PreferenceAgent, error) {
@@ -22,6 +24,7 @@ func NewPreferenceAgent(i do.Injector) (adapteranthropic.PreferenceAgent, error)
 	return &preferenceAgent{
 		client: &client.Messages,
 		reader: do.MustInvoke[articlerepo.Repository](i),
+		logger: do.MustInvoke[*slog.Logger](i),
 	}, nil
 }
 
@@ -61,7 +64,7 @@ func (a *preferenceAgent) Run(ctx context.Context) (string, error) {
 		},
 	}
 
-	return runAgentLoopWithUsageLog(ctx, a.client, params, func(_, inputJSON string) (string, error) {
+	return runAgentLoopWithUsageLog(ctx, a.logger, a.client, params, func(_, inputJSON string) (string, error) {
 		limit, err := parseLimitInput(inputJSON, maxBookmarkedArticles, maxBookmarkedArticles)
 		if err != nil {
 			return "", err
