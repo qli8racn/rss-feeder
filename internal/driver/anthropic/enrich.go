@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -90,6 +91,7 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 	if len(articles) == 0 {
 		return 0, nil
 	}
+	fmt.Fprintf(os.Stderr, "[enrich] 開始しています...（対象: %d件）\n", len(articles))
 
 	requested := make(map[int64]bool, len(articles))
 	for _, art := range articles {
@@ -331,6 +333,8 @@ func (a *enrichAgent) fetchFullContent(ctx context.Context, articles []domain.Ar
 	copy(result, articles)
 
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var successCount int
 	sem := make(chan struct{}, maxFetchConcurrency)
 
 	for i := range articles {
@@ -352,9 +356,13 @@ func (a *enrichAgent) fetchFullContent(ctx context.Context, articles []domain.Ar
 				return
 			}
 			result[idx].Content = text
+			mu.Lock()
+			successCount++
+			mu.Unlock()
 		}(i)
 	}
 	wg.Wait()
+	fmt.Fprintf(os.Stderr, "[enrich] フルテキスト取得: %d/%d件成功\n", successCount, len(articles))
 	return result
 }
 

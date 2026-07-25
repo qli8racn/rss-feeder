@@ -19,5 +19,5 @@
 
 ## テスト・確認
 
-- [ ] `go build -p 1 -o bin/rss-agent ./cmd/agent` でビルドが通ること
-- [ ] `bin/rss-agent enrich --force --limit 3` を実行し、従来より詳細な要約が生成されること
+- [x] `go build -p 1 -o bin/rss-agent ./cmd/agent` でビルドが通ること
+- [x] `bin/rss-agent enrich --force --limit 3` を実行し、従来より詳細な要約が生成されること
