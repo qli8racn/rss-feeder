@@ -16,6 +16,7 @@ import (
 	driverhtmlfetch "github.com/qli8racn/rss-feeder/internal/driver/htmlfetch"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
+	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
 	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
@@ -36,6 +37,8 @@ func main() {
 	do.Provide(i, driveranthropic.NewEnrichAgent)
 	do.Provide(i, driveranthropic.NewFeedDiscoveryAgent)
 	do.Provide(i, driveranthropic.NewCurateAgent)
+	do.Provide(i, dbrepofeed.NewRepository)
+	do.Provide(i, driveranthropic.NewDiscoverAgent)
 
 	summarizeUC := usecase.NewSummarizeUsecase(do.MustInvoke[adapteranthropic.SummarizeAgent](i))
 	preferenceUC := usecase.NewPreferenceUsecase(do.MustInvoke[adapteranthropic.PreferenceAgent](i))
@@ -46,6 +49,7 @@ func main() {
 		do.MustInvoke[adapterrss.RSSReader](i),
 	)
 	curateUC := usecase.NewCurateUsecase(do.MustInvoke[adapteranthropic.CurateAgent](i))
+	discoverUC := usecase.NewDiscoverUsecase(do.MustInvoke[adapteranthropic.DiscoverAgent](i))
 
 	root := &cobra.Command{
 		Use:   "rss-agent",
@@ -61,6 +65,7 @@ func main() {
 		agent.NewEnrichCommand(enrichUC),
 		agent.NewDiscoverFeedCommand(discoverFeedUC),
 		agent.NewCurateCommand(curateUC),
+		agent.NewDiscoverCommand(discoverUC),
 	)
 
 	if err := root.Execute(); err != nil {
