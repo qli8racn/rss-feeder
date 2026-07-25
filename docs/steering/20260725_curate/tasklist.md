@@ -21,8 +21,8 @@
 ## テスト・確認
 
 - [x] `go build -p 1 -o bin/rss-agent ./cmd/agent` でビルドが通ること
-- [ ] `bin/rss-agent curate` を実行し、推薦記事リストが出力されること
-- [ ] `bin/rss-agent curate --limit 10` で件数を変えられること
+- [x] `bin/rss-agent curate` を実行し、推薦記事リストが出力されること
+- [x] `bin/rss-agent curate --limit 10` で件数を変えられること
 
 ## レビュー指摘対応
 

@@ -15,6 +15,15 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
+// fakeFetcher は adapterhtmlfetch.Fetcher を実装するテスト用フェイク。
+type fakeFetcher struct {
+	fetch func(ctx context.Context, url string) (string, error)
+}
+
+func (f *fakeFetcher) Fetch(ctx context.Context, url string) (string, error) {
+	return f.fetch(ctx, url)
+}
+
 func TestTruncateRunes_ShorterThanMax(t *testing.T) {
 	got := truncateRunes("hello", 10)
 	if got != "hello" {
@@ -612,5 +621,145 @@ func TestEnrichAgent_Run_AlreadyCanceledContext(t *testing.T) {
 	}
 	if called {
 		t.Error("Run: API should not have been called for an already-canceled context")
+	}
+}
+
+// --- extractTextFromHTML のテスト ---
+
+func TestExtractTextFromHTML_ArticleTag(t *testing.T) {
+	html := `<html><body><nav>ナビ</nav><article>本文テキスト</article></body></html>`
+	got := extractTextFromHTML(html)
+	if got != "本文テキスト" {
+		t.Errorf("extractTextFromHTML: got %q, want %q", got, "本文テキスト")
+	}
+}
+
+func TestExtractTextFromHTML_FallsBackToBody(t *testing.T) {
+	// article/main などが存在しない場合は body 全体にフォールバックする。
+	html := `<html><body><p>ボディテキスト</p></body></html>`
+	got := extractTextFromHTML(html)
+	if got != "ボディテキスト" {
+		t.Errorf("extractTextFromHTML: got %q, want %q", got, "ボディテキスト")
+	}
+}
+
+func TestExtractTextFromHTML_RemovesNoiseElements(t *testing.T) {
+	// script・style はテキスト抽出前に削除される。
+	html := `<html><body><script>var x=1;</script><style>.foo{}</style><article>本文</article></body></html>`
+	got := extractTextFromHTML(html)
+	if got != "本文" {
+		t.Errorf("extractTextFromHTML: got %q, want %q", got, "本文")
+	}
+}
+
+func TestExtractTextFromHTML_NormalizesWhitespace(t *testing.T) {
+	html := `<html><body><article>  空白　　 の　テスト  </article></body></html>`
+	got := extractTextFromHTML(html)
+	// strings.Fields で分割・Join するため先頭末尾の空白と連続空白が除去される。
+	if got == "" {
+		t.Error("extractTextFromHTML: got empty, want non-empty")
+	}
+}
+
+func TestExtractTextFromHTML_EmptyHTML(t *testing.T) {
+	got := extractTextFromHTML("<html><body></body></html>")
+	if got != "" {
+		t.Errorf("extractTextFromHTML: got %q, want empty", got)
+	}
+}
+
+// --- fetchFullContent のテスト ---
+
+func TestFetchFullContent_UpdatesContentOnSuccess(t *testing.T) {
+	articles := []domain.Article{
+		{ID: 1, URL: "https://example.com/1", Content: "original"},
+	}
+	agent := &enrichAgent{
+		fetcher: &fakeFetcher{
+			fetch: func(_ context.Context, _ string) (string, error) {
+				return `<html><body><article>フルテキスト</article></body></html>`, nil
+			},
+		},
+	}
+	result := agent.fetchFullContent(context.Background(), articles)
+	if result[0].Content != "フルテキスト" {
+		t.Errorf("fetchFullContent: Content got %q, want %q", result[0].Content, "フルテキスト")
+	}
+}
+
+func TestFetchFullContent_SkipsEmptyURL(t *testing.T) {
+	// URL が空の記事はフェッチをスキップし、元の Content を保持する。
+	articles := []domain.Article{
+		{ID: 1, URL: "", Content: "original"},
+	}
+	called := false
+	agent := &enrichAgent{
+		fetcher: &fakeFetcher{
+			fetch: func(_ context.Context, _ string) (string, error) {
+				called = true
+				return "", nil
+			},
+		},
+	}
+	result := agent.fetchFullContent(context.Background(), articles)
+	if called {
+		t.Error("fetchFullContent: fetcher should not be called for empty URL")
+	}
+	if result[0].Content != "original" {
+		t.Errorf("fetchFullContent: Content got %q, want %q", result[0].Content, "original")
+	}
+}
+
+func TestFetchFullContent_FallbackOnFetchError(t *testing.T) {
+	// フェッチ失敗時は元の Content を保持する（フォールバック）。
+	articles := []domain.Article{
+		{ID: 1, URL: "https://example.com/1", Content: "original"},
+	}
+	agent := &enrichAgent{
+		fetcher: &fakeFetcher{
+			fetch: func(_ context.Context, _ string) (string, error) {
+				return "", errors.New("connection refused")
+			},
+		},
+	}
+	result := agent.fetchFullContent(context.Background(), articles)
+	if result[0].Content != "original" {
+		t.Errorf("fetchFullContent: Content got %q, want %q (should fallback on error)", result[0].Content, "original")
+	}
+}
+
+func TestFetchFullContent_FallbackOnEmptyText(t *testing.T) {
+	// HTML 取得は成功したがテキスト抽出結果が空の場合も元の Content を保持する。
+	articles := []domain.Article{
+		{ID: 1, URL: "https://example.com/1", Content: "original"},
+	}
+	agent := &enrichAgent{
+		fetcher: &fakeFetcher{
+			fetch: func(_ context.Context, _ string) (string, error) {
+				return `<html><body></body></html>`, nil
+			},
+		},
+	}
+	result := agent.fetchFullContent(context.Background(), articles)
+	if result[0].Content != "original" {
+		t.Errorf("fetchFullContent: Content got %q, want %q (should fallback when text is empty)", result[0].Content, "original")
+	}
+}
+
+func TestFetchFullContent_PreservesOtherFields(t *testing.T) {
+	// Content 以外のフィールドが書き換えられないことを確認する。
+	articles := []domain.Article{
+		{ID: 42, URL: "https://example.com/1", Title: "タイトル", Content: "original"},
+	}
+	agent := &enrichAgent{
+		fetcher: &fakeFetcher{
+			fetch: func(_ context.Context, _ string) (string, error) {
+				return `<html><body><article>新しい本文</article></body></html>`, nil
+			},
+		},
+	}
+	result := agent.fetchFullContent(context.Background(), articles)
+	if result[0].ID != 42 || result[0].Title != "タイトル" {
+		t.Errorf("fetchFullContent: non-Content fields modified: got %+v", result[0])
 	}
 }

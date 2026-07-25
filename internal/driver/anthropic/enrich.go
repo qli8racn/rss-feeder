@@ -5,28 +5,33 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/samber/do/v2"
 
 	adapteranthropic "github.com/qli8racn/rss-feeder/internal/adapter/driver/anthropic"
+	adapterhtmlfetch "github.com/qli8racn/rss-feeder/internal/adapter/driver/htmlfetch"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
 type enrichAgent struct {
-	client messageCreator
-	repo   articlerepo.Repository
+	client  messageCreator
+	repo    articlerepo.Repository
+	fetcher adapterhtmlfetch.Fetcher
 }
 
 func NewEnrichAgent(i do.Injector) (adapteranthropic.EnrichAgent, error) {
 	client := newAnthropicClient()
 	return &enrichAgent{
-		client: &client.Messages,
-		repo:   do.MustInvoke[articlerepo.Repository](i),
+		client:  &client.Messages,
+		repo:    do.MustInvoke[articlerepo.Repository](i),
+		fetcher: do.MustInvoke[adapterhtmlfetch.Fetcher](i),
 	}, nil
 }
 
@@ -44,6 +49,10 @@ const defaultEnrichBatchSize = 40
 // defaultEnrichConcurrency はバッチを並列実行する際の最大同時実行数のデフォルト値。
 // `--concurrency` で上書きできる。
 const defaultEnrichConcurrency = 4
+
+// maxFetchConcurrency はバッチ内での URL フェッチの最大同時実行数。
+// 同一ホストへの集中アクセスを避けるため上限を設ける。
+const maxFetchConcurrency = 5
 
 // Run は要約・カテゴリが未設定の記事に対して Claude に要約・カテゴリ分類させ、結果を DB に保存する。
 // Force が true の場合は要約済みの記事も含めた最新記事を対象に再処理する。
@@ -82,6 +91,7 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 	if len(articles) == 0 {
 		return 0, nil
 	}
+	fmt.Fprintf(os.Stderr, "[enrich] 開始しています...（対象: %d件）\n", len(articles))
 
 	requested := make(map[int64]bool, len(articles))
 	for _, art := range articles {
@@ -111,7 +121,8 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results, usage, err := a.summarizeAndCategorizeWithSplitRetry(ctx, chunk)
+			enrichedChunk := a.fetchFullContent(ctx, chunk)
+			results, usage, err := a.summarizeAndCategorizeWithSplitRetry(ctx, enrichedChunk)
 			outcomes[i] = chunkOutcome{results: results, usage: usage, err: err}
 		}()
 	}
@@ -311,4 +322,65 @@ func extractJSON(text string) string {
 		return text
 	}
 	return text[start : end+1]
+}
+
+// fetchFullContent はバッチ内の各記事 URL から HTML を取得してテキストを抽出し、
+// Content フィールドを上書きした記事スライスを返す。
+// フェッチ失敗・テキスト抽出結果が空の場合は元の Content を保持する（フォールバック）。
+// URL フェッチは maxFetchConcurrency を上限に並列実行する。
+func (a *enrichAgent) fetchFullContent(ctx context.Context, articles []domain.Article) []domain.Article {
+	result := make([]domain.Article, len(articles))
+	copy(result, articles)
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var successCount int
+	sem := make(chan struct{}, maxFetchConcurrency)
+
+	for i := range articles {
+		if articles[i].URL == "" {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			html, err := a.fetcher.Fetch(ctx, articles[idx].URL)
+			if err != nil {
+				return
+			}
+			text := extractTextFromHTML(html)
+			if text == "" {
+				return
+			}
+			result[idx].Content = text
+			mu.Lock()
+			successCount++
+			mu.Unlock()
+		}(i)
+	}
+	wg.Wait()
+	fmt.Fprintf(os.Stderr, "[enrich] フルテキスト取得: %d/%d件成功\n", successCount, len(articles))
+	return result
+}
+
+// extractTextFromHTML は HTML から読み取り可能なテキストを抽出する。
+// ノイズ要素（script/style/nav/header/footer/aside）を除去したあと、
+// article → main → [role=main] → body の順で最初に見つかった要素のテキストを返す。
+func extractTextFromHTML(html string) string {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		return ""
+	}
+	doc.Find("script, style, nav, header, footer, aside").Remove()
+
+	for _, sel := range []string{"article", "main", "[role=main]", ".content", ".post-content", ".entry-content", "body"} {
+		text := strings.Join(strings.Fields(doc.Find(sel).Text()), " ")
+		if text != "" {
+			return text
+		}
+	}
+	return ""
 }
