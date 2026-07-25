@@ -40,7 +40,8 @@ func (a *enrichAgent) fetchFullContent(ctx, articles) []domain.Article
 - フェッチ成功 → `extractTextFromHTML(html)` でテキスト化 → `article.Content` を上書き
 - フェッチ失敗・テキスト抽出結果が空 → 元の `Content` を保持（フォールバック）
 
-goroutine ごとに `result[i]` に書き込むが、インデックスが重複しないため mutex は不要。
+goroutine ごとに `result[i]` に書き込む（インデックス重複なし、`result` 自体は mutex 不要）。
+進捗ログ用の `successCount` カウントには `sync.Mutex` を使用する。
 
 ## extractTextFromHTML
 
