@@ -2,8 +2,7 @@ package anthropic
 
 import (
 	"context"
-	"fmt"
-	"os"
+	"log/slog"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -62,19 +61,23 @@ func addUsage(total, delta anthropic.Usage) anthropic.Usage {
 	return total
 }
 
-// logUsage はトークン使用量・概算費用・実行時間を標準エラー出力に1行で記録する。
-// 標準出力はコマンドの主たる出力（要約結果など）に使うため、ログはそちらを汚さない標準エラー出力に出す。
-func logUsage(model string, usage anthropic.Usage, elapsed time.Duration) {
-	fmt.Fprintf(os.Stderr, "[rss-agent] model=%s input=%d output=%d cost=$%.4f elapsed=%s\n",
-		model, usage.InputTokens, usage.OutputTokens, estimateCostUSD(model, usage), elapsed.Round(time.Millisecond))
+// logUsage はトークン使用量・概算費用・実行時間を logger に記録する。
+func logUsage(logger *slog.Logger, model string, usage anthropic.Usage, elapsed time.Duration) {
+	logger.Info("usage",
+		"model", model,
+		"input_tokens", usage.InputTokens,
+		"output_tokens", usage.OutputTokens,
+		"cost_usd", estimateCostUSD(model, usage),
+		"elapsed", elapsed.Round(time.Millisecond).String(),
+	)
 }
 
 // runAgentLoopWithUsageLog は runAgentLoop を実行し、完了後にトークン使用量・概算費用・
-// 実行時間を logUsage で標準エラー出力に記録する。preference.go/summarize.go の
+// 実行時間を logUsage で記録する。preference.go/summarize.go/curate.go/discover.go の
 // 計測用ボイラープレート（計測開始・Usage集計・defer ログ出力）を共通化するためのラッパー。
-func runAgentLoopWithUsageLog(ctx context.Context, client messageCreator, params anthropic.MessageNewParams, handler toolHandler) (string, error) {
+func runAgentLoopWithUsageLog(ctx context.Context, logger *slog.Logger, client messageCreator, params anthropic.MessageNewParams, handler toolHandler) (string, error) {
 	start := time.Now()
 	result, usage, err := runAgentLoop(ctx, client, params, handler)
-	logUsage(params.Model, usage, time.Since(start))
+	logUsage(logger, params.Model, usage, time.Since(start))
 	return result, err
 }

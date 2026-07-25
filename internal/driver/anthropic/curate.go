@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"log/slog"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -18,6 +18,7 @@ import (
 type curateAgent struct {
 	client messageCreator
 	repo   articlerepo.Repository
+	logger *slog.Logger
 }
 
 func NewCurateAgent(i do.Injector) (adapteranthropic.CurateAgent, error) {
@@ -25,6 +26,7 @@ func NewCurateAgent(i do.Injector) (adapteranthropic.CurateAgent, error) {
 	return &curateAgent{
 		client: &client.Messages,
 		repo:   do.MustInvoke[articlerepo.Repository](i),
+		logger: do.MustInvoke[*slog.Logger](i),
 	}, nil
 }
 
@@ -116,24 +118,25 @@ func (a *curateAgent) Run(ctx context.Context, opts adapteranthropic.CurateOptio
 		},
 	}
 
-	fmt.Fprintln(os.Stderr, "[curate] 開始しています...")
-	return runAgentLoopWithUsageLog(ctx, a.client, params, func(name, inputJSON string) (string, error) {
+	log := a.logger.With("command", "curate")
+	log.Info("開始しています...")
+	return runAgentLoopWithUsageLog(ctx, a.logger, a.client, params, func(name, inputJSON string) (string, error) {
 		switch name {
 		case "fetch_recent_articles":
 			limit, err := parseLimitInput(inputJSON, defaultLimit, maxCurateLimit)
 			if err != nil {
 				return "", err
 			}
-			fmt.Fprintf(os.Stderr, "[curate] 直近記事を取得中（最大%d件）...\n", limit)
+			log.Info("直近記事を取得中", "limit", limit)
 			articles, err := a.repo.FetchLatest(ctx, limit, "")
 			if err != nil {
 				return "", err
 			}
 			if len(articles) == 0 {
-				fmt.Fprintln(os.Stderr, "[curate] 直近記事: 0件")
+				log.Info("直近記事", "count", 0)
 				return "記事がありません。bin/rss-feeder fetch で記事を取得してください。", nil
 			}
-			fmt.Fprintf(os.Stderr, "[curate] 直近記事: %d件取得\n", len(articles))
+			log.Info("直近記事取得", "count", len(articles))
 			b, err := json.Marshal(toEnrichedArticleJSONList(articles))
 			if err != nil {
 				return "", err
@@ -141,19 +144,19 @@ func (a *curateAgent) Run(ctx context.Context, opts adapteranthropic.CurateOptio
 			return string(b), nil
 
 		case "fetch_bookmarked_articles":
-			fmt.Fprintln(os.Stderr, "[curate] ブックマーク記事を取得中...")
+			log.Info("ブックマーク記事を取得中")
 			articles, err := a.repo.FindBookmarked(ctx)
 			if err != nil {
 				return "", err
 			}
 			if len(articles) == 0 {
-				fmt.Fprintln(os.Stderr, "[curate] ブックマーク記事: 0件（趣向情報なしで推薦）")
+				log.Info("ブックマーク記事", "count", 0)
 				return "ブックマークされた記事がありません。趣向情報なしで推薦します。", nil
 			}
 			if len(articles) > maxBookmarks {
 				articles = articles[:maxBookmarks]
 			}
-			fmt.Fprintf(os.Stderr, "[curate] ブックマーク記事: %d件取得\n", len(articles))
+			log.Info("ブックマーク記事取得", "count", len(articles))
 			b, err := json.Marshal(toEnrichedArticleJSONList(articles))
 			if err != nil {
 				return "", err

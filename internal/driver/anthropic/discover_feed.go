@@ -3,6 +3,7 @@ package anthropic
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
@@ -19,11 +20,15 @@ const maxHTMLRunes = 20000
 
 type feedDiscoveryAgent struct {
 	client messageCreator
+	logger *slog.Logger
 }
 
-func NewFeedDiscoveryAgent(_ do.Injector) (adapteranthropic.FeedDiscoveryAgent, error) {
+func NewFeedDiscoveryAgent(i do.Injector) (adapteranthropic.FeedDiscoveryAgent, error) {
 	client := newAnthropicClient()
-	return &feedDiscoveryAgent{client: &client.Messages}, nil
+	return &feedDiscoveryAgent{
+		client: &client.Messages,
+		logger: do.MustInvoke[*slog.Logger](i),
+	}, nil
 }
 
 func (a *feedDiscoveryAgent) Discover(ctx context.Context, pageURL string, html string) (string, error) {
@@ -52,7 +57,7 @@ func (a *feedDiscoveryAgent) Discover(ctx context.Context, pageURL string, html 
 	if err != nil {
 		return "", err
 	}
-	logUsage(model, resp.Usage, time.Since(start))
+	logUsage(a.logger, model, resp.Usage, time.Since(start))
 
 	for _, block := range resp.Content {
 		if tb, ok := block.AsAny().(anthropic.TextBlock); ok {

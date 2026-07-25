@@ -14,6 +14,7 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/config"
 	driveranthropic "github.com/qli8racn/rss-feeder/internal/driver/anthropic"
 	driverhtmlfetch "github.com/qli8racn/rss-feeder/internal/driver/htmlfetch"
+	driverlogger "github.com/qli8racn/rss-feeder/internal/driver/logger"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
@@ -28,6 +29,8 @@ func main() {
 	}
 
 	i := do.New()
+	do.Provide(i, config.NewProvider)
+	do.Provide(i, driverlogger.NewLogger)
 	do.Provide(i, readerdb.NewClient)
 	do.Provide(i, dbrepoarticle.NewRepository)
 	do.Provide(i, driverrss.NewReader)

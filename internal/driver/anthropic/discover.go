@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"log/slog"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/samber/do/v2"
@@ -16,9 +16,10 @@ import (
 )
 
 type discoverAgent struct {
-	client     messageCreator
+	client      messageCreator
 	articleRepo articlerepo.Repository
 	feedRepo    feedrepo.Repository
+	logger      *slog.Logger
 }
 
 func NewDiscoverAgent(i do.Injector) (adapteranthropic.DiscoverAgent, error) {
@@ -27,9 +28,9 @@ func NewDiscoverAgent(i do.Injector) (adapteranthropic.DiscoverAgent, error) {
 		client:      &client.Messages,
 		articleRepo: do.MustInvoke[articlerepo.Repository](i),
 		feedRepo:    do.MustInvoke[feedrepo.Repository](i),
+		logger:      do.MustInvoke[*slog.Logger](i),
 	}, nil
 }
-
 
 type feedJSON struct {
 	FeedURL string `json:"feed_url"`
@@ -84,23 +85,24 @@ func (a *discoverAgent) Run(ctx context.Context) (string, error) {
 		},
 	}
 
-	fmt.Fprintln(os.Stderr, "[discover] 開始しています...")
-	return runAgentLoopWithUsageLog(ctx, a.client, params, func(name, _ string) (string, error) {
+	log := a.logger.With("command", "discover")
+	log.Info("開始しています...")
+	return runAgentLoopWithUsageLog(ctx, a.logger, a.client, params, func(name, _ string) (string, error) {
 		switch name {
 		case "fetch_bookmarked_articles":
-			fmt.Fprintln(os.Stderr, "[discover] ブックマーク記事を取得中...")
+			log.Info("ブックマーク記事を取得中")
 			articles, err := a.articleRepo.FindBookmarked(ctx)
 			if err != nil {
 				return "", err
 			}
 			if len(articles) == 0 {
-				fmt.Fprintln(os.Stderr, "[discover] ブックマーク記事: 0件（趣向情報なしで推薦）")
+				log.Info("ブックマーク記事", "count", 0)
 				return "ブックマークされた記事がありません。趣向情報なしで推薦します。", nil
 			}
 			if len(articles) > maxBookmarks {
 				articles = articles[:maxBookmarks]
 			}
-			fmt.Fprintf(os.Stderr, "[discover] ブックマーク記事: %d件取得\n", len(articles))
+			log.Info("ブックマーク記事取得", "count", len(articles))
 			b, err := json.Marshal(toEnrichedArticleJSONList(articles))
 			if err != nil {
 				return "", err
@@ -108,12 +110,12 @@ func (a *discoverAgent) Run(ctx context.Context) (string, error) {
 			return string(b), nil
 
 		case "fetch_registered_feeds":
-			fmt.Fprintln(os.Stderr, "[discover] 登録済みフィードを取得中...")
+			log.Info("登録済みフィードを取得中")
 			feeds, err := a.feedRepo.ListAll(ctx)
 			if err != nil {
 				return "", err
 			}
-			fmt.Fprintf(os.Stderr, "[discover] 登録済みフィード: %d件取得\n", len(feeds))
+			log.Info("登録済みフィード取得", "count", len(feeds))
 			b, err := json.Marshal(toFeedJSONList(feeds))
 			if err != nil {
 				return "", err

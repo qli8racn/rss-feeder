@@ -4,12 +4,20 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/samber/do/v2"
 	"github.com/spf13/viper"
 )
 
+// LogConfig はログ出力先・フォーマットの設定。
+type LogConfig struct {
+	Output string `mapstructure:"output"`
+	Format string `mapstructure:"format"`
+}
+
 // Config は internal/config/config.yml から読み込む設定値。
 type Config struct {
-	AnthropicAPIKey string `mapstructure:"anthropic_api_key"`
+	AnthropicAPIKey string    `mapstructure:"anthropic_api_key"`
+	Log             LogConfig `mapstructure:"log"`
 }
 
 // Load は internal/config/config.yml を読み込んで Config にマッピングする。
@@ -33,6 +41,11 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// NewProvider は DI コンテナ向けに *Config を提供する provider。
+func NewProvider(_ do.Injector) (*Config, error) {
+	return Load()
 }
 
 // SetupAnthropicAPIKey は config.yml から AnthropicAPIKey を読み込み、

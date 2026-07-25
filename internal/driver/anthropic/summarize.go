@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/samber/do/v2"
@@ -15,6 +16,7 @@ import (
 type summarizeAgent struct {
 	client messageCreator
 	reader articlerepo.Repository
+	logger *slog.Logger
 }
 
 func NewSummarizeAgent(i do.Injector) (adapteranthropic.SummarizeAgent, error) {
@@ -22,6 +24,7 @@ func NewSummarizeAgent(i do.Injector) (adapteranthropic.SummarizeAgent, error) {
 	return &summarizeAgent{
 		client: &client.Messages,
 		reader: do.MustInvoke[articlerepo.Repository](i),
+		logger: do.MustInvoke[*slog.Logger](i),
 	}, nil
 }
 
@@ -61,7 +64,7 @@ func (a *summarizeAgent) Run(ctx context.Context, opts adapteranthropic.Summariz
 	}
 
 	defaultLimit := opts.Limit
-	return runAgentLoopWithUsageLog(ctx, a.client, params, func(_, inputJSON string) (string, error) {
+	return runAgentLoopWithUsageLog(ctx, a.logger, a.client, params, func(_, inputJSON string) (string, error) {
 		var input struct {
 			FeedURL string `json:"feed_url"`
 		}
