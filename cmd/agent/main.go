@@ -35,6 +35,7 @@ func main() {
 	do.Provide(i, driveranthropic.NewPreferenceAgent)
 	do.Provide(i, driveranthropic.NewEnrichAgent)
 	do.Provide(i, driveranthropic.NewFeedDiscoveryAgent)
+	do.Provide(i, driveranthropic.NewCurateAgent)
 
 	summarizeUC := usecase.NewSummarizeUsecase(do.MustInvoke[adapteranthropic.SummarizeAgent](i))
 	preferenceUC := usecase.NewPreferenceUsecase(do.MustInvoke[adapteranthropic.PreferenceAgent](i))
@@ -44,6 +45,7 @@ func main() {
 		do.MustInvoke[adapteranthropic.FeedDiscoveryAgent](i),
 		do.MustInvoke[adapterrss.RSSReader](i),
 	)
+	curateUC := usecase.NewCurateUsecase(do.MustInvoke[adapteranthropic.CurateAgent](i))
 
 	root := &cobra.Command{
 		Use:   "rss-agent",
@@ -58,6 +60,7 @@ func main() {
 		agent.NewPreferenceCommand(preferenceUC),
 		agent.NewEnrichCommand(enrichUC),
 		agent.NewDiscoverFeedCommand(discoverFeedUC),
+		agent.NewCurateCommand(curateUC),
 	)
 
 	if err := root.Execute(); err != nil {
