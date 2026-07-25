@@ -252,7 +252,7 @@ rss-feeder/
 │   │           ├── enrich.go                      # enrich サブコマンド（--limit/--force/--feed/--batch-size/--concurrency フラグ）
 │   │           └── discover_feed.go               # discover-feed <url> サブコマンド（rss-agent単独実行用）
 │   └── driver/
-│       ├── readerdb/                            # reader.db への接続・リポジトリ実装
+│       ├── readerdb/                            # rss-feeder-db/reader.db への接続・リポジトリ実装
 │       │   ├── client.go                        # DB 接続（WALモード・busy_timeout=5000ms 設定）
 │       │   ├── article/
 │       │   │   └── article.go                  # ArticleRepository 実装（SQL 文はここ）
@@ -276,7 +276,11 @@ rss-feeder/
 │           ├── summarize.go                     # summarizeAgent（SummarizeAgent 実装）
 │           ├── enrich.go                        # enrichAgent（EnrichAgent 実装、DB保存）
 │           └── discover_feed.go                 # feedDiscoveryAgent（FeedDiscoveryAgent 実装、claude-haiku-4-5）
-├── reader.db                                    # SQLite データベース（gitignore）
+├── rss-feeder-db/                               # DB アーティファクト（schema.sql・マイグレーション・reader.db）
+│   ├── schema.sql                               # 現在の DDL（新規 DB 作成用）
+│   ├── 20260607_initial_schema.sh               # 初期スキーマ作成
+│   ├── 20260614_add_article_metadata.sh         # articles へメタデータカラムを追加
+│   └── reader.db                               # SQLite データベース（gitignore）
 ├── go.mod
 └── go.sum
 ```

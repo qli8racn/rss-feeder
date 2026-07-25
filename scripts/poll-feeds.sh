@@ -1,6 +1,6 @@
 #!/bin/bash
 # devcontainer内のcron（.devcontainer/poll-feeds.cron）から1時間ごとに起動され、RSSフィードの取得・要約を行う。
-# reader.db / internal/config/config.yml への参照が相対パスのため、
+# rss-feeder-db/reader.db / internal/config/config.yml への参照が相対パスのため、
 # 必ずリポジトリルートをカレントディレクトリにして実行する。
 set -uo pipefail
 

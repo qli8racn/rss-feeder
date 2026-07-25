@@ -55,7 +55,7 @@ Claude Code のエージェント・Hooks・SQLite の連携を段階的な機�
 | 項目 | 要求 |
 |------|------|
 | 言語 | Go 1.24 以上 |
-| データストア | SQLite（`reader.db`） |
+| データストア | SQLite（`rss-feeder-db/reader.db`） |
 | 開発環境 | VSCode + devcontainer |
 | ビルド | `go build` 単一バイナリ |
 | テスト | 各フェーズに対応するユニットテストを用意 |

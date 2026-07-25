@@ -24,7 +24,7 @@ go build -o bin/web        ./cmd/web
 GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -o bin/rss-agent -p 1 ./cmd/agent
 ```
 
-DB（`reader.db`）は初回起動時に自動作成される。
+DB（`rss-feeder-db/reader.db`）は初回起動時に自動作成される。
 
 `rss-agent` を使う場合は `internal/config/config.yml` を作成し、`ANTHROPIC_API_KEY` を設定する。
 
@@ -133,8 +133,8 @@ Claude Code が Bash ツールで `rss-feeder` コマンドを実行する際に
 ## DB 確認
 
 ```bash
-sqlite3 reader.db "SELECT * FROM articles LIMIT 5"
-sqlite3 reader.db "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 10"
+sqlite3 rss-feeder-db/reader.db "SELECT * FROM articles LIMIT 5"
+sqlite3 rss-feeder-db/reader.db "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 10"
 ```
 
 ## ドキュメント
