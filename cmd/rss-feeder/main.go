@@ -16,6 +16,7 @@ import (
 	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/adapter/handler/cli"
+	"github.com/qli8racn/rss-feeder/internal/config"
 	driverfeeddiscovery "github.com/qli8racn/rss-feeder/internal/driver/feeddiscovery"
 	driverfeedenrich "github.com/qli8racn/rss-feeder/internal/driver/feedenrich"
 	driverhtmlfetch "github.com/qli8racn/rss-feeder/internal/driver/htmlfetch"
@@ -24,6 +25,11 @@ import (
 	dbrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerdb/auditlog"
 	dbrepodbmaint "github.com/qli8racn/rss-feeder/internal/driver/readerdb/dbmaintenance"
 	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
+	"github.com/qli8racn/rss-feeder/internal/driver/readerpg"
+	pgrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerpg/article"
+	pgrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerpg/auditlog"
+	pgrepodbmaint "github.com/qli8racn/rss-feeder/internal/driver/readerpg/dbmaintenance"
+	pgrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerpg/feed"
 	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/migration"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
@@ -35,16 +41,31 @@ func main() {
 
 	i := do.New()
 
-	do.Provide(i, readerdb.NewClient)
-	do.Provide(i, dbrepoarticle.NewRepository)
-	do.Provide(i, dbrepofeed.NewRepository)
+	do.Provide(i, config.NewProvider)
+	cfg := do.MustInvoke[*config.Config](i)
+
+	if cfg.DB.IsSupabase() {
+		do.Provide(i, readerpg.NewClient)
+		do.Provide(i, pgrepoarticle.NewRepository)
+		do.Provide(i, pgrepofeed.NewRepository)
+		do.Provide(i, pgrepoauditlog.NewRepository)
+		do.Provide(i, pgrepodbmaint.NewMaintainer)
+	} else {
+		do.Provide(i, readerdb.NewClient)
+		do.Provide(i, dbrepoarticle.NewRepository)
+		do.Provide(i, dbrepofeed.NewRepository)
+		do.Provide(i, dbrepoauditlog.NewRepository)
+		do.Provide(i, dbrepodbmaint.NewMaintainer)
+	}
 	do.Provide(i, driverrss.NewReader)
-	do.Provide(i, dbrepoauditlog.NewRepository)
-	do.Provide(i, dbrepodbmaint.NewMaintainer)
 	do.Provide(i, driverhtmlfetch.NewFetcher)
 
 	db := do.MustInvoke[*sql.DB](i)
-	if err := migration.Run(db); err != nil {
+	if cfg.DB.IsSupabase() {
+		if err := migration.RunPostgres(db); err != nil {
+			log.Fatalf("migration failed: %v", err)
+		}
+	} else if err := migration.Run(db); err != nil {
 		log.Fatalf("migration failed: %v", err)
 	}
 

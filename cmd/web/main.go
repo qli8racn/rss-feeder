@@ -18,12 +18,17 @@ import (
 	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/adapter/handler/web"
+	"github.com/qli8racn/rss-feeder/internal/config"
 	driverfeeddiscovery "github.com/qli8racn/rss-feeder/internal/driver/feeddiscovery"
 	driverhtmlfetch "github.com/qli8racn/rss-feeder/internal/driver/htmlfetch"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerdb/auditlog"
 	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
+	"github.com/qli8racn/rss-feeder/internal/driver/readerpg"
+	pgrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerpg/article"
+	pgrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerpg/auditlog"
+	pgrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerpg/feed"
 	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/migration"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
@@ -38,15 +43,29 @@ func main() {
 	flag.Parse()
 
 	i := do.New()
-	do.Provide(i, readerdb.NewClient)
-	do.Provide(i, dbrepoarticle.NewRepository)
-	do.Provide(i, dbrepoauditlog.NewRepository)
-	do.Provide(i, dbrepofeed.NewRepository)
+	do.Provide(i, config.NewProvider)
+	cfg := do.MustInvoke[*config.Config](i)
+
+	if cfg.DB.IsSupabase() {
+		do.Provide(i, readerpg.NewClient)
+		do.Provide(i, pgrepoarticle.NewRepository)
+		do.Provide(i, pgrepoauditlog.NewRepository)
+		do.Provide(i, pgrepofeed.NewRepository)
+	} else {
+		do.Provide(i, readerdb.NewClient)
+		do.Provide(i, dbrepoarticle.NewRepository)
+		do.Provide(i, dbrepoauditlog.NewRepository)
+		do.Provide(i, dbrepofeed.NewRepository)
+	}
 	do.Provide(i, driverrss.NewReader)
 	do.Provide(i, driverhtmlfetch.NewFetcher)
 
 	db := do.MustInvoke[*sql.DB](i)
-	if err := migration.Run(db); err != nil {
+	if cfg.DB.IsSupabase() {
+		if err := migration.RunPostgres(db); err != nil {
+			log.Fatalf("migration failed: %v", err)
+		}
+	} else if err := migration.Run(db); err != nil {
 		log.Fatalf("migration failed: %v", err)
 	}
 

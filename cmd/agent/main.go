@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 
@@ -18,7 +19,11 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
+	"github.com/qli8racn/rss-feeder/internal/driver/readerpg"
+	pgrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerpg/article"
+	pgrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerpg/feed"
 	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
+	"github.com/qli8racn/rss-feeder/internal/migration"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
 
@@ -31,8 +36,17 @@ func main() {
 	i := do.New()
 	do.Provide(i, config.NewProvider)
 	do.Provide(i, driverlogger.NewLogger)
-	do.Provide(i, readerdb.NewClient)
-	do.Provide(i, dbrepoarticle.NewRepository)
+	cfg := do.MustInvoke[*config.Config](i)
+
+	if cfg.DB.IsSupabase() {
+		do.Provide(i, readerpg.NewClient)
+		do.Provide(i, pgrepoarticle.NewRepository)
+		do.Provide(i, pgrepofeed.NewRepository)
+	} else {
+		do.Provide(i, readerdb.NewClient)
+		do.Provide(i, dbrepoarticle.NewRepository)
+		do.Provide(i, dbrepofeed.NewRepository)
+	}
 	do.Provide(i, driverrss.NewReader)
 	do.Provide(i, driverhtmlfetch.NewFetcher)
 	do.Provide(i, driveranthropic.NewSummarizeAgent)
@@ -40,8 +54,18 @@ func main() {
 	do.Provide(i, driveranthropic.NewEnrichAgent)
 	do.Provide(i, driveranthropic.NewFeedDiscoveryAgent)
 	do.Provide(i, driveranthropic.NewCurateAgent)
-	do.Provide(i, dbrepofeed.NewRepository)
 	do.Provide(i, driveranthropic.NewDiscoverAgent)
+
+	db := do.MustInvoke[*sql.DB](i)
+	if cfg.DB.IsSupabase() {
+		if err := migration.RunPostgres(db); err != nil {
+			fmt.Fprintf(os.Stderr, "migration failed: %v\n", err)
+			os.Exit(1)
+		}
+	} else if err := migration.Run(db); err != nil {
+		fmt.Fprintf(os.Stderr, "migration failed: %v\n", err)
+		os.Exit(1)
+	}
 
 	summarizeUC := usecase.NewSummarizeUsecase(do.MustInvoke[adapteranthropic.SummarizeAgent](i))
 	preferenceUC := usecase.NewPreferenceUsecase(do.MustInvoke[adapteranthropic.PreferenceAgent](i))
