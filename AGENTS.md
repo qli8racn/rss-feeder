@@ -105,6 +105,27 @@ cp internal/config/config.example.yml internal/config/config.yml
 > 同様に `go test ./...` も `internal/driver/anthropic` を含む場合 OOM するため、
 > `go test $(go list ./... | grep -v internal/driver/anthropic)` のように除外して実行すること。
 
+### DB ドライバの切り替え（SQLite / Supabase）
+
+`internal/config/config.yml` の `db.driver` で使用するDBを選択する（`rss-feeder`・`web`・
+`rss-agent`・`mcp` の4エントリポイント共通）。
+
+```yaml
+db:
+  driver: supabase   # 省略時・"sqlite" の場合は従来通りローカルの rss-feeder-db/reader.db（SQLite）を使用する
+  supabase:
+    dsn: "postgres://postgres.xxxxxxxx:xxxxxxxx@aws-0-xxxxx.pooler.supabase.com:5432/postgres?sslmode=require"
+```
+
+- `db.driver` が未設定 または `"sqlite"` の場合は既存挙動（SQLiteへの読み書き）のまま。
+- `db.driver: supabase` を指定する場合は、あらかじめ [supabase.com](https://supabase.com) で
+  プロジェクトを作成し、プロジェクト設定画面に表示される接続文字列（Connection string）を
+  そのまま `db.supabase.dsn` に貼り付ける。
+- スキーマ（`feeds`・`articles`・`audit_log`）は各エントリポイントの起動時に自動作成される
+  （SQLite同様、Supabase側も初回起動時の簡易マイグレーションで初期化される）。
+- Self-hosted Supabase（Docker版）は現時点で未対応（`docs/steering/20260726_supabase_db_driver/`
+  の「今後のタスク」参照）。
+
 ---
 
 ## CLI Commands
