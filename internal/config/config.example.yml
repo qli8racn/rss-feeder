@@ -6,7 +6,12 @@ anthropic_api_key: "sk-ant-xxxxxxxx"
 # rss-feeder-db/reader.db（SQLite）を使用する（後方互換）。
 # "supabase" を指定すると、db.supabase.dsn で指定したクラウド上のSupabase（Postgres）
 # プロジェクトへ接続する（supabase.comのプロジェクト設定画面に表示される接続文字列を
-# そのまま貼り付ける）。
+# そのまま貼り付ける）。"sqlite"・"supabase"・空文字以外の値を指定すると起動時にエラーになる。
+#
+# 接続文字列にはDirect connection・Session pooler（ポート5432）・Transaction pooler
+# （ポート6543）の3種類がある。Session pooler（5432）の利用を推奨する。Transaction pooler
+# （6543）はpgxのprepared statementキャッシュと衝突する可能性があるため、やむを得ず使う場合は
+# DSNに `?default_query_exec_mode=simple_protocol` を付与すること。
 # db:
 #   driver: supabase
 #   supabase:

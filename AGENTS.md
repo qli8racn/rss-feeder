@@ -118,11 +118,19 @@ db:
 ```
 
 - `db.driver` が未設定 または `"sqlite"` の場合は既存挙動（SQLiteへの読み書き）のまま。
+  `"sqlite"`・`"supabase"`・空文字以外の値（タイプミス等）を指定した場合は起動時にエラーになる。
 - `db.driver: supabase` を指定する場合は、あらかじめ [supabase.com](https://supabase.com) で
   プロジェクトを作成し、プロジェクト設定画面に表示される接続文字列（Connection string）を
   そのまま `db.supabase.dsn` に貼り付ける。
+- Supabaseダッシュボードの接続文字列には **Direct connection**・**Session pooler**（ポート`5432`）・
+  **Transaction pooler**（ポート`6543`）の3種類がある。**Session pooler（`5432`）の利用を推奨**する。
+  Transaction pooler（`6543`）はpgxのprepared statementキャッシュと衝突する可能性があるため、
+  やむを得ず使う場合はDSNに `default_query_exec_mode=simple_protocol` を付与すること
+  （`pgx/v5/stdlib` がサポートするクエリ実行モードの1つ）。
 - スキーマ（`feeds`・`articles`・`audit_log`）は各エントリポイントの起動時に自動作成される
   （SQLite同様、Supabase側も初回起動時の簡易マイグレーションで初期化される）。
+- 手動確認時の注意点: PostgresのTIMESTAMPTZはUTCに正規化して返すのに対し、SQLiteのDATETIMEは
+  保存時のロケーションをそのまま引きずるため、日時の表示フォーマットに差が出ることがある。
 - Self-hosted Supabase（Docker版）は現時点で未対応（`docs/steering/20260726_supabase_db_driver/`
   の「今後のタスク」参照）。
 
