@@ -14,10 +14,33 @@ type LogConfig struct {
 	Format string `mapstructure:"format"`
 }
 
+// DriverSQLite・DriverSupabase は db.driver に指定可能な値。
+const (
+	DriverSQLite   = "sqlite"
+	DriverSupabase = "supabase"
+)
+
+// DBConfig は使用するDBドライバの選択と、その接続設定。
+type DBConfig struct {
+	Driver   string         `mapstructure:"driver"` // "sqlite"（デフォルト） | "supabase"
+	Supabase SupabaseConfig `mapstructure:"supabase"`
+}
+
+// SupabaseConfig は Supabase（クラウド上のPostgresプロジェクト）への接続設定。
+type SupabaseConfig struct {
+	DSN string `mapstructure:"dsn"`
+}
+
+// IsSupabase は db.driver に "supabase" が指定されているかどうかを返す。
+func (c DBConfig) IsSupabase() bool {
+	return c.Driver == DriverSupabase
+}
+
 // Config は internal/config/config.yml から読み込む設定値。
 type Config struct {
 	AnthropicAPIKey string    `mapstructure:"anthropic_api_key"`
 	Log             LogConfig `mapstructure:"log"`
+	DB              DBConfig  `mapstructure:"db"`
 }
 
 // Load は internal/config/config.yml を読み込んで Config にマッピングする。

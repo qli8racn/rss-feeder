@@ -1,3 +1,13 @@
 # anthropic_api_key は claude.ai（コンシューマー向けチャット）のログイン情報ではなく、
 # Claude Console（https://console.anthropic.com）の「API Keys」から発行する API キーを使用する。
 anthropic_api_key: "sk-ant-xxxxxxxx"
+
+# db.driver は使用するDBを選択する。省略時・"sqlite" の場合は従来通りローカルの
+# rss-feeder-db/reader.db（SQLite）を使用する（後方互換）。
+# "supabase" を指定すると、db.supabase.dsn で指定したクラウド上のSupabase（Postgres）
+# プロジェクトへ接続する（supabase.comのプロジェクト設定画面に表示される接続文字列を
+# そのまま貼り付ける）。
+# db:
+#   driver: supabase
+#   supabase:
+#     dsn: "postgres://postgres.xxxxxxxx:xxxxxxxx@aws-0-xxxxx.pooler.supabase.com:5432/postgres?sslmode=require"

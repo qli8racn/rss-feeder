@@ -39,6 +39,49 @@ func TestLoad_ReadsConfigFile(t *testing.T) {
 	}
 }
 
+func TestLoad_DBDriverDefaultsToEmpty(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.DB.Driver != "" {
+		t.Errorf("DB.Driver: got %q, want empty (未設定はsqlite扱い)", cfg.DB.Driver)
+	}
+	if cfg.DB.IsSupabase() {
+		t.Errorf("IsSupabase: got true, want false (未設定時)")
+	}
+}
+
+func TestLoad_ReadsDBConfig(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "internal", "config")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("failed to create internal/config: %v", err)
+	}
+	content := []byte("db:\n  driver: supabase\n  supabase:\n    dsn: \"postgres://user:pass@host:5432/postgres?sslmode=require\"\n")
+	if err := os.WriteFile(filepath.Join(configDir, "config.yml"), content, 0o600); err != nil {
+		t.Fatalf("failed to write config.yml: %v", err)
+	}
+	t.Chdir(dir)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.DB.Driver != DriverSupabase {
+		t.Errorf("DB.Driver: got %q, want %q", cfg.DB.Driver, DriverSupabase)
+	}
+	if !cfg.DB.IsSupabase() {
+		t.Errorf("IsSupabase: got false, want true")
+	}
+	wantDSN := "postgres://user:pass@host:5432/postgres?sslmode=require"
+	if cfg.DB.Supabase.DSN != wantDSN {
+		t.Errorf("DB.Supabase.DSN: got %q, want %q", cfg.DB.Supabase.DSN, wantDSN)
+	}
+}
+
 func TestLoad_ReadsLogConfig(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "internal", "config")
