@@ -15,6 +15,9 @@ type ListFilterOptions struct {
 	Order    string
 	Page     int
 	PerPage  int
+	// SkipMarkAsRead が true の場合、取得した記事を既読にマークする副作用を行わない
+	// （MCPサーバーの list ツールなど、閲覧そのものを既読化のトリガーにしたくない呼び出し元向け）。
+	SkipMarkAsRead bool
 }
 
 type ListMode int
@@ -80,8 +83,10 @@ func (uc *ListUsecase) ExecuteFiltered(ctx context.Context, opts ListFilterOptio
 		return nil, 0, err
 	}
 
-	if err := uc.markUnreadAsRead(ctx, articles); err != nil {
-		return nil, 0, err
+	if !opts.SkipMarkAsRead {
+		if err := uc.markUnreadAsRead(ctx, articles); err != nil {
+			return nil, 0, err
+		}
 	}
 
 	return articles, total, nil

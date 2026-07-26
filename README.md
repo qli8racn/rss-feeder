@@ -81,6 +81,42 @@ bin/web [--port 8080] [--static-dir web/static]
 
 `GET /api/articles`・`GET /api/articles/search`・`POST /api/articles/{id}/bookmark`・`GET /api/categories`・`POST /api/articles/fetch` を提供する。API の詳細は [機能設計・技術仕様](docs/design.md) を参照。
 
+## MCPサーバーとして使う（Claude Desktop連携）
+
+`cmd/mcp` をビルドしてClaude Desktopに登録すると、チャット上の自然言語からこのプロジェクトの
+フィード管理・記事閲覧を操作できる。ビルド方法・`claude_desktop_config.json` への登録方法は
+[AGENTS.md](AGENTS.md#mcp-servercmdmcp) を参照（DevContainer環境での注意点もそこに記載）。
+
+登録すると、Claude Desktopのツール/コネクタ一覧に `rss-feeder` が表示され、以下のツールが使えるようになる。
+
+| ツール | 説明 | 備考 |
+|-------|------|------|
+| `rss_list` | 保存済み記事を一覧表示（デフォルトは未読のみ。all/bookmarked・categoryで絞り込み可。all・bookmarkedは同時指定不可） | 読み取り専用（閲覧しても既読にならない）。`limit`/`page`でページネーションし、`total`で総件数を返す（デフォルト50件・上限200件） |
+| `rss_search` | キーワードで記事を全文検索 | 読み取り専用。`limit`/`page`/`total`は`rss_list`と同様 |
+| `rss_categories` | 記事に付与済みのカテゴリ一覧を表示 | 読み取り専用 |
+| `rss_list_feeds` | 登録済みRSSフィード一覧を表示 | 読み取り専用 |
+| `rss_bookmark` | 指定した記事IDのブックマークをトグル | |
+| `rss_mark_read` | 指定した記事IDを既読にする | `rss_list`が既読化しないため、既読管理をしたい場合に使う |
+| `rss_add_feed` | フィードURL（またはそのサイトURL）をDBに登録し、直後に記事を取得 | 数秒〜数十秒かかる場合あり |
+| `rss_fetch` | 登録済みの全フィードを取得してDBに保存 | 数秒〜数十秒かかる場合あり |
+| `rss_remove_feed` | 指定フィードと関連記事を完全削除 | 破壊的操作。`confirm`必須・実行前に必ず同意確認 |
+| `rss_enrich` | 記事にAIで要約・カテゴリを付与してDBに保存 | `ANTHROPIC_API_KEY`課金発生。`confirm`・`limit`必須 |
+| `rss_preference` | ブックマーク済み記事から読書傾向を分析 | 読み取り専用だが課金発生。`confirm`必須 |
+
+Claude Desktopのチャットでは、例えば以下のように話しかけると各ツールが呼び出される。
+
+- 「最近ブックマークした記事を教えて」→ `rss_list`（bookmarked絞り込み）
+- 「Goに関する記事を検索して」→ `rss_search`
+- 「この記事は既読にして」→ `rss_mark_read`
+- 「新しいフィード https://example.com/feed.xml を登録して」→ `rss_add_feed`
+- 「登録済みの全フィードを更新して」→ `rss_fetch`
+- 「〇〇フィードはもう読まないから削除して」→ `rss_remove_feed`（実行前にClaudeから確認が入る）
+- 「未要約の記事に要約をつけて。5件まで」→ `rss_enrich`（課金発生の確認が入る）
+- 「自分の読書傾向を分析して」→ `rss_preference`（課金発生の確認が入る）
+
+`rss_remove_feed`・`rss_enrich`・`rss_preference` は実行前にClaude側から同意確認が入る設計なので、
+「はい」等で明示的に同意しない限り実行されない。
+
 ## テスト
 
 ```bash

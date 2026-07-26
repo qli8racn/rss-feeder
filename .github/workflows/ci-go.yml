@@ -41,5 +41,11 @@ jobs:
           GOFLAGS: -gcflags=all=-l=0
         run: go build -p 1 -o bin/rss-agent ./cmd/agent
 
+      - name: Build mcp
+        env:
+          GOMAXPROCS: 1
+          GOFLAGS: -gcflags=all=-l=0
+        run: go build -p 1 -o bin/mcp ./cmd/mcp
+
       - name: Test
         run: go test ./...

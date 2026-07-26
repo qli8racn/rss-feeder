@@ -31,6 +31,6 @@
     "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
   },
   "mounts": [
-    "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
   ]
 }
