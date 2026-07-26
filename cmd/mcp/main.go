@@ -40,14 +40,42 @@ const (
 
 func boolPtr(b bool) *bool { return &b }
 
+// isStdoutOutput は log.output が標準出力を指しているかどうかを判定する。
+// "stdout" の完全一致だけでなく、/dev/stdout・/proc/self/fd/1 のような標準出力への別名パスも
+// stdio transport の通信破壊につながるため併せて弾く。
+func isStdoutOutput(output string) bool {
+	switch output {
+	case "stdout", "/dev/stdout", "/proc/self/fd/1":
+		return true
+	default:
+		return false
+	}
+}
+
+// repoRootMarker は算出したディレクトリが本当にリポジトリルートかどうかの判定に使う目印ファイル。
+// config.example.yml はリポジトリに必ずコミットされているため、config.yml 未設置の初回起動でも
+// 存在確認に使える。
+const repoRootMarker = "internal/config/config.example.yml"
+
 // repoRootFromExecutable は AGENTS.md 記載のビルドコマンド（`go build -o bin/mcp ./cmd/mcp`）による
 // `<repo_root>/bin/mcp` という配置を前提に、実行ファイルの実パスから2階層上をリポジトリルートとして算出する。
+// 算出結果が実際にリポジトリルートであることを repoRootMarker の存在で確認し、`bin/mcp` が
+// 想定外の場所に配置された場合に「migration failed」等の分かりにくい後続エラーではなく、
+// 原因を特定できるエラーを返す。
 func repoRootFromExecutable(exePath string) (string, error) {
 	resolved, err := filepath.EvalSymlinks(exePath)
 	if err != nil {
 		return "", fmt.Errorf("実行ファイルパス(%s)のシンボリックリンク解決に失敗しました: %w", exePath, err)
 	}
-	return filepath.Dir(filepath.Dir(resolved)), nil
+	repoRoot := filepath.Dir(filepath.Dir(resolved))
+	if _, err := os.Stat(filepath.Join(repoRoot, repoRootMarker)); err != nil {
+		return "", fmt.Errorf(
+			"実行ファイル(%s)から算出したリポジトリルート(%s)に%sが見つかりません。"+
+				"bin/mcp はビルドコマンドどおり <repo_root>/bin/mcp に配置してください: %w",
+			exePath, repoRoot, repoRootMarker, err,
+		)
+	}
+	return repoRoot, nil
 }
 
 // chdirToRepoRoot は cmd/mcp をリポジトリルートで実行しているかのように振る舞わせるための処理。
@@ -95,8 +123,8 @@ func main() {
 	// ログ出力先が stdout だと通信を破壊してしまう。誤設定に気づけるよう、DI配線を
 	// 進める前に検知して起動を中断する（docs/steering/20260726_mcp_server/design.md 参照）。
 	cfg := do.MustInvoke[*config.Config](i)
-	if cfg.Log.Output == "stdout" {
-		fmt.Fprintln(os.Stderr, "cmd/mcp は stdio transport を使用するため、config.yml の log.output に stdout は指定できません（stderr またはファイルパスを指定してください）")
+	if isStdoutOutput(cfg.Log.Output) {
+		fmt.Fprintln(os.Stderr, "cmd/mcp は stdio transport を使用するため、config.yml の log.output に標準出力（stdout・/dev/stdout・/proc/self/fd/1）は指定できません（stderr またはファイルパスを指定してください）")
 		os.Exit(1)
 	}
 
@@ -143,69 +171,73 @@ func main() {
 
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: serverName, Version: serverVersion}, nil)
 
+	// ツール名には rss_ 接頭辞を付ける。Claude Desktop 等に複数の MCP サーバーを登録した環境では
+	// "list"・"search" のような汎用的な名前だとLLMがどのドメインのツールか判別しづらいため。
+	// description も「RSSフィーダーに保存済みの記事を〜」のように主語を明示する。
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
-		Name:        "list",
-		Description: "保存済み記事を一覧表示する。デフォルトは未読のみ。all・bookmarked・category で絞り込み可能（all と bookmarked は同時指定不可）。",
+		Name:        "rss_list",
+		Description: "RSSフィーダーに保存済みの記事を一覧表示する。デフォルトは未読のみ。all・bookmarked・category で絞り込み可能（all と bookmarked は同時指定不可）。limit・page でページネーションし、応答の total で絞り込み条件に一致する総数を返す（デフォルト50件・上限200件）。閲覧による既読化は行わない読み取り専用のツール。",
 		Annotations: &mcpsdk.ToolAnnotations{ReadOnlyHint: true},
 	}, handlermcp.ListTool(listUC))
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
-		Name:        "search",
-		Description: "キーワードで記事を全文検索する。bookmarked・category で絞り込み可能。",
+		Name:        "rss_search",
+		Description: "RSSフィーダーに保存済みの記事をキーワードで全文検索する。bookmarked・category で絞り込み可能。limit・page でページネーションし、応答の total で検索条件に一致する総数を返す（デフォルト50件・上限200件）。",
 		Annotations: &mcpsdk.ToolAnnotations{ReadOnlyHint: true},
 	}, handlermcp.SearchTool(searchUC))
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
-		Name:        "categories",
-		Description: "記事に付与済みのカテゴリ一覧を表示する。",
+		Name:        "rss_categories",
+		Description: "RSSフィーダーに保存済みの記事に付与済みのカテゴリ一覧を表示する。",
 		Annotations: &mcpsdk.ToolAnnotations{ReadOnlyHint: true},
 	}, handlermcp.CategoriesTool(categoriesUC))
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
-		Name:        "list-feeds",
-		Description: "登録済みRSSフィード一覧を表示する。",
+		Name:        "rss_list_feeds",
+		Description: "RSSフィーダーに登録済みのRSSフィード一覧を表示する。",
 		Annotations: &mcpsdk.ToolAnnotations{ReadOnlyHint: true},
 	}, handlermcp.ListFeedsTool(listFeedsUC))
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
-		Name:        "bookmark",
-		Description: "指定した記事IDのブックマーク登録/解除をトグルする。",
+		Name:        "rss_bookmark",
+		Description: "RSSフィーダーで指定した記事IDのブックマーク登録/解除をトグルする。",
 		Annotations: &mcpsdk.ToolAnnotations{DestructiveHint: boolPtr(false)},
 	}, handlermcp.BookmarkTool(bookmarkUC))
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
-		Name: "add-feed",
-		Description: "RSS/AtomフィードのURL、またはそのフィードを持つサイトのURLをDBに登録し、" +
+		Name: "rss_add_feed",
+		Description: "RSS/AtomフィードのURL、またはそのフィードを持つサイトのURLをRSSフィーダーのDBに登録し、" +
 			"登録直後に記事を1回取得する。フィードURLの探索を伴うため実行に数秒〜数十秒かかることがある。",
 		Annotations: &mcpsdk.ToolAnnotations{DestructiveHint: boolPtr(false)},
 	}, handlermcp.AddFeedTool(addFeedUC, resolveFeedURLUC, fetchUC, logger))
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
-		Name:        "fetch",
-		Description: "登録済みの全フィードを取得してDBに保存する。ネットワークI/Oのため数秒〜数十秒かかることがある。",
+		Name:        "rss_fetch",
+		Description: "RSSフィーダーに登録済みの全フィードを取得してDBに保存する。ネットワークI/Oのため数秒〜数十秒かかることがある。",
 		Annotations: &mcpsdk.ToolAnnotations{DestructiveHint: boolPtr(false)},
 	}, handlermcp.FetchTool(fetchUC))
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
-		Name: "remove-feed",
-		Description: "指定したフィードと、それに紐づく記事を完全に削除する破壊的操作(元に戻せない)。" +
-			"実行前に必ずユーザーに削除対象(フィード名・記事件数など。list-feeds・list で確認できる)を提示し、" +
+		Name: "rss_remove_feed",
+		Description: "RSSフィーダーから指定したフィードと、それに紐づく記事を完全に削除する破壊的操作(元に戻せない)。" +
+			"実行前に必ずユーザーに削除対象(フィード名・記事件数など。rss_list_feeds・rss_list で確認できる)を提示し、" +
 			"明示的な同意を得てから confirm:true を渡すこと。ユーザーの同意なしに true を渡してはならない。",
 		Annotations: &mcpsdk.ToolAnnotations{DestructiveHint: boolPtr(true)},
 	}, handlermcp.RemoveFeedTool(removeFeedUC))
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
-		Name: "enrich",
-		Description: "記事にAIによる要約・カテゴリを付与してDBに保存する。ANTHROPIC_API_KEYによる追加課金が" +
+		Name: "rss_enrich",
+		Description: "RSSフィーダーに保存済みの記事にAIによる要約・カテゴリを付与してDBに保存する。ANTHROPIC_API_KEYによる追加課金が" +
 			"発生するため、実行前に必ずユーザーに『ANTHROPIC_API_KEYを使用した追加料金が発生しますが、実行して" +
 			"よいですか？』と確認し、明示的な同意を得てから confirm:true を渡すこと。ユーザーの同意なしに true " +
-			"を渡してはならない。limit で処理件数の上限を必ず指定すること(無制限実行を避けるため)。",
+			"を渡してはならない。limit で処理件数の上限を必ず指定すること(無制限実行を避けるため。サーバー側でも" +
+			"limit・batch_size は100、concurrency は5を上限にクランプされる)。",
 		Annotations: &mcpsdk.ToolAnnotations{DestructiveHint: boolPtr(false)},
 	}, handlermcp.EnrichTool(enrichUC))
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
-		Name: "preference",
-		Description: "ブックマーク済み記事からユーザーの趣向を分析する(DB更新は行わない読み取り専用処理)。" +
+		Name: "rss_preference",
+		Description: "RSSフィーダーでブックマーク済みの記事からユーザーの趣向を分析する(DB更新は行わない読み取り専用処理)。" +
 			"ANTHROPIC_API_KEYによる追加課金が発生するため、実行前に必ずユーザーに『ANTHROPIC_API_KEYを使用した" +
 			"追加料金が発生しますが、実行してよいですか？』と確認し、明示的な同意を得てから confirm:true を渡す" +
 			"こと。ユーザーの同意なしに true を渡してはならない。",

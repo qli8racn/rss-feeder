@@ -236,6 +236,26 @@ func TestListUsecase_ExecuteFiltered_MarksUnreadAsRead(t *testing.T) {
 	}
 }
 
+func TestListUsecase_ExecuteFiltered_SkipMarkAsRead(t *testing.T) {
+	repo := &mockListArticleRepo{
+		filtered: []domain.Article{
+			{ID: 1, Title: "A", Read: false},
+			{ID: 2, Title: "B", Read: true},
+		},
+	}
+	uc := NewListUsecase(repo)
+
+	if _, _, err := uc.ExecuteFiltered(context.Background(), ListFilterOptions{
+		Mode:           ListModeAll,
+		SkipMarkAsRead: true,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(repo.markedIDs) != 0 {
+		t.Errorf("markedIDs: got %+v, want none (SkipMarkAsRead=true)", repo.markedIDs)
+	}
+}
+
 func TestListUsecase_EmptyList(t *testing.T) {
 	repo := &mockListArticleRepo{unread: []domain.Article{}}
 	uc := NewListUsecase(repo)
