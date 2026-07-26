@@ -7,7 +7,7 @@ import (
 
 func TestCheckBookmarkedUsecase_ReturnsCount(t *testing.T) {
 	repo := &mockResetArticleRepo{bookmarked: 3}
-	uc := NewCheckBookmarkedUsecase(repo)
+	uc := NewCheckBookmarkedUsecase(repo, testUserID)
 
 	count, err := uc.Execute(context.Background())
 	if err != nil {
@@ -20,7 +20,7 @@ func TestCheckBookmarkedUsecase_ReturnsCount(t *testing.T) {
 
 func TestCheckBookmarkedUsecase_ZeroBookmarked(t *testing.T) {
 	repo := &mockResetArticleRepo{bookmarked: 0}
-	uc := NewCheckBookmarkedUsecase(repo)
+	uc := NewCheckBookmarkedUsecase(repo, testUserID)
 
 	count, err := uc.Execute(context.Background())
 	if err != nil {

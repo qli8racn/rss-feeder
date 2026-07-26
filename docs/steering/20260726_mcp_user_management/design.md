@@ -176,3 +176,31 @@ func (uc *ResolveUserUsecase) Execute(ctx context.Context, name string) (*domain
 - フィード単位の設計比較で述べた「同一外部フィードを複数ユーザーが購読した場合のfetch/enrich重複コスト」は、利用者数が増えた場合に再検討する
 - `users` テーブルにはユーザーの削除・改名機能を設けない（要件のスコープ外）。誤った識別子で `cmd/mcp --user-id` を起動してしまった場合の復旧手段（該当ユーザーの `feeds.user_id` を手動で付け替える等）は今回設計しない
 - FK制約（`PRAGMA foreign_keys`）を有効化するかどうかは既存踏襲で見送ったが、データ整合性を厳格化したい場合は別途検討する
+
+## 実装時の追記（設計からの逸脱点）
+
+実装時に本設計と異なる判断を行った箇所を以下に記録する。@pm によるレビューを推奨する。
+
+1. **`articles.url` のユニーク制約変更（設計時未記載）**: `feeds` を「1ユーザー1購読=1行」にした結果、
+   複数ユーザーが同一の外部フィードURLを購読すると `articles` にも同じ記事URLが複数ユーザー分保存される
+   想定だったが、既存の `articles.url TEXT UNIQUE NOT NULL`（グローバルなユニーク制約）がこれをブロック
+   することが実装時に判明した（2人目以降のユーザーの記事保存が `articlerepo.ErrDuplicate` としてサイレントに
+   スキップされてしまう）。この設計はfeeds側の変更とセットで必要な帰結であるため、`feeds` と同様の
+   テーブル再作成手順で `UNIQUE(feed_id, url)` に変更する対応を追加した（`internal/migration/migration.go`
+   の `recreateArticlesTableWithFeedScope`・`rss-feeder-db/20260726_add_user_management.sh` の該当箇所）。
+2. **`articlerepo.Repository` の `Search`・`DistinctCategories` へのuserID追加**: 本設計の「repository層の変更方針」節では
+   これら2メソッドをuserIDスコープ対象の列挙に含めていなかったが、「usecase層の変更方針」節および要件
+   （記事検索・カテゴリ一覧もユーザーごとに分離される）と整合させるため、実装では両メソッドにも
+   `userID` を追加してスコープした。
+3. **DIコンテナへのuserID登録方式**: 本設計では専用型 `usecase.UserID`（`type UserID int64`）をDIコンテナに
+   登録する案を示していたが、`internal/driver/anthropic`（driver層）が `internal/usecase`（本来usecase層に
+   依存されるべきでない層）をインポートすることになり、依存方向のルール（`driver → adapter(interface)`）に
+   反するため採用しなかった。代わりに、既存の `domain.User`（`internal/domain`）を `do.ProvideValue` で
+   DIコンテナに登録し、`NewPreferenceAgent`・`NewCurateAgent`・`NewDiscoverAgent` 内で
+   `do.MustInvoke[*domain.User](i).ID` として取得する方式を採用した（int64 との型衝突を避けるという
+   本来の狙いは `*domain.User` という既存の型でも同様に達成できる）。
+4. **`cmd/agent/main.go` に `migration.Run(db)` 呼び出しが存在しなかった**: 既存実装では `cmd/agent`
+   （`bin/rss-agent`）が `migration.Run(db)` を呼び出しておらず、`users` テーブルが存在しない状態で
+   `ResolveUserUsecase` を呼ぶとエラーになる不整合があったため、他のエントリポイントと同様に
+   `migration.Run(db)` の呼び出しを追加した（本来 `cmd/rss-feeder`・`cmd/web` と同じ関心事のため既存の
+   欠落と判断し、本フェーズの変更に含めた）。

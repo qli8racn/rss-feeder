@@ -11,20 +11,21 @@ import (
 
 type AddFeedUsecase struct {
 	feedRepo feedrepo.Repository
+	userID   int64
 }
 
-func NewAddFeedUsecase(feedRepo feedrepo.Repository) *AddFeedUsecase {
-	return &AddFeedUsecase{feedRepo: feedRepo}
+func NewAddFeedUsecase(feedRepo feedrepo.Repository, userID int64) *AddFeedUsecase {
+	return &AddFeedUsecase{feedRepo: feedRepo, userID: userID}
 }
 
 func (uc *AddFeedUsecase) Execute(ctx context.Context, url string) (*domain.Feed, error) {
-	if err := uc.feedRepo.Register(ctx, url); err != nil {
+	if err := uc.feedRepo.Register(ctx, url, uc.userID); err != nil {
 		if errors.Is(err, feedrepo.ErrAlreadyExists) {
 			return nil, fmt.Errorf("すでに登録済みです %s: %w", url, err)
 		}
 		return nil, err
 	}
-	feed, err := uc.feedRepo.FindByURL(ctx, url)
+	feed, err := uc.feedRepo.FindByURL(ctx, url, uc.userID)
 	if err != nil {
 		return nil, err
 	}

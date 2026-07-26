@@ -15,7 +15,7 @@ func TestRemoveFeedUsecase_RemovesSuccessfully(t *testing.T) {
 			removedID = id
 			return nil
 		},
-	})
+	}, testUserID)
 
 	if err := uc.Execute(context.Background(), 42); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -30,7 +30,7 @@ func TestRemoveFeedUsecase_NotFound(t *testing.T) {
 		removeFn: func(_ context.Context, _ int64) error {
 			return feedrepo.ErrNotFound
 		},
-	})
+	}, testUserID)
 
 	if err := uc.Execute(context.Background(), 99); err == nil {
 		t.Fatal("expected error, got nil")
@@ -43,7 +43,7 @@ func TestRemoveFeedUsecase_RepoError(t *testing.T) {
 		removeFn: func(_ context.Context, _ int64) error {
 			return repoErr
 		},
-	})
+	}, testUserID)
 
 	if err := uc.Execute(context.Background(), 1); !errors.Is(err, repoErr) {
 		t.Errorf("expected repo error, got %v", err)

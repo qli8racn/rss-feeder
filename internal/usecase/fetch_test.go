@@ -21,23 +21,33 @@ func (m *mockArticleRepo) Save(_ context.Context, a domain.Article) error {
 	}
 	return nil
 }
-func (m *mockArticleRepo) FindAll(_ context.Context) ([]domain.Article, error)    { return nil, nil }
-func (m *mockArticleRepo) FindUnread(_ context.Context) ([]domain.Article, error) { return nil, nil }
-func (m *mockArticleRepo) FindBookmarked(_ context.Context) ([]domain.Article, error) {
+func (m *mockArticleRepo) FindAll(_ context.Context, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockArticleRepo) FindByID(_ context.Context, _ int64) (*domain.Article, error) {
+func (m *mockArticleRepo) FindUnread(_ context.Context, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockArticleRepo) Update(_ context.Context, _ domain.Article) error     { return nil }
-func (m *mockArticleRepo) MarkAsRead(_ context.Context, _ []int64) error        { return nil }
-func (m *mockArticleRepo) DeleteNonBookmarked(_ context.Context) (int64, error) { return 0, nil }
-func (m *mockArticleRepo) CountNonBookmarked(_ context.Context) (int64, error)  { return 0, nil }
-func (m *mockArticleRepo) CountBookmarked(_ context.Context) (int64, error)     { return 0, nil }
+func (m *mockArticleRepo) FindBookmarked(_ context.Context, _ int64) ([]domain.Article, error) {
+	return nil, nil
+}
+func (m *mockArticleRepo) FindByID(_ context.Context, _ int64, _ int64) (*domain.Article, error) {
+	return nil, nil
+}
+func (m *mockArticleRepo) Update(_ context.Context, _ domain.Article, _ int64) error { return nil }
+func (m *mockArticleRepo) MarkAsRead(_ context.Context, _ []int64, _ int64) error    { return nil }
+func (m *mockArticleRepo) DeleteNonBookmarked(_ context.Context, _ int64) (int64, error) {
+	return 0, nil
+}
+func (m *mockArticleRepo) CountNonBookmarked(_ context.Context, _ int64) (int64, error) {
+	return 0, nil
+}
+func (m *mockArticleRepo) CountBookmarked(_ context.Context, _ int64) (int64, error) {
+	return 0, nil
+}
 func (m *mockArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.Article, error) {
+func (m *mockArticleRepo) Search(_ context.Context, _ string, _ bool, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
 func (m *mockArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate) error {
@@ -49,10 +59,10 @@ func (m *mockArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain
 func (m *mockArticleRepo) UpdateMetadataBatch(_ context.Context, _ []articlerepo.MetadataUpdate) (int64, error) {
 	return 0, nil
 }
-func (m *mockArticleRepo) FindFiltered(_ context.Context, _ articlerepo.ListFilter) ([]domain.Article, int64, error) {
+func (m *mockArticleRepo) FindFiltered(_ context.Context, _ articlerepo.ListFilter, _ int64) ([]domain.Article, int64, error) {
 	return nil, 0, nil
 }
-func (m *mockArticleRepo) DistinctCategories(_ context.Context) ([]string, error) {
+func (m *mockArticleRepo) DistinctCategories(_ context.Context, _ int64) ([]string, error) {
 	return nil, nil
 }
 
@@ -61,28 +71,36 @@ type mockFeedRepo struct {
 	findByURLFn func(ctx context.Context, url string) (*domain.Feed, error)
 	listAllFn   func(ctx context.Context) ([]domain.Feed, error)
 	removeFn    func(ctx context.Context, id int64) error
+	gotUserID   int64 // 直近に呼ばれたメソッドに渡されたuserID
 }
 
-func (m *mockFeedRepo) Save(_ context.Context, _ domain.Feed) (int64, error) { return 1, nil }
-func (m *mockFeedRepo) FindByURL(ctx context.Context, url string) (*domain.Feed, error) {
+func (m *mockFeedRepo) Save(_ context.Context, _ domain.Feed, userID int64) (int64, error) {
+	m.gotUserID = userID
+	return 1, nil
+}
+func (m *mockFeedRepo) FindByURL(ctx context.Context, url string, userID int64) (*domain.Feed, error) {
+	m.gotUserID = userID
 	if m.findByURLFn != nil {
 		return m.findByURLFn(ctx, url)
 	}
 	return nil, nil
 }
-func (m *mockFeedRepo) Register(ctx context.Context, url string) error {
+func (m *mockFeedRepo) Register(ctx context.Context, url string, userID int64) error {
+	m.gotUserID = userID
 	if m.registerFn != nil {
 		return m.registerFn(ctx, url)
 	}
 	return nil
 }
-func (m *mockFeedRepo) ListAll(ctx context.Context) ([]domain.Feed, error) {
+func (m *mockFeedRepo) ListAll(ctx context.Context, userID int64) ([]domain.Feed, error) {
+	m.gotUserID = userID
 	if m.listAllFn != nil {
 		return m.listAllFn(ctx)
 	}
 	return nil, nil
 }
-func (m *mockFeedRepo) Remove(ctx context.Context, id int64) error {
+func (m *mockFeedRepo) Remove(ctx context.Context, id int64, userID int64) error {
+	m.gotUserID = userID
 	if m.removeFn != nil {
 		return m.removeFn(ctx, id)
 	}
@@ -109,7 +127,9 @@ func TestFetchUsecase_SkipsDuplicates(t *testing.T) {
 	repo := &mockArticleRepo{existing: map[string]bool{"https://example.com/1": true}}
 	uc := NewFetchUsecase(repo, &mockFeedRepo{}, &mockRSSReader{
 		articles: []domain.Article{{URL: "https://example.com/1", Title: "Test"}},
-	})
+	},
+		testUserID,
+	)
 
 	result, err := uc.Execute(context.Background(), []string{"https://feed.example.com"})
 	if err != nil {
@@ -129,7 +149,9 @@ func TestFetchUsecase_SavesNewArticles(t *testing.T) {
 			{URL: "https://example.com/1", Title: "Article 1"},
 			{URL: "https://example.com/2", Title: "Article 2"},
 		},
-	})
+	},
+		testUserID,
+	)
 
 	result, err := uc.Execute(context.Background(), []string{"https://feed.example.com"})
 	if err != nil {
@@ -143,7 +165,9 @@ func TestFetchUsecase_SavesNewArticles(t *testing.T) {
 func TestFetchUsecase_HandlesReaderError(t *testing.T) {
 	uc := NewFetchUsecase(&mockArticleRepo{}, &mockFeedRepo{}, &mockRSSReader{
 		err: errors.New("connection failed"),
-	})
+	},
+		testUserID,
+	)
 
 	result, err := uc.Execute(context.Background(), []string{"https://feed.example.com"})
 	if err == nil {
@@ -159,6 +183,7 @@ func TestFetchUsecase_NonDuplicateSaveError_CountsAsError(t *testing.T) {
 		&mockSaveErrRepo{},
 		&mockFeedRepo{},
 		&mockRSSReader{articles: []domain.Article{{URL: "https://example.com/1", Title: "A"}}},
+		testUserID,
 	)
 
 	result, err := uc.Execute(context.Background(), []string{"https://feed.example.com"})
@@ -177,7 +202,9 @@ func (m *mockSaveErrRepo) Save(_ context.Context, _ domain.Article) error {
 }
 
 func TestFetchUsecase_ExecuteAll_NoFeeds(t *testing.T) {
-	uc := NewFetchUsecase(&mockArticleRepo{}, &mockFeedRepo{}, &mockRSSReader{})
+	uc := NewFetchUsecase(&mockArticleRepo{}, &mockFeedRepo{}, &mockRSSReader{},
+		testUserID,
+	)
 
 	result, err := uc.ExecuteAll(context.Background())
 	if err != nil {
@@ -193,7 +220,9 @@ func TestFetchUsecase_ExecuteAll_ListFeedsError(t *testing.T) {
 		listAllFn: func(_ context.Context) ([]domain.Feed, error) {
 			return nil, errors.New("db unavailable")
 		},
-	}, &mockRSSReader{})
+	}, &mockRSSReader{},
+		testUserID,
+	)
 
 	result, err := uc.ExecuteAll(context.Background())
 	if err == nil {
@@ -211,7 +240,9 @@ func TestFetchUsecase_ExecuteAll_FetchesRegisteredFeeds(t *testing.T) {
 		},
 	}, &mockRSSReader{
 		articles: []domain.Article{{URL: "https://example.com/1", Title: "A"}},
-	})
+	},
+		testUserID,
+	)
 
 	result, err := uc.ExecuteAll(context.Background())
 	if err != nil {

@@ -8,7 +8,7 @@ import (
 
 func TestMarkReadUsecase_Execute(t *testing.T) {
 	repo := &mockListArticleRepo{}
-	uc := NewMarkReadUsecase(repo)
+	uc := NewMarkReadUsecase(repo, testUserID)
 
 	if err := uc.Execute(context.Background(), []int64{1, 2}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -20,7 +20,7 @@ func TestMarkReadUsecase_Execute(t *testing.T) {
 
 func TestMarkReadUsecase_Execute_EmptyIDs(t *testing.T) {
 	repo := &mockListArticleRepo{}
-	uc := NewMarkReadUsecase(repo)
+	uc := NewMarkReadUsecase(repo, testUserID)
 
 	err := uc.Execute(context.Background(), nil)
 	if !errors.Is(err, ErrMarkReadIDsRequired) {
@@ -34,7 +34,7 @@ func TestMarkReadUsecase_Execute_EmptyIDs(t *testing.T) {
 func TestMarkReadUsecase_Execute_RepoError(t *testing.T) {
 	wantErr := errors.New("db error")
 	repo := &mockListArticleRepo{markErr: wantErr}
-	uc := NewMarkReadUsecase(repo)
+	uc := NewMarkReadUsecase(repo, testUserID)
 
 	err := uc.Execute(context.Background(), []int64{1})
 	if !errors.Is(err, wantErr) {

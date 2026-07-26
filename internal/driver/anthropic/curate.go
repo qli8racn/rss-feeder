@@ -19,14 +19,18 @@ type curateAgent struct {
 	client messageCreator
 	repo   articlerepo.Repository
 	logger *slog.Logger
+	userID int64
 }
 
+// NewCurateAgent は *domain.User をDIコンテナから取得し、userIDを保持する
+// （NewPreferenceAgent と同じ理由。internal/driver/anthropic/preference.go 参照）。
 func NewCurateAgent(i do.Injector) (adapteranthropic.CurateAgent, error) {
 	client := newAnthropicClient()
 	return &curateAgent{
 		client: &client.Messages,
 		repo:   do.MustInvoke[articlerepo.Repository](i),
 		logger: do.MustInvoke[*slog.Logger](i),
+		userID: do.MustInvoke[*domain.User](i).ID,
 	}, nil
 }
 
@@ -145,7 +149,7 @@ func (a *curateAgent) Run(ctx context.Context, opts adapteranthropic.CurateOptio
 
 		case "fetch_bookmarked_articles":
 			log.Info("ブックマーク記事を取得中")
-			articles, err := a.repo.FindBookmarked(ctx)
+			articles, err := a.repo.FindBookmarked(ctx, a.userID)
 			if err != nil {
 				return "", err
 			}

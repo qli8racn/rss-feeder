@@ -8,12 +8,13 @@ import (
 
 type ListCategoriesUsecase struct {
 	articleRepo articlerepo.Repository
+	userID      int64
 }
 
-func NewListCategoriesUsecase(articleRepo articlerepo.Repository) *ListCategoriesUsecase {
-	return &ListCategoriesUsecase{articleRepo: articleRepo}
+func NewListCategoriesUsecase(articleRepo articlerepo.Repository, userID int64) *ListCategoriesUsecase {
+	return &ListCategoriesUsecase{articleRepo: articleRepo, userID: userID}
 }
 
 func (uc *ListCategoriesUsecase) Execute(ctx context.Context) ([]string, error) {
-	return uc.articleRepo.DistinctCategories(ctx)
+	return uc.articleRepo.DistinctCategories(ctx, uc.userID)
 }

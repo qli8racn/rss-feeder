@@ -44,22 +44,25 @@ type BackfillMetadataUsecase struct {
 	articleRepo articlerepo.Repository
 	feedRepo    feedrepo.Repository
 	rssReader   adapterrss.RSSReader
+	userID      int64
 }
 
 func NewBackfillMetadataUsecase(
 	articleRepo articlerepo.Repository,
 	feedRepo feedrepo.Repository,
 	rssReader adapterrss.RSSReader,
+	userID int64,
 ) *BackfillMetadataUsecase {
 	return &BackfillMetadataUsecase{
 		articleRepo: articleRepo,
 		feedRepo:    feedRepo,
 		rssReader:   rssReader,
+		userID:      userID,
 	}
 }
 
 func (uc *BackfillMetadataUsecase) Execute(ctx context.Context) (BackfillMetadataResult, error) {
-	feeds, err := uc.feedRepo.ListAll(ctx)
+	feeds, err := uc.feedRepo.ListAll(ctx, uc.userID)
 	if err != nil {
 		return BackfillMetadataResult{}, fmt.Errorf("フィード一覧の取得に失敗: %w", err)
 	}

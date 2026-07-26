@@ -19,6 +19,11 @@ type repository struct {
 const (
 	articleColumns        = "id, feed_id, url, title, content, published_at, read, bookmarked, fetched_at, publisher, thumbnail_url, summary, category"
 	aliasedArticleColumns = "a.id, a.feed_id, a.url, a.title, a.content, a.published_at, a.read, a.bookmarked, a.fetched_at, a.publisher, a.thumbnail_url, a.summary, a.category"
+
+	// ownedByUserSubquery は articles.feed_id が userID の所有するフィードを指しているかを
+	// 判定するサブクエリ。記事IDはユーザー横断の連番のため、これを条件に加えないと、
+	// 他ユーザーの記事IDを推測して操作できてしまう。
+	ownedByUserSubquery = "feed_id IN (SELECT id FROM feeds WHERE user_id = ?)"
 )
 
 func NewRepository(i do.Injector) (articlerepo.Repository, error) {
@@ -43,19 +48,21 @@ func (r *repository) Save(ctx context.Context, a domain.Article) error {
 	return nil
 }
 
-func (r *repository) FindAll(ctx context.Context) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles ORDER BY published_at DESC", articleColumns)
-	return r.query(ctx, q)
+func (r *repository) FindAll(ctx context.Context, userID int64) ([]domain.Article, error) {
+	q := fmt.Sprintf("SELECT %s FROM articles WHERE %s ORDER BY published_at DESC", articleColumns, ownedByUserSubquery)
+	return r.queryArgs(ctx, q, userID)
 }
 
-func (r *repository) FindUnread(ctx context.Context) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles WHERE read = 0 ORDER BY published_at DESC", articleColumns)
-	return r.query(ctx, q)
+func (r *repository) FindUnread(ctx context.Context, userID int64) ([]domain.Article, error) {
+	q := fmt.Sprintf("SELECT %s FROM articles WHERE read = 0 AND %s ORDER BY published_at DESC", articleColumns, ownedByUserSubquery)
+	return r.queryArgs(ctx, q, userID)
 }
 
-func (r *repository) FindBookmarked(ctx context.Context) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s, COALESCE(f.feed_url, '') FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id WHERE a.bookmarked = 1 ORDER BY a.published_at DESC", aliasedArticleColumns)
-	rows, err := r.db.QueryContext(ctx, q)
+func (r *repository) FindBookmarked(ctx context.Context, userID int64) ([]domain.Article, error) {
+	q := fmt.Sprintf(
+		"SELECT %s, COALESCE(f.feed_url, '') FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id WHERE a.bookmarked = 1 AND a.%s ORDER BY a.published_at DESC",
+		aliasedArticleColumns, ownedByUserSubquery)
+	rows, err := r.db.QueryContext(ctx, q, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -81,9 +88,9 @@ func (r *repository) FetchLatest(ctx context.Context, limit int, feedURL string)
 	return scanArticlesWithFeed(rows)
 }
 
-func (r *repository) FindByID(ctx context.Context, id int64) (*domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles WHERE id = ?", articleColumns)
-	row := r.db.QueryRowContext(ctx, q, id)
+func (r *repository) FindByID(ctx context.Context, id int64, userID int64) (*domain.Article, error) {
+	q := fmt.Sprintf("SELECT %s FROM articles WHERE id = ? AND %s", articleColumns, ownedByUserSubquery)
+	row := r.db.QueryRowContext(ctx, q, id, userID)
 	a, err := scanArticle(row.Scan)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -94,50 +101,53 @@ func (r *repository) FindByID(ctx context.Context, id int64) (*domain.Article, e
 	return a, nil
 }
 
-func (r *repository) Update(ctx context.Context, a domain.Article) error {
-	_, err := r.db.ExecContext(ctx, `
-		UPDATE articles SET read = ?, bookmarked = ? WHERE id = ?
-	`, a.Read, a.Bookmarked, a.ID)
+func (r *repository) Update(ctx context.Context, a domain.Article, userID int64) error {
+	q := fmt.Sprintf(`UPDATE articles SET read = ?, bookmarked = ? WHERE id = ? AND %s`, ownedByUserSubquery)
+	_, err := r.db.ExecContext(ctx, q, a.Read, a.Bookmarked, a.ID, userID)
 	return err
 }
 
-func (r *repository) MarkAsRead(ctx context.Context, ids []int64) error {
+func (r *repository) MarkAsRead(ctx context.Context, ids []int64, userID int64) error {
 	if len(ids) == 0 {
 		return nil
 	}
 	placeholders := strings.Repeat("?,", len(ids))
 	placeholders = placeholders[:len(placeholders)-1]
-	args := make([]any, len(ids))
-	for i, id := range ids {
-		args[i] = id
+	args := make([]any, 0, len(ids)+1)
+	for _, id := range ids {
+		args = append(args, id)
 	}
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE articles SET read = 1 WHERE id IN (`+placeholders+`)`,
-		args...)
+	args = append(args, userID)
+	q := fmt.Sprintf(`UPDATE articles SET read = 1 WHERE id IN (%s) AND %s`, placeholders, ownedByUserSubquery)
+	_, err := r.db.ExecContext(ctx, q, args...)
 	return err
 }
 
-func (r *repository) DeleteNonBookmarked(ctx context.Context) (int64, error) {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM articles WHERE bookmarked = 0`)
+func (r *repository) DeleteNonBookmarked(ctx context.Context, userID int64) (int64, error) {
+	q := fmt.Sprintf(`DELETE FROM articles WHERE bookmarked = 0 AND %s`, ownedByUserSubquery)
+	res, err := r.db.ExecContext(ctx, q, userID)
 	if err != nil {
 		return 0, err
 	}
 	return res.RowsAffected()
 }
 
-func (r *repository) CountNonBookmarked(ctx context.Context) (int64, error) {
+func (r *repository) CountNonBookmarked(ctx context.Context, userID int64) (int64, error) {
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM articles WHERE bookmarked = 0`).Scan(&count)
+	q := fmt.Sprintf(`SELECT COUNT(*) FROM articles WHERE bookmarked = 0 AND %s`, ownedByUserSubquery)
+	err := r.db.QueryRowContext(ctx, q, userID).Scan(&count)
 	return count, err
 }
 
-func (r *repository) Search(ctx context.Context, keyword string, bookmarkedOnly bool) ([]domain.Article, error) {
+func (r *repository) Search(ctx context.Context, keyword string, bookmarkedOnly bool, userID int64) ([]domain.Article, error) {
 	q := fmt.Sprintf("SELECT %s FROM articles WHERE (title LIKE ? OR content LIKE ?)", articleColumns)
 	like := "%" + keyword + "%"
 	args := []any{like, like}
 	if bookmarkedOnly {
 		q += " AND bookmarked = 1"
 	}
+	q += " AND " + ownedByUserSubquery
+	args = append(args, userID)
 	q += " ORDER BY published_at DESC"
 	return r.queryArgs(ctx, q, args...)
 }
@@ -226,15 +236,16 @@ func (r *repository) UpdateMetadataBatch(ctx context.Context, updates []articler
 	return total, tx.Commit()
 }
 
-func (r *repository) CountBookmarked(ctx context.Context) (int64, error) {
+func (r *repository) CountBookmarked(ctx context.Context, userID int64) (int64, error) {
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM articles WHERE bookmarked = 1`).Scan(&count)
+	q := fmt.Sprintf(`SELECT COUNT(*) FROM articles WHERE bookmarked = 1 AND %s`, ownedByUserSubquery)
+	err := r.db.QueryRowContext(ctx, q, userID).Scan(&count)
 	return count, err
 }
 
-func (r *repository) FindFiltered(ctx context.Context, filter articlerepo.ListFilter) ([]domain.Article, int64, error) {
-	var conditions []string
-	var args []any
+func (r *repository) FindFiltered(ctx context.Context, filter articlerepo.ListFilter, userID int64) ([]domain.Article, int64, error) {
+	conditions := []string{ownedByUserSubquery}
+	args := []any{userID}
 
 	if filter.Unread {
 		conditions = append(conditions, "read = 0")
@@ -252,10 +263,7 @@ func (r *repository) FindFiltered(ctx context.Context, filter articlerepo.ListFi
 		args = append(args, filter.Category)
 	}
 
-	where := ""
-	if len(conditions) > 0 {
-		where = " WHERE " + strings.Join(conditions, " AND ")
-	}
+	where := " WHERE " + strings.Join(conditions, " AND ")
 
 	var total int64
 	countQ := "SELECT COUNT(*) FROM articles" + where
@@ -291,8 +299,9 @@ func (r *repository) FindFiltered(ctx context.Context, filter articlerepo.ListFi
 	return articles, total, nil
 }
 
-func (r *repository) DistinctCategories(ctx context.Context) ([]string, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT DISTINCT category FROM articles WHERE category != '' ORDER BY category ASC`)
+func (r *repository) DistinctCategories(ctx context.Context, userID int64) ([]string, error) {
+	q := fmt.Sprintf(`SELECT DISTINCT category FROM articles WHERE category != '' AND %s ORDER BY category ASC`, ownedByUserSubquery)
+	rows, err := r.db.QueryContext(ctx, q, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -307,10 +316,6 @@ func (r *repository) DistinctCategories(ctx context.Context) ([]string, error) {
 		categories = append(categories, c)
 	}
 	return categories, rows.Err()
-}
-
-func (r *repository) query(ctx context.Context, q string) ([]domain.Article, error) {
-	return r.queryArgs(ctx, q)
 }
 
 func (r *repository) queryArgs(ctx context.Context, q string, args ...any) ([]domain.Article, error) {

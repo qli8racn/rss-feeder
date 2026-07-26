@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"os"
 
@@ -9,16 +11,20 @@ import (
 
 	adapteranthropic "github.com/qli8racn/rss-feeder/internal/adapter/driver/anthropic"
 	"github.com/qli8racn/rss-feeder/internal/adapter/driver/htmlfetch"
+	userrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/user"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/adapter/handler/agent"
 	"github.com/qli8racn/rss-feeder/internal/config"
+	"github.com/qli8racn/rss-feeder/internal/domain"
 	driveranthropic "github.com/qli8racn/rss-feeder/internal/driver/anthropic"
 	driverhtmlfetch "github.com/qli8racn/rss-feeder/internal/driver/htmlfetch"
 	driverlogger "github.com/qli8racn/rss-feeder/internal/driver/logger"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
+	dbrepouser "github.com/qli8racn/rss-feeder/internal/driver/readerdb/user"
 	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
+	"github.com/qli8racn/rss-feeder/internal/migration"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
 )
 
@@ -33,14 +39,33 @@ func main() {
 	do.Provide(i, driverlogger.NewLogger)
 	do.Provide(i, readerdb.NewClient)
 	do.Provide(i, dbrepoarticle.NewRepository)
+	do.Provide(i, dbrepofeed.NewRepository)
+	do.Provide(i, dbrepouser.NewRepository)
 	do.Provide(i, driverrss.NewReader)
 	do.Provide(i, driverhtmlfetch.NewFetcher)
+
+	db := do.MustInvoke[*sql.DB](i)
+	if err := migration.Run(db); err != nil {
+		fmt.Fprintf(os.Stderr, "migration failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	// cmd/agent（bin/rss-agent）はユーザー概念に対応しない（要件のスコープ外）ため、常に
+	// デフォルトユーザーとして暗黙的に動作する。preference・curate・discoverAgentは
+	// *domain.User をDIコンテナ経由で取得する（internal/driver/anthropic/preference.go 参照）。
+	resolveUserUC := usecase.NewResolveUserUsecase(do.MustInvoke[userrepo.Repository](i))
+	user, err := resolveUserUC.Execute(context.Background(), domain.DefaultUserName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "default user resolution failed: %v\n", err)
+		os.Exit(1)
+	}
+	do.ProvideValue(i, user)
+
 	do.Provide(i, driveranthropic.NewSummarizeAgent)
 	do.Provide(i, driveranthropic.NewPreferenceAgent)
 	do.Provide(i, driveranthropic.NewEnrichAgent)
 	do.Provide(i, driveranthropic.NewFeedDiscoveryAgent)
 	do.Provide(i, driveranthropic.NewCurateAgent)
-	do.Provide(i, dbrepofeed.NewRepository)
 	do.Provide(i, driveranthropic.NewDiscoverAgent)
 
 	summarizeUC := usecase.NewSummarizeUsecase(do.MustInvoke[adapteranthropic.SummarizeAgent](i))

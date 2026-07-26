@@ -30,10 +30,11 @@ const (
 
 type ListUsecase struct {
 	articleRepo articlerepo.Repository
+	userID      int64
 }
 
-func NewListUsecase(articleRepo articlerepo.Repository) *ListUsecase {
-	return &ListUsecase{articleRepo: articleRepo}
+func NewListUsecase(articleRepo articlerepo.Repository, userID int64) *ListUsecase {
+	return &ListUsecase{articleRepo: articleRepo, userID: userID}
 }
 
 func (uc *ListUsecase) Execute(ctx context.Context, mode ListMode) ([]domain.Article, error) {
@@ -44,11 +45,11 @@ func (uc *ListUsecase) Execute(ctx context.Context, mode ListMode) ([]domain.Art
 
 	switch mode {
 	case ListModeAll:
-		articles, err = uc.articleRepo.FindAll(ctx)
+		articles, err = uc.articleRepo.FindAll(ctx, uc.userID)
 	case ListModeBookmarked:
-		articles, err = uc.articleRepo.FindBookmarked(ctx)
+		articles, err = uc.articleRepo.FindBookmarked(ctx, uc.userID)
 	default:
-		articles, err = uc.articleRepo.FindUnread(ctx)
+		articles, err = uc.articleRepo.FindUnread(ctx, uc.userID)
 	}
 	if err != nil {
 		return nil, err
@@ -78,7 +79,7 @@ func (uc *ListUsecase) ExecuteFiltered(ctx context.Context, opts ListFilterOptio
 		filter.Unread = true
 	}
 
-	articles, total, err := uc.articleRepo.FindFiltered(ctx, filter)
+	articles, total, err := uc.articleRepo.FindFiltered(ctx, filter, uc.userID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -102,5 +103,5 @@ func (uc *ListUsecase) markUnreadAsRead(ctx context.Context, articles []domain.A
 	if len(unreadIDs) == 0 {
 		return nil
 	}
-	return uc.articleRepo.MarkAsRead(ctx, unreadIDs)
+	return uc.articleRepo.MarkAsRead(ctx, unreadIDs, uc.userID)
 }

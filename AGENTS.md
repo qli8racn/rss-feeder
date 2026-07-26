@@ -159,8 +159,17 @@ Claude Desktop 等の MCP クライアントからローカル起動する MCP �
 
 ```bash
 GOMAXPROCS=1 GOFLAGS="-gcflags=all=-l=0" go build -p 1 -o bin/mcp ./cmd/mcp
-bin/mcp [--rss-agent-path bin/rss-agent]
+bin/mcp [--rss-agent-path bin/rss-agent] [--user-id alice]
 ```
+
+`--user-id`（省略可、デフォルト `default`）で、MCPクライアントを識別する任意の文字列を指定する。
+プロセス起動時に1回だけ `users` テーブルに対して find-or-create（初回はレコードを作成、以降は同一の
+既存レコードを再利用）され、以降そのプロセス内の全ツール呼び出しは解決済みユーザーのフィード・記事・
+ブックマーク・既読状態のみを対象にする（購読フィード・記事・ブックマーク・既読/未読・fetch・enrich・
+preferenceがすべてユーザーごとに分離される）。同じ識別子で複数回起動しても同一ユーザーとして扱われ、
+フィードが重複作成されることはない。`--user-id` を省略した場合は `bin/rss-feeder`・`bin/web`・
+`bin/rss-agent` と同じ `default` ユーザーとして動作する。`--user-id` は認証・なりすまし対策のない
+自己申告文字列である（詳細は `docs/steering/20260726_mcp_user_management/design.md` 参照）。
 
 公開するツール（他のMCPサーバーとの判別のため `rss_` 接頭辞を付与）: `rss_list`・`rss_search`・
 `rss_categories`・`rss_list_feeds`・`rss_bookmark`・`rss_mark_read`・`rss_add_feed`・`rss_fetch`・
@@ -196,7 +205,10 @@ Claude Desktop への登録は `claude_desktop_config.json`（macOSでは
   "mcpServers": {
     "rss-feeder": {
       "command": "/absolute/path/to/rss-feeder/bin/mcp",
-      "args": ["--rss-agent-path", "/absolute/path/to/rss-feeder/bin/rss-agent"]
+      "args": [
+        "--rss-agent-path", "/absolute/path/to/rss-feeder/bin/rss-agent",
+        "--user-id", "alice"
+      ]
     }
   }
 }
@@ -204,6 +216,10 @@ Claude Desktop への登録は `claude_desktop_config.json`（macOSでは
 
 `command`/`args` は絶対パスで指定する（Claude Desktop はリポジトリの作業ディレクトリを引き継がないため）。
 登録後 Claude Desktop を再起動すると、ツール一覧に `rss-feeder` サーバーの各ツールが表示される。
+`--user-id` は省略可能で、省略した場合は `default` ユーザーとして動作する。複数人（あるいは1人が
+複数の用途）で使い分けたい場合は、`claude_desktop_config.json` に `"rss-feeder-alice"`・
+`"rss-feeder-bob"` のように別名で複数の `mcpServers` エントリを登録し、それぞれ異なる `--user-id` を
+指定する。
 
 > **DevContainer上でビルドした場合の注意:** Claude Desktop はホストOS上でネイティブに動くアプリのため、
 > 上記の `command` にDevContainer内でビルドした `bin/mcp` のパスをそのまま指定すると、ホストとコンテナの

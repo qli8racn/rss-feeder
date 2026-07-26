@@ -11,20 +11,28 @@ import (
 
 	adapteranthropic "github.com/qli8racn/rss-feeder/internal/adapter/driver/anthropic"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
+	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
 type preferenceAgent struct {
 	client messageCreator
 	reader articlerepo.Repository
 	logger *slog.Logger
+	userID int64
 }
 
+// NewPreferenceAgent は *domain.User をDIコンテナから取得し、userIDを保持する。
+// int64 をそのままDIコンテナに登録すると他の int64 値と型が衝突するため、
+// main.go で ResolveUserUsecase.Execute の結果（*domain.User）を do.ProvideValue で登録し、
+// ここではその ID フィールドを参照する（usecase 層への依存を避けるため、専用型を
+// usecase パッケージに設けるのではなく既存の domain.User を利用する）。
 func NewPreferenceAgent(i do.Injector) (adapteranthropic.PreferenceAgent, error) {
 	client := newAnthropicClient()
 	return &preferenceAgent{
 		client: &client.Messages,
 		reader: do.MustInvoke[articlerepo.Repository](i),
 		logger: do.MustInvoke[*slog.Logger](i),
+		userID: do.MustInvoke[*domain.User](i).ID,
 	}, nil
 }
 
@@ -70,7 +78,7 @@ func (a *preferenceAgent) Run(ctx context.Context) (string, error) {
 			return "", err
 		}
 
-		articles, err := a.reader.FindBookmarked(ctx)
+		articles, err := a.reader.FindBookmarked(ctx, a.userID)
 		if err != nil {
 			return "", err
 		}

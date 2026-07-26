@@ -17,7 +17,7 @@ func TestListFeedsUsecase_ReturnsFeeds(t *testing.T) {
 		listAllFn: func(_ context.Context) ([]domain.Feed, error) {
 			return expected, nil
 		},
-	})
+	}, testUserID)
 
 	feeds, err := uc.Execute(context.Background())
 	if err != nil {
@@ -29,7 +29,7 @@ func TestListFeedsUsecase_ReturnsFeeds(t *testing.T) {
 }
 
 func TestListFeedsUsecase_ReturnsEmpty(t *testing.T) {
-	uc := NewListFeedsUsecase(&mockFeedRepo{})
+	uc := NewListFeedsUsecase(&mockFeedRepo{}, testUserID)
 
 	feeds, err := uc.Execute(context.Background())
 	if err != nil {
@@ -46,7 +46,7 @@ func TestListFeedsUsecase_RepoError(t *testing.T) {
 		listAllFn: func(_ context.Context) ([]domain.Feed, error) {
 			return nil, repoErr
 		},
-	})
+	}, testUserID)
 
 	if _, err := uc.Execute(context.Background()); !errors.Is(err, repoErr) {
 		t.Errorf("expected repo error, got %v", err)
