@@ -32,13 +32,24 @@
 
 補足: design.md の記載では `Search`・`DistinctCategories` は userID スコープ対象の列挙から漏れていたが、
 要件（記事検索・カテゴリ一覧もユーザーごとに分離）を満たすため実装では両メソッドにも `userID` を追加した。
+また、レビューで `FetchLatest`・`FindWithoutSummary`・`UpdateEnrichmentBatch`（`enrich`・`summarize`・`curate`
+が使用）へのuserID追加漏れが指摘され、追って追加した（詳細は下記「Usecase層」の補足参照）。
 
 ## Usecase層
 
 - [x] `internal/usecase/resolve_user.go` に `ResolveUserUsecase`（find-or-createでユーザーを解決する）を追加する
 - [x] `list`・`search`・`list_categories`・`list_feeds`・`bookmark`・`mark_read`・`add_feed`・`remove_feed`・`fetch`・`backfill_metadata`・`reset`・`check_article`・`check_bookmarked` の各Usecaseコンストラクタに `userID` を追加し、内部のrepo呼び出しに反映する
-- [x] `internal/driver/anthropic/preference.go`・`curate.go`・`discover.go` の各Agent実装のコンストラクタに `userID` を追加し、内部のrepo呼び出し（`FindBookmarked`・`ListAll`）に反映する（DIコンテナには `usecase.UserID` ではなく既存の `*domain.User` を登録する方式を採用。理由は各`main.go`の実装メモを参照）
+- [x] `internal/driver/anthropic/preference.go`・`curate.go`・`discover.go`・`enrich.go`・`summarize.go` の各Agent実装のコンストラクタに `userID` を追加し、内部のrepo呼び出し（`FindBookmarked`・`ListAll`・`FetchLatest`・`FindWithoutSummary`・`UpdateEnrichmentBatch`）に反映する（DIコンテナには `usecase.UserID` ではなく既存の `*domain.User` を登録する方式を採用。理由は各`main.go`の実装メモを参照）
 - [x] 上記Usecase・Agentの既存テストをuserIDスコープに対応させて更新する（Agent側は新規に `agent_userid_test.go` を追加）
+
+補足: 実装当初は `preference.go`・`curate.go`・`discover.go` のみ対応し、`enrich.go`・`summarize.go` が
+使用する `FetchLatest`・`FindWithoutSummary`・`UpdateEnrichmentBatch` へのuserID追加が漏れていた
+（レビューで指摘・修正）。特に `enrich.go` は `rss_enrich`（MCPで公開済みの課金を伴うツール）が内部で
+使うため、放置すると他ユーザーの記事が要約・課金対象に混入する実害のある不具合だった。
+`internal/adapter/driver/readerdb/article/article.go`・`internal/driver/readerdb/article/article.go` の
+該当3メソッドにuserIDを追加し、`enrich.go`・`summarize.go`・`curate.go` の呼び出し箇所を修正、
+`internal/driver/readerdb/article/article_test.go`・`internal/driver/anthropic/enrich_test.go` に
+他ユーザーの記事が対象にならない・更新されないことを確認する回帰テストを追加した。
 
 ## `cmd/mcp` の変更
 

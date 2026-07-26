@@ -47,14 +47,17 @@ type MetadataUpdate struct {
 	ThumbnailURL string
 }
 
-// Repository は記事を操作する。一覧・検索・更新系のメソッドは userID でスコープし、
-// JOIN feeds ON articles.feed_id = feeds.id AND feeds.user_id = ? を条件に加えることで
+// Repository は記事を操作する。ほぼ全メソッドを userID でスコープし、
+// feed_id IN (SELECT id FROM feeds WHERE user_id = ?) を条件に加えることで
 // 他ユーザーの記事IDを推測して操作されることを防ぐ（記事IDはユーザー横断の連番のため）。
+// FetchLatest・FindWithoutSummary・UpdateEnrichmentBatch は enrich/summarize/curate の
+// 対象記事選定・要約結果の保存に使われ、他ユーザーの記事が課金・処理対象に混入することを
+// 防ぐためスコープが必須（過去にenrich.goのみ対応漏れがあった不具合を踏まえ全Agentで統一する）。
 //
-// FetchLatest・UpdateEnrichmentBatch・FindWithoutSummary・UpdateMetadataBatch は
-// enrich/summarize/backfill_metadataの対象記事選定・メタデータ補完に使われ、記事内容自体は
-// 所有ユーザーによらず共通に扱って問題ないため、userIDでのスコープは行わない
-// （docs/steering/20260726_mcp_user_management/design.md 参照）。
+// UpdateMetadataBatch のみ URL 一致で全ユーザー横断に補完するため userID を取らない
+// （メタデータ補完はどのユーザーの記事に適用しても実害がなく、むしろ複数ユーザーが同じ
+// 外部記事URLを保存している場合に全員分を一度に補完できる方が望ましいため。
+// docs/steering/20260726_mcp_user_management/design.md 参照）。
 type Repository interface {
 	Save(ctx context.Context, article domain.Article) error
 	FindAll(ctx context.Context, userID int64) ([]domain.Article, error)
@@ -66,11 +69,11 @@ type Repository interface {
 	DeleteNonBookmarked(ctx context.Context, userID int64) (int64, error)
 	CountNonBookmarked(ctx context.Context, userID int64) (int64, error)
 	CountBookmarked(ctx context.Context, userID int64) (int64, error)
-	FetchLatest(ctx context.Context, limit int, feedURL string) ([]domain.Article, error)
+	FetchLatest(ctx context.Context, limit int, feedURL string, userID int64) ([]domain.Article, error)
 	Search(ctx context.Context, keyword string, bookmarkedOnly bool, userID int64) ([]domain.Article, error)
 	// UpdateEnrichmentBatch は複数件の要約・カテゴリ更新を1トランザクションでまとめて行う。
-	UpdateEnrichmentBatch(ctx context.Context, updates []EnrichmentUpdate) error
-	FindWithoutSummary(ctx context.Context, limit int) ([]domain.Article, error)
+	UpdateEnrichmentBatch(ctx context.Context, updates []EnrichmentUpdate, userID int64) error
+	FindWithoutSummary(ctx context.Context, limit int, userID int64) ([]domain.Article, error)
 	// UpdateMetadataBatch は既存記事への出版元・サムネイルのバックフィル用。
 	// 既に値が設定されている列は上書きせず、空文字の列のみ埋める。更新件数を返す。
 	UpdateMetadataBatch(ctx context.Context, updates []MetadataUpdate) (int64, error)

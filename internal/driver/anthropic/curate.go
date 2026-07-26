@@ -132,7 +132,7 @@ func (a *curateAgent) Run(ctx context.Context, opts adapteranthropic.CurateOptio
 				return "", err
 			}
 			log.Info("直近記事を取得中", "limit", limit)
-			articles, err := a.repo.FetchLatest(ctx, limit, "")
+			articles, err := a.repo.FetchLatest(ctx, limit, "", a.userID)
 			if err != nil {
 				return "", err
 			}

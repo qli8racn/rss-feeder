@@ -49,7 +49,7 @@ func (m *mockSearchArticleRepo) CountNonBookmarked(_ context.Context, _ int64) (
 func (m *mockSearchArticleRepo) CountBookmarked(_ context.Context, _ int64) (int64, error) {
 	return 0, nil
 }
-func (m *mockSearchArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) {
+func (m *mockSearchArticleRepo) FetchLatest(_ context.Context, _ int, _ string, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
 func (m *mockSearchArticleRepo) Search(_ context.Context, keyword string, bookmarkedOnly bool, userID int64) ([]domain.Article, error) {
@@ -58,10 +58,10 @@ func (m *mockSearchArticleRepo) Search(_ context.Context, keyword string, bookma
 	m.gotUserID = userID
 	return m.results, m.err
 }
-func (m *mockSearchArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate) error {
+func (m *mockSearchArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate, _ int64) error {
 	return nil
 }
-func (m *mockSearchArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {
+func (m *mockSearchArticleRepo) FindWithoutSummary(_ context.Context, _ int, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
 func (m *mockSearchArticleRepo) UpdateMetadataBatch(_ context.Context, _ []articlerepo.MetadataUpdate) (int64, error) {

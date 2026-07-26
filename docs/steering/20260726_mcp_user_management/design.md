@@ -204,3 +204,15 @@ func (uc *ResolveUserUsecase) Execute(ctx context.Context, name string) (*domain
    `ResolveUserUsecase` を呼ぶとエラーになる不整合があったため、他のエントリポイントと同様に
    `migration.Run(db)` の呼び出しを追加した（本来 `cmd/rss-feeder`・`cmd/web` と同じ関心事のため既存の
    欠落と判断し、本フェーズの変更に含めた）。
+5. **`internal/driver/anthropic/enrich.go`（`enrichAgent`）のuserIDスコープ対応漏れ（レビューで検出・修正済み）**:
+   本設計の「影響を受けるUsecase／Repositoryの分類」の2番目の項目では `enrich・preference・curate・discover・
+   summarize` すべてのAgent実装にuserIDを追加する方針だったが、実装当初は `preference.go`・`curate.go`・
+   `discover.go` の3つのみ対応し、`enrich.go`・`summarize.go` への対応が漏れていた。特に `enrich.go` は
+   `rss_enrich`（MCPで公開済みの課金を伴うツール）が内部で使う `FetchLatest`・`FindWithoutSummary`・
+   `UpdateEnrichmentBatch` の呼び出しにuserIDスコープが無いままだったため、ユーザーAとして `rss_enrich` を
+   呼び出すと他ユーザーの未要約記事も要約対象・課金対象になってしまう実害のある不具合だった。レビューで
+   指摘を受け、`articlerepo.Repository` の `FetchLatest`・`FindWithoutSummary`・`UpdateEnrichmentBatch` に
+   `userID int64` 引数を追加してスコープし（`UpdateMetadataBatch` のみ引き続き対象外。理由は
+   `internal/adapter/driver/readerdb/article/article.go` のコメント参照）、`enrichAgent`・`summarizeAgent`
+   （`FetchLatest` を共用する `summarizeAgent` も同様に対応が必要だったため合わせて修正）の両方に
+   `userID` フィールドを追加して修正した。

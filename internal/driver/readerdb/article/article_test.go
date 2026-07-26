@@ -612,7 +612,7 @@ func TestArticleRepository_UpdateEnrichmentBatch(t *testing.T) {
 		{ID: all[0].ID, Summary: "要約1", Category: "Tech"},
 		{ID: all[1].ID, Summary: "要約2", Category: "Business"},
 	}
-	if err := r.UpdateEnrichmentBatch(ctx, updates); err != nil {
+	if err := r.UpdateEnrichmentBatch(ctx, updates, defaultUserID); err != nil {
 		t.Fatalf("UpdateEnrichmentBatch: %v", err)
 	}
 
@@ -630,8 +630,34 @@ func TestArticleRepository_UpdateEnrichmentBatch_Empty(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
-	if err := r.UpdateEnrichmentBatch(ctx, nil); err != nil {
+	if err := r.UpdateEnrichmentBatch(ctx, nil, defaultUserID); err != nil {
 		t.Errorf("UpdateEnrichmentBatch(nil): got error %v, want nil", err)
+	}
+}
+
+func TestArticleRepository_UpdateEnrichmentBatch_OtherUsersArticleIsNotUpdated(t *testing.T) {
+	// otherUserID の記事IDを defaultUserID として更新しようとしても対象外になり、
+	// 更新されないことを確認する（rss_enrich が他ユーザーの記事を書き換えないことの検証）。
+	ctx := context.Background()
+	r := newRepo(t)
+
+	if err := r.Save(ctx, makeOtherUserArticle("https://other.example.com/1")); err != nil {
+		t.Fatalf("Save (other user): %v", err)
+	}
+	all, _ := r.FindAll(ctx, otherUserID)
+
+	if err := r.UpdateEnrichmentBatch(ctx, []articlerepo.EnrichmentUpdate{
+		{ID: all[0].ID, Summary: "勝手に要約", Category: "Tech"},
+	}, defaultUserID); err != nil {
+		t.Fatalf("UpdateEnrichmentBatch: %v", err)
+	}
+
+	found, err := r.FindByID(ctx, all[0].ID, otherUserID)
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	if found.Summary != "" {
+		t.Errorf("otherUser's article should not be updated by defaultUser's UpdateEnrichmentBatch, got summary=%q", found.Summary)
 	}
 }
 
@@ -824,11 +850,11 @@ func TestArticleRepository_FindWithoutSummary(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 	all, _ := r.FindAll(ctx, defaultUserID)
-	if err := r.UpdateEnrichmentBatch(ctx, []articlerepo.EnrichmentUpdate{{ID: all[0].ID, Summary: "要約", Category: "Tech"}}); err != nil {
+	if err := r.UpdateEnrichmentBatch(ctx, []articlerepo.EnrichmentUpdate{{ID: all[0].ID, Summary: "要約", Category: "Tech"}}, defaultUserID); err != nil {
 		t.Fatalf("UpdateEnrichmentBatch: %v", err)
 	}
 
-	results, err := r.FindWithoutSummary(ctx, 10)
+	results, err := r.FindWithoutSummary(ctx, 10, defaultUserID)
 	if err != nil {
 		t.Fatalf("FindWithoutSummary: %v", err)
 	}
@@ -837,6 +863,85 @@ func TestArticleRepository_FindWithoutSummary(t *testing.T) {
 	}
 	if results[0].Summary != "" {
 		t.Errorf("Summary should be empty, got %q", results[0].Summary)
+	}
+}
+
+func TestArticleRepository_FindWithoutSummary_ScopedToUser(t *testing.T) {
+	// otherUserID の要約未設定記事が defaultUserID の FindWithoutSummary に混入しないことを確認する
+	// （rss_enrich が他ユーザーの記事まで要約対象にしてしまわないことの検証）。
+	ctx := context.Background()
+	r := newRepo(t)
+
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeOtherUserArticle("https://other.example.com/1")); err != nil {
+		t.Fatalf("Save (other user): %v", err)
+	}
+
+	results, err := r.FindWithoutSummary(ctx, 10, defaultUserID)
+	if err != nil {
+		t.Fatalf("FindWithoutSummary: %v", err)
+	}
+	if len(results) != 1 || results[0].URL != "https://example.com/1" {
+		t.Errorf("expected only defaultUser's article, got %+v", results)
+	}
+}
+
+func TestArticleRepository_FetchLatest_ScopedToUser(t *testing.T) {
+	// otherUserID の記事が defaultUserID の FetchLatest（rss_enrich・rss_agent summarize/curate が
+	// 利用する）に混入しないことを確認する。
+	ctx := context.Background()
+	r := newRepo(t)
+
+	if err := r.Save(ctx, makeArticle("https://example.com/1")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := r.Save(ctx, makeOtherUserArticle("https://other.example.com/1")); err != nil {
+		t.Fatalf("Save (other user): %v", err)
+	}
+
+	results, err := r.FetchLatest(ctx, 10, "", defaultUserID)
+	if err != nil {
+		t.Fatalf("FetchLatest: %v", err)
+	}
+	if len(results) != 1 || results[0].URL != "https://example.com/1" {
+		t.Errorf("expected only defaultUser's article, got %+v", results)
+	}
+}
+
+func TestArticleRepository_FetchLatest_SameFeedURLDifferentUsersOnlyReturnsOwnersArticles(t *testing.T) {
+	// 複数ユーザーが同一の外部フィードURLを購読している場合（feeds は1ユーザー1購読=1行のため
+	// 別々のfeed行になる）、feedURL絞り込みを指定してもuserIDでスコープされ、
+	// 他ユーザーの記事が混入しないことを確認する
+	// （過去にenrich.goのFetchLatest呼び出しでuserIDスコープ漏れがあった不具合の回帰テスト）。
+	ctx := context.Background()
+	r := newRepo(t)
+
+	const sharedFeedURL = "https://shared.example.com/feed"
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO feeds (id, user_id, feed_url, title) VALUES (3, ?, ?, 'Shared (other user copy)')`,
+		otherUserID, sharedFeedURL); err != nil {
+		t.Fatalf("setup other user's feed with shared url: %v", err)
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE feeds SET feed_url = ? WHERE id = 1`, sharedFeedURL); err != nil {
+		t.Fatalf("point defaultUser's feed to shared url: %v", err)
+	}
+
+	if err := r.Save(ctx, makeArticle("https://shared.example.com/article1")); err != nil {
+		t.Fatalf("Save (defaultUser): %v", err)
+	}
+	if err := r.Save(ctx, domain.Article{FeedID: 3, URL: "https://shared.example.com/article1", Title: "Other's copy"}); err != nil {
+		t.Fatalf("Save (otherUser, same article url via different feed): %v", err)
+	}
+
+	results, err := r.FetchLatest(ctx, 10, sharedFeedURL, defaultUserID)
+	if err != nil {
+		t.Fatalf("FetchLatest: %v", err)
+	}
+	if len(results) != 1 || results[0].Title != "Title https://shared.example.com/article1" {
+		t.Errorf("expected only defaultUser's article for the shared feed_url, got %+v", results)
 	}
 }
 

@@ -70,11 +70,13 @@ func (r *repository) FindBookmarked(ctx context.Context, userID int64) ([]domain
 	return scanArticlesWithFeed(rows)
 }
 
-func (r *repository) FetchLatest(ctx context.Context, limit int, feedURL string) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s, COALESCE(f.feed_url, '') FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id", aliasedArticleColumns)
-	args := []any{}
+func (r *repository) FetchLatest(ctx context.Context, limit int, feedURL string, userID int64) ([]domain.Article, error) {
+	q := fmt.Sprintf(
+		"SELECT %s, COALESCE(f.feed_url, '') FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id WHERE a.%s",
+		aliasedArticleColumns, ownedByUserSubquery)
+	args := []any{userID}
 	if feedURL != "" {
-		q += " WHERE f.feed_url = ?"
+		q += " AND f.feed_url = ?"
 		args = append(args, feedURL)
 	}
 	q += " ORDER BY a.published_at DESC LIMIT ?"
@@ -156,7 +158,7 @@ func (r *repository) Search(ctx context.Context, keyword string, bookmarkedOnly 
 // 1件ずつ ExecContext するより、ジャーナルへのfsyncをまとめられる分高速。
 // 1件でも失敗すればトランザクション全体をロールバックする（呼び出し元はこの単位を
 // 「DBへの保存単位」として扱うため、部分成功させたい場合は呼び出し元で複数回に分けて呼ぶ）。
-func (r *repository) UpdateEnrichmentBatch(ctx context.Context, updates []articlerepo.EnrichmentUpdate) error {
+func (r *repository) UpdateEnrichmentBatch(ctx context.Context, updates []articlerepo.EnrichmentUpdate, userID int64) error {
 	if len(updates) == 0 {
 		return nil
 	}
@@ -166,23 +168,23 @@ func (r *repository) UpdateEnrichmentBatch(ctx context.Context, updates []articl
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.PrepareContext(ctx, `UPDATE articles SET summary = ?, category = ? WHERE id = ?`)
+	stmt, err := tx.PrepareContext(ctx, fmt.Sprintf(`UPDATE articles SET summary = ?, category = ? WHERE id = ? AND %s`, ownedByUserSubquery))
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
 	for _, u := range updates {
-		if _, err := stmt.ExecContext(ctx, u.Summary, u.Category, u.ID); err != nil {
+		if _, err := stmt.ExecContext(ctx, u.Summary, u.Category, u.ID, userID); err != nil {
 			return fmt.Errorf("記事 %d の更新に失敗しました: %w", u.ID, err)
 		}
 	}
 	return tx.Commit()
 }
 
-func (r *repository) FindWithoutSummary(ctx context.Context, limit int) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles WHERE summary IS NULL OR summary = '' ORDER BY published_at DESC LIMIT ?", articleColumns)
-	return r.queryArgs(ctx, q, limit)
+func (r *repository) FindWithoutSummary(ctx context.Context, limit int, userID int64) ([]domain.Article, error) {
+	q := fmt.Sprintf("SELECT %s FROM articles WHERE (summary IS NULL OR summary = '') AND %s ORDER BY published_at DESC LIMIT ?", articleColumns, ownedByUserSubquery)
+	return r.queryArgs(ctx, q, userID, limit)
 }
 
 // UpdateMetadataBatch は既存記事への出版元・サムネイルのバックフィル用。

@@ -55,16 +55,16 @@ func (m *mockListArticleRepo) CountNonBookmarked(_ context.Context, _ int64) (in
 func (m *mockListArticleRepo) CountBookmarked(_ context.Context, _ int64) (int64, error) {
 	return 0, nil
 }
-func (m *mockListArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) {
+func (m *mockListArticleRepo) FetchLatest(_ context.Context, _ int, _ string, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
 func (m *mockListArticleRepo) Search(_ context.Context, _ string, _ bool, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockListArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate) error {
+func (m *mockListArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate, _ int64) error {
 	return nil
 }
-func (m *mockListArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {
+func (m *mockListArticleRepo) FindWithoutSummary(_ context.Context, _ int, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
 func (m *mockListArticleRepo) UpdateMetadataBatch(_ context.Context, _ []articlerepo.MetadataUpdate) (int64, error) {

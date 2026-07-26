@@ -181,17 +181,21 @@ type fakeRepo struct {
 	findWithoutSummary func(ctx context.Context, limit int) ([]domain.Article, error)
 	fetchLatest        func(ctx context.Context, limit int, feedURL string) ([]domain.Article, error)
 	updateBatch        func(ctx context.Context, updates []articlerepo.EnrichmentUpdate) error
+	gotUserIDs         []int64 // 各メソッドに渡されたuserIDを呼ばれた順に記録する
 }
 
-func (f *fakeRepo) FindWithoutSummary(ctx context.Context, limit int) ([]domain.Article, error) {
+func (f *fakeRepo) FindWithoutSummary(ctx context.Context, limit int, userID int64) ([]domain.Article, error) {
+	f.gotUserIDs = append(f.gotUserIDs, userID)
 	return f.findWithoutSummary(ctx, limit)
 }
 
-func (f *fakeRepo) FetchLatest(ctx context.Context, limit int, feedURL string) ([]domain.Article, error) {
+func (f *fakeRepo) FetchLatest(ctx context.Context, limit int, feedURL string, userID int64) ([]domain.Article, error) {
+	f.gotUserIDs = append(f.gotUserIDs, userID)
 	return f.fetchLatest(ctx, limit, feedURL)
 }
 
-func (f *fakeRepo) UpdateEnrichmentBatch(ctx context.Context, updates []articlerepo.EnrichmentUpdate) error {
+func (f *fakeRepo) UpdateEnrichmentBatch(ctx context.Context, updates []articlerepo.EnrichmentUpdate, userID int64) error {
+	f.gotUserIDs = append(f.gotUserIDs, userID)
 	return f.updateBatch(ctx, updates)
 }
 
@@ -605,6 +609,66 @@ func TestEnrichAgent_Run_ForceWithFeedURLScopesFetchLatest(t *testing.T) {
 	}
 	if gotFeedURL != "https://example.com/feed" {
 		t.Errorf("FetchLatest: got feedURL %q, want %q", gotFeedURL, "https://example.com/feed")
+	}
+}
+
+// testEnrichUserID は enrichAgent が保持する userID を、FetchLatest・FindWithoutSummary・
+// UpdateEnrichmentBatch の呼び出しへ正しく伝播していることを検証するための固定値。
+const testEnrichUserID int64 = 77
+
+func TestEnrichAgent_Run_Force_PassesUserIDToFetchLatest(t *testing.T) {
+	// rss_enrich をユーザーAとして呼び出した際、他ユーザーの記事が要約・課金対象に
+	// 混入しないよう、FetchLatestにuserIDが渡ることを確認する
+	// （過去にenrich.goのみuserIDスコープ対応が漏れていた不具合の回帰テスト）。
+	articles := articlesWithIDs(1, 2)
+	repo := &fakeRepo{
+		fetchLatest: func(_ context.Context, _ int, _ string) ([]domain.Article, error) { return articles, nil },
+		updateBatch: func(_ context.Context, _ []articlerepo.EnrichmentUpdate) error { return nil },
+	}
+	agent := &enrichAgent{
+		logger: discardLogger(),
+		client: &fakeMessageCreator{new: echoSuccess(t, anthropic.Usage{InputTokens: 10, OutputTokens: 5})},
+		repo:   repo,
+		userID: testEnrichUserID,
+	}
+
+	if _, err := agent.Run(context.Background(), adapteranthropic.EnrichOptions{Limit: 2, Force: true}); err != nil {
+		t.Fatalf("Run: unexpected error: %v", err)
+	}
+	for _, got := range repo.gotUserIDs {
+		if got != testEnrichUserID {
+			t.Errorf("repo call userID: got %d, want %d", got, testEnrichUserID)
+		}
+	}
+	if len(repo.gotUserIDs) == 0 {
+		t.Fatal("expected repo methods to have been called with a userID, got none")
+	}
+}
+
+func TestEnrichAgent_Run_Default_PassesUserIDToFindWithoutSummaryAndUpdateEnrichmentBatch(t *testing.T) {
+	articles := articlesWithIDs(1, 2)
+	repo := &fakeRepo{
+		findWithoutSummary: func(_ context.Context, _ int) ([]domain.Article, error) { return articles, nil },
+		updateBatch:        func(_ context.Context, _ []articlerepo.EnrichmentUpdate) error { return nil },
+	}
+	agent := &enrichAgent{
+		logger: discardLogger(),
+		client: &fakeMessageCreator{new: echoSuccess(t, anthropic.Usage{InputTokens: 10, OutputTokens: 5})},
+		repo:   repo,
+		userID: testEnrichUserID,
+	}
+
+	if _, err := agent.Run(context.Background(), adapteranthropic.EnrichOptions{Limit: 2}); err != nil {
+		t.Fatalf("Run: unexpected error: %v", err)
+	}
+	// FindWithoutSummary（1回）・UpdateEnrichmentBatch（1回）の両方にuserIDが渡っているはず。
+	if len(repo.gotUserIDs) != 2 {
+		t.Fatalf("repo calls: got %d, want 2 (FindWithoutSummary + UpdateEnrichmentBatch)", len(repo.gotUserIDs))
+	}
+	for _, got := range repo.gotUserIDs {
+		if got != testEnrichUserID {
+			t.Errorf("repo call userID: got %d, want %d", got, testEnrichUserID)
+		}
 	}
 }
 
