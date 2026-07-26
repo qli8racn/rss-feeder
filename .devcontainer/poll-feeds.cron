@@ -1,3 +1,0 @@
-# 1時間ごとにRSSフィードの取得・要約を実行する
-# workspaceFolder はリポジトリ名から決まるため /workspaces/rss-feeder を前提にしている
-0 * * * * vscode /bin/bash /workspaces/rss-feeder/scripts/poll-feeds.sh >> /workspaces/rss-feeder/logs/cron.log 2>&1

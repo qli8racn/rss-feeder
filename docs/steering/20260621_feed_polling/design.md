@@ -1,5 +1,9 @@
 # 設計：フィード取得・要約の定期実行
 
+> **【廃止】** 2026-07-26 に本設計に基づく実装（devcontainer cron）を撤去した。
+> `.devcontainer/poll-feeds.cron` / `scripts/poll-feeds.sh` を削除し、Dockerfileの`cron`パッケージ
+> インストール・`devcontainer.json`の`postStartCommand`も削除済み。本ドキュメントは当時の設計の記録として残す。
+
 ## 全体構成
 
 ```
