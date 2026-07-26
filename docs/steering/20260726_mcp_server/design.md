@@ -16,6 +16,10 @@ Claude Desktop
 
 `cmd/mcp` は新しいビジネスロジックを持たず、MCPプロトコルのアダプタ層に徹する（ツール引数 → usecase 呼び出し → 結果をMCPレスポンス形式に変換、のみを担当する）。
 
+> **Note（実装後のレビュー対応）:** 以下で `list`・`search` のように無接頭辞で記載しているツール名は設計検討時点のものであり、
+> 実装後のレビュー対応で他のMCPサーバーとの判別性を高めるため `rss_` 接頭辞を付与した（`rss_list`・`rss_search` 等。詳細は `cmd/mcp/main.go`・`AGENTS.md` を参照）。
+> 併せて `rss_list` は閲覧による既読化を行わない読み取り専用ツールに変更し、既読管理用に `rss_mark_read` を追加した。
+
 ## Go向けMCP SDKの選定
 
 | 観点 | `github.com/modelcontextprotocol/go-sdk`（公式） | `github.com/mark3labs/mcp-go`（コミュニティ） |

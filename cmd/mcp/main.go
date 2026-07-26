@@ -168,6 +168,7 @@ func main() {
 	removeFeedUC := usecase.NewRemoveFeedUsecase(do.MustInvoke[feedrepo.Repository](i))
 	enrichUC := usecase.NewEnrichUsecase(do.MustInvoke[adapteranthropic.EnrichAgent](i))
 	preferenceUC := usecase.NewPreferenceUsecase(do.MustInvoke[adapteranthropic.PreferenceAgent](i))
+	markReadUC := usecase.NewMarkReadUsecase(do.MustInvoke[articlerepo.Repository](i))
 
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: serverName, Version: serverVersion}, nil)
 
@@ -176,7 +177,7 @@ func main() {
 	// description も「RSSフィーダーに保存済みの記事を〜」のように主語を明示する。
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
 		Name:        "rss_list",
-		Description: "RSSフィーダーに保存済みの記事を一覧表示する。デフォルトは未読のみ。all・bookmarked・category で絞り込み可能（all と bookmarked は同時指定不可）。limit・page でページネーションし、応答の total で絞り込み条件に一致する総数を返す（デフォルト50件・上限200件）。閲覧による既読化は行わない読み取り専用のツール。",
+		Description: "RSSフィーダーに保存済みの記事を一覧表示する。デフォルトは未読のみ。all・bookmarked・category で絞り込み可能（all と bookmarked は同時指定不可）。limit・page でページネーションし、応答の total で絞り込み条件に一致する総数を返す（デフォルト50件・上限200件）。閲覧による既読化は行わない読み取り専用のツール（既読にしたい場合は rss_mark_read を使う）。",
 		Annotations: &mcpsdk.ToolAnnotations{ReadOnlyHint: true},
 	}, handlermcp.ListTool(listUC))
 
@@ -205,6 +206,12 @@ func main() {
 	}, handlermcp.BookmarkTool(bookmarkUC))
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
+		Name:        "rss_mark_read",
+		Description: "RSSフィーダーで指定した記事IDを既読にする。rss_list は閲覧では既読化しないため、既読管理をしたい場合はこのツールを使う。",
+		Annotations: &mcpsdk.ToolAnnotations{DestructiveHint: boolPtr(false)},
+	}, handlermcp.MarkReadTool(markReadUC))
+
+	mcpsdk.AddTool(server, &mcpsdk.Tool{
 		Name: "rss_add_feed",
 		Description: "RSS/AtomフィードのURL、またはそのフィードを持つサイトのURLをRSSフィーダーのDBに登録し、" +
 			"登録直後に記事を1回取得する。フィードURLの探索を伴うため実行に数秒〜数十秒かかることがある。",
@@ -220,10 +227,10 @@ func main() {
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
 		Name: "rss_remove_feed",
 		Description: "RSSフィーダーから指定したフィードと、それに紐づく記事を完全に削除する破壊的操作(元に戻せない)。" +
-			"実行前に必ずユーザーに削除対象(フィード名・記事件数など。rss_list_feeds・rss_list で確認できる)を提示し、" +
+			"実行前に必ずユーザーに削除対象(フィード名・URL。rss_list_feeds で確認できる)を提示し、" +
 			"明示的な同意を得てから confirm:true を渡すこと。ユーザーの同意なしに true を渡してはならない。",
 		Annotations: &mcpsdk.ToolAnnotations{DestructiveHint: boolPtr(true)},
-	}, handlermcp.RemoveFeedTool(removeFeedUC))
+	}, handlermcp.RemoveFeedTool(removeFeedUC, listFeedsUC))
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
 		Name: "rss_enrich",

@@ -42,13 +42,13 @@ func AddFeedTool(
 			return nil, AddFeedOutput{}, err
 		}
 
-		fetched := 0
-		if result, err := fetchUC.Execute(ctx, []string{resolvedURL}); err != nil {
-			logger.Warn("add-feed: 登録直後の記事取得に失敗しました", "feed_url", resolvedURL, "error", err)
-		} else {
-			fetched = result.TotalSaved()
+		// FetchResult は一部のフィードでエラーが起きても他フィードの保存結果を保持する値型のため、
+		// エラー時も部分的に保存できた件数を fetched に反映する（0件で握り潰さない）。
+		result, fetchErr := fetchUC.Execute(ctx, []string{resolvedURL})
+		if fetchErr != nil {
+			logger.Warn("add-feed: 登録直後の記事取得に失敗しました", "feed_url", resolvedURL, "error", fetchErr)
 		}
 
-		return nil, AddFeedOutput{ID: feed.ID, FeedURL: feed.FeedURL, Title: feed.Title, Fetched: fetched}, nil
+		return nil, AddFeedOutput{ID: feed.ID, FeedURL: feed.FeedURL, Title: feed.Title, Fetched: result.TotalSaved()}, nil
 	}
 }

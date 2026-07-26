@@ -126,15 +126,17 @@ bin/mcp [--rss-agent-path bin/rss-agent]
 ```
 
 公開するツール（他のMCPサーバーとの判別のため `rss_` 接頭辞を付与）: `rss_list`・`rss_search`・
-`rss_categories`・`rss_list_feeds`・`rss_bookmark`・`rss_add_feed`・`rss_fetch`・
+`rss_categories`・`rss_list_feeds`・`rss_bookmark`・`rss_mark_read`・`rss_add_feed`・`rss_fetch`・
 `rss_remove_feed`（破壊的操作）・`rss_enrich`・`rss_preference`（ANTHROPIC_API_KEY必須・課金発生）。
 `rss_remove_feed`・`rss_enrich`・`rss_preference` は真偽値の必須引数 `confirm` を持ち、`confirm:true` を渡す前に
 MCPクライアント（LLM）がユーザーに明示的な同意を得ることを前提とした設計になっている
 （ツールの description に明記）。`rss_enrich` はさらに処理件数上限の必須引数 `limit` を持ち、
-サーバー側でも `limit`・`batch_size`（各100）・`concurrency`（5）を上限にクランプする。
+サーバー側でも `limit`（100）・`batch_size`（40。`internal/driver/anthropic`の
+`defaultEnrichBatchSize`と同値で、これを超えるとMaxTokens超過による分割リトライを誘発しやすい）・
+`concurrency`（5）を上限にクランプする。
 `rss_list`・`rss_search` は `limit`・`page` でページネーションし、応答の `total` で
 絞り込み条件に一致する総件数を返す（デフォルト50件・上限200件。CLI・Web UIと異なり閲覧による
-既読化は行わない読み取り専用ツール）。
+既読化は行わない読み取り専用ツールで、既読にしたい場合は `rss_mark_read` を使う）。
 
 > **重要:** stdio transport では標準出力(stdout)がJSON-RPC通信そのものに使われるため、
 > `internal/config/config.yml` の `log.output` に `stdout` を指定していると通信が壊れる。

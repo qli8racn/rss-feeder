@@ -17,9 +17,13 @@ var ErrEnrichLimitRequired = errors.New("limit には1以上の値を指定し�
 // maxEnrichLimit・maxEnrichBatchSize・maxEnrichConcurrency は、confirm による同意確認1回で
 // 際限なく課金・API負荷が発生するのを防ぐためのサーバー側の上限クランプ。LLM が limit を必須で
 // 指定しても、その値自体に上限がなければ暴走防止の意図が実効化しないため、ここで頭打ちにする。
+//
+// maxEnrichBatchSize は internal/driver/anthropic/enrich.go の defaultEnrichBatchSize(40) と
+// 同じ値にする。40件はレスポンスがMaxTokens(4096)に対して安全マージンを持つと実測済みの値で、
+// それを超えるクランプ上限を設けると分割リトライ（無駄なトークン課金）を誘発しやすくなるため。
 const (
 	maxEnrichLimit       = 100
-	maxEnrichBatchSize   = 100
+	maxEnrichBatchSize   = 40
 	maxEnrichConcurrency = 5
 )
 
@@ -39,8 +43,8 @@ type EnrichInput struct {
 	Confirm     bool   `json:"confirm" jsonschema:"true の場合のみ実行する。ANTHROPIC_API_KEYによる追加課金が発生するため、ユーザーへの明示的な同意確認なしにtrueを渡してはならない"`
 	Force       bool   `json:"force,omitempty" jsonschema:"要約済みの記事も含め、最新記事を対象に再処理する"`
 	FeedURL     string `json:"feed_url,omitempty" jsonschema:"対象を絞り込むフィードURL（省略時は全フィード対象）"`
-	BatchSize   int    `json:"batch_size,omitempty" jsonschema:"1回のAPI呼び出しで処理する記事数（省略時はデフォルト値を使う）"`
-	Concurrency int    `json:"concurrency,omitempty" jsonschema:"バッチの最大同時実行数（省略時はデフォルト値を使う）"`
+	BatchSize   int    `json:"batch_size,omitempty" jsonschema:"1回のAPI呼び出しで処理する記事数（省略時はデフォルト値を使う。サーバー側で40件に上限クランプされる）"`
+	Concurrency int    `json:"concurrency,omitempty" jsonschema:"バッチの最大同時実行数（省略時はデフォルト値を使う。サーバー側で5に上限クランプされる）"`
 }
 
 // EnrichOutput は enrich ツールの出力。

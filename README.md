@@ -91,28 +91,30 @@ bin/web [--port 8080] [--static-dir web/static]
 
 | ツール | 説明 | 備考 |
 |-------|------|------|
-| `list` | 保存済み記事を一覧表示（デフォルトは未読のみ。all/bookmarked・categoryで絞り込み可。all・bookmarkedは同時指定不可） | 読み取り専用 |
-| `search` | キーワードで記事を全文検索 | 読み取り専用 |
-| `categories` | 記事に付与済みのカテゴリ一覧を表示 | 読み取り専用 |
-| `list-feeds` | 登録済みRSSフィード一覧を表示 | 読み取り専用 |
-| `bookmark` | 指定した記事IDのブックマークをトグル | |
-| `add-feed` | フィードURL（またはそのサイトURL）をDBに登録し、直後に記事を取得 | 数秒〜数十秒かかる場合あり |
-| `fetch` | 登録済みの全フィードを取得してDBに保存 | 数秒〜数十秒かかる場合あり |
-| `remove-feed` | 指定フィードと関連記事を完全削除 | 破壊的操作。`confirm`必須・実行前に必ず同意確認 |
-| `enrich` | 記事にAIで要約・カテゴリを付与してDBに保存 | `ANTHROPIC_API_KEY`課金発生。`confirm`・`limit`必須 |
-| `preference` | ブックマーク済み記事から読書傾向を分析 | 読み取り専用だが課金発生。`confirm`必須 |
+| `rss_list` | 保存済み記事を一覧表示（デフォルトは未読のみ。all/bookmarked・categoryで絞り込み可。all・bookmarkedは同時指定不可） | 読み取り専用（閲覧しても既読にならない）。`limit`/`page`でページネーションし、`total`で総件数を返す（デフォルト50件・上限200件） |
+| `rss_search` | キーワードで記事を全文検索 | 読み取り専用。`limit`/`page`/`total`は`rss_list`と同様 |
+| `rss_categories` | 記事に付与済みのカテゴリ一覧を表示 | 読み取り専用 |
+| `rss_list_feeds` | 登録済みRSSフィード一覧を表示 | 読み取り専用 |
+| `rss_bookmark` | 指定した記事IDのブックマークをトグル | |
+| `rss_mark_read` | 指定した記事IDを既読にする | `rss_list`が既読化しないため、既読管理をしたい場合に使う |
+| `rss_add_feed` | フィードURL（またはそのサイトURL）をDBに登録し、直後に記事を取得 | 数秒〜数十秒かかる場合あり |
+| `rss_fetch` | 登録済みの全フィードを取得してDBに保存 | 数秒〜数十秒かかる場合あり |
+| `rss_remove_feed` | 指定フィードと関連記事を完全削除 | 破壊的操作。`confirm`必須・実行前に必ず同意確認 |
+| `rss_enrich` | 記事にAIで要約・カテゴリを付与してDBに保存 | `ANTHROPIC_API_KEY`課金発生。`confirm`・`limit`必須 |
+| `rss_preference` | ブックマーク済み記事から読書傾向を分析 | 読み取り専用だが課金発生。`confirm`必須 |
 
 Claude Desktopのチャットでは、例えば以下のように話しかけると各ツールが呼び出される。
 
-- 「最近ブックマークした記事を教えて」→ `list`（bookmarked絞り込み）
-- 「Goに関する記事を検索して」→ `search`
-- 「新しいフィード https://example.com/feed.xml を登録して」→ `add-feed`
-- 「登録済みの全フィードを更新して」→ `fetch`
-- 「〇〇フィードはもう読まないから削除して」→ `remove-feed`（実行前にClaudeから確認が入る）
-- 「未要約の記事に要約をつけて。5件まで」→ `enrich`（課金発生の確認が入る）
-- 「自分の読書傾向を分析して」→ `preference`（課金発生の確認が入る）
+- 「最近ブックマークした記事を教えて」→ `rss_list`（bookmarked絞り込み）
+- 「Goに関する記事を検索して」→ `rss_search`
+- 「この記事は既読にして」→ `rss_mark_read`
+- 「新しいフィード https://example.com/feed.xml を登録して」→ `rss_add_feed`
+- 「登録済みの全フィードを更新して」→ `rss_fetch`
+- 「〇〇フィードはもう読まないから削除して」→ `rss_remove_feed`（実行前にClaudeから確認が入る）
+- 「未要約の記事に要約をつけて。5件まで」→ `rss_enrich`（課金発生の確認が入る）
+- 「自分の読書傾向を分析して」→ `rss_preference`（課金発生の確認が入る）
 
-`remove-feed`・`enrich`・`preference` は実行前にClaude側から同意確認が入る設計なので、
+`rss_remove_feed`・`rss_enrich`・`rss_preference` は実行前にClaude側から同意確認が入る設計なので、
 「はい」等で明示的に同意しない限り実行されない。
 
 ## テスト
