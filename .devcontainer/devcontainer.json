@@ -6,7 +6,6 @@
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "forwardPorts": [4566, 54545],
   "postCreateCommand": "go mod tidy",
-  "postStartCommand": "sudo service cron start",
   "customizations": {
     "vscode": {
       "extensions": [

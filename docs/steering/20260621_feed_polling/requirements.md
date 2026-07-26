@@ -1,5 +1,9 @@
 # フェーズ：フィード取得・要約の定期実行（イベント駆動の検討と実装）
 
+> **【廃止】** 2026-07-26 に devcontainer cron によるポーリング実装を撤去した。
+> `.devcontainer/poll-feeds.cron` / `scripts/poll-feeds.sh` を削除し、Dockerfileの`cron`パッケージ
+> インストール・`devcontainer.json`の`postStartCommand`も削除済み。本ドキュメントは当時の検討経緯の記録として残す。
+
 ## 概要
 
 「DBにフィードが追加されたことをトリガーにrss-orchestratorエージェントを実行する」というイベント駆動の仕組みが

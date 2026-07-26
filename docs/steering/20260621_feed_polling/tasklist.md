@@ -1,5 +1,7 @@
 # タスクリスト：フィード取得・要約の定期実行
 
+> **【廃止】** 2026-07-26 に本タスクリストで実装したdevcontainer cronを撤去した（詳細は`design.md`参照）。
+
 ## スクリプト
 
 - [x] `scripts/poll-feeds.sh` 新規作成（`bin/rss-feeder fetch` → `bin/rss-agent enrich`、`logs/poll-feeds.log`に記録）
