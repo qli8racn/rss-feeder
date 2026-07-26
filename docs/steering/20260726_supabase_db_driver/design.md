@@ -51,6 +51,7 @@ Claude Desktop / CLI / Web UI
   - `INSERT OR IGNORE` → Postgresでは `INSERT ... ON CONFLICT (url) DO NOTHING` に書き換える。
   - `res.LastInsertId()`（`feed.Save`）→ Postgresの `database/sql` 経由ドライバ（後述のpgx含む）は `LastInsertId` を一般にサポートしないため、`INSERT ... RETURNING id` + `QueryRowContext(...).Scan(&id)` に書き換える。
   - `sql.Named`（`UpdateMetadataBatch`）→ 名前付きパラメータの互換性が不確実なため、位置引数（`$1, $2, $3`）ベースの素直な書き方に書き換える。
+  - `LIKE` → `ILIKE`: SQLiteの`LIKE`はASCII範囲で大文字小文字を区別しないが、Postgresの`LIKE`は区別する。`Search`・`FindFiltered`のキーワード検索は`ILIKE`に書き換えてSQLite側の挙動と揃える。
   - `BOOLEAN`・`DATETIME` 型のGo側スキャン（`sql.NullTime`・`bool`）は `database/sql` の標準型で吸収されるため、リポジトリのScanコード自体は大きな変更なしで動作する見込み（Postgresの `TIMESTAMPTZ`/`BOOLEAN` は `sql.NullTime`/`bool` に問題なくマッピングされる）。
 - `internal/driver/readerpg/dbmaintenance` も追加する。ただしSQLite固有のPRAGMAはPostgresに存在しないため、以下のように役割を読み替える。
   - `Vacuum`: Postgresの `VACUUM` をそのまま実行（`VACUUM ANALYZE` にするかは実装時に検討）。

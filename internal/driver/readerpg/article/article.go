@@ -47,17 +47,17 @@ func (r *repository) Save(ctx context.Context, a domain.Article) error {
 }
 
 func (r *repository) FindAll(ctx context.Context) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles ORDER BY published_at DESC", articleColumns)
+	q := fmt.Sprintf("SELECT %s FROM articles ORDER BY published_at DESC NULLS LAST", articleColumns)
 	return r.query(ctx, q)
 }
 
 func (r *repository) FindUnread(ctx context.Context) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles WHERE read = FALSE ORDER BY published_at DESC", articleColumns)
+	q := fmt.Sprintf("SELECT %s FROM articles WHERE read = FALSE ORDER BY published_at DESC NULLS LAST", articleColumns)
 	return r.query(ctx, q)
 }
 
 func (r *repository) FindBookmarked(ctx context.Context) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s, COALESCE(f.feed_url, '') FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id WHERE a.bookmarked = TRUE ORDER BY a.published_at DESC", aliasedArticleColumns)
+	q := fmt.Sprintf("SELECT %s, COALESCE(f.feed_url, '') FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id WHERE a.bookmarked = TRUE ORDER BY a.published_at DESC NULLS LAST", aliasedArticleColumns)
 	rows, err := r.db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (r *repository) FetchLatest(ctx context.Context, limit int, feedURL string)
 		q += fmt.Sprintf(" WHERE f.feed_url = $%d", len(args))
 	}
 	args = append(args, limit)
-	q += fmt.Sprintf(" ORDER BY a.published_at DESC LIMIT $%d", len(args))
+	q += fmt.Sprintf(" ORDER BY a.published_at DESC NULLS LAST LIMIT $%d", len(args))
 
 	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -134,14 +134,16 @@ func (r *repository) CountNonBookmarked(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+// Search は ILIKE を使う。PostgresのLIKEはSQLiteと異なりASCII範囲でも大文字小文字を
+// 区別するため、SQLite実装（LIKE）と挙動を揃えるためILIKEを使う。
 func (r *repository) Search(ctx context.Context, keyword string, bookmarkedOnly bool) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles WHERE (title LIKE $1 OR content LIKE $2)", articleColumns)
+	q := fmt.Sprintf("SELECT %s FROM articles WHERE (title ILIKE $1 OR content ILIKE $2)", articleColumns)
 	like := "%" + keyword + "%"
 	args := []any{like, like}
 	if bookmarkedOnly {
 		q += " AND bookmarked = TRUE"
 	}
-	q += " ORDER BY published_at DESC"
+	q += " ORDER BY published_at DESC NULLS LAST"
 	return r.queryArgs(ctx, q, args...)
 }
 
@@ -236,9 +238,11 @@ func (r *repository) FindFiltered(ctx context.Context, filter articlerepo.ListFi
 		conditions = append(conditions, "bookmarked = TRUE")
 	}
 	if filter.Keyword != "" {
+		// ILIKE: PostgresのLIKEはSQLiteと異なりASCII範囲でも大文字小文字を区別するため、
+		// SQLite実装（LIKE）と挙動を揃える。
 		like := "%" + filter.Keyword + "%"
 		args = append(args, like, like)
-		conditions = append(conditions, fmt.Sprintf("(title LIKE $%d OR content LIKE $%d)", len(args)-1, len(args)))
+		conditions = append(conditions, fmt.Sprintf("(title ILIKE $%d OR content ILIKE $%d)", len(args)-1, len(args)))
 	}
 	if filter.Category != "" {
 		args = append(args, filter.Category)
@@ -260,9 +264,14 @@ func (r *repository) FindFiltered(ctx context.Context, filter articlerepo.ListFi
 	if !articlerepo.ValidSortFields[sortColumn] {
 		sortColumn = "published_at"
 	}
+	// NULLS FIRST/LAST: SQLiteはASCでNULLSFIRST・DESCでNULLSLASTがデフォルトだが、
+	// Postgresはその逆（ASCでNULLSLAST・DESCでNULLSFIRST）がデフォルトのため、
+	// sortColumn（category・publisher等はNULL/空になりうる）でSQLite側の挙動と揃えるために明示する。
 	orderDir := "DESC"
+	nullsOrder := "NULLS LAST"
 	if filter.Order == "asc" {
 		orderDir = "ASC"
+		nullsOrder = "NULLS FIRST"
 	}
 
 	page := filter.Page
@@ -275,8 +284,8 @@ func (r *repository) FindFiltered(ctx context.Context, filter articlerepo.ListFi
 	}
 
 	limitArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
-	q := fmt.Sprintf("SELECT %s FROM articles%s ORDER BY %s %s LIMIT $%d OFFSET $%d",
-		articleColumns, where, sortColumn, orderDir, len(limitArgs)-1, len(limitArgs))
+	q := fmt.Sprintf("SELECT %s FROM articles%s ORDER BY %s %s %s LIMIT $%d OFFSET $%d",
+		articleColumns, where, sortColumn, orderDir, nullsOrder, len(limitArgs)-1, len(limitArgs))
 
 	articles, err := r.queryArgs(ctx, q, limitArgs...)
 	if err != nil {
