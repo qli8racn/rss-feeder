@@ -36,6 +36,18 @@ func (c DBConfig) IsSupabase() bool {
 	return c.Driver == DriverSupabase
 }
 
+// Validate は db.driver に許可された値（未設定・"sqlite"・"supabase"）以外が
+// 設定されていないかを確認する。タイプミス等による意図しないフォールバックを
+// 起動時に検知するため。
+func (c DBConfig) Validate() error {
+	switch c.Driver {
+	case "", DriverSQLite, DriverSupabase:
+		return nil
+	default:
+		return fmt.Errorf("db.driver に不正な値 %q が指定されています（許可される値: %q, %q）", c.Driver, DriverSQLite, DriverSupabase)
+	}
+}
+
 // Config は internal/config/config.yml から読み込む設定値。
 type Config struct {
 	AnthropicAPIKey string    `mapstructure:"anthropic_api_key"`
@@ -61,6 +73,10 @@ func Load() (*Config, error) {
 
 	if err := v.Unmarshal(cfg); err != nil {
 		return nil, fmt.Errorf("config.yml の解析に失敗しました: %w", err)
+	}
+
+	if err := cfg.DB.Validate(); err != nil {
+		return nil, fmt.Errorf("config.yml の db.driver が不正です: %w", err)
 	}
 
 	return cfg, nil

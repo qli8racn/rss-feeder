@@ -82,6 +82,23 @@ func TestLoad_ReadsDBConfig(t *testing.T) {
 	}
 }
 
+func TestLoad_InvalidDBDriver(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "internal", "config")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("failed to create internal/config: %v", err)
+	}
+	content := []byte("db:\n  driver: supavase\n") // タイプミスを想定
+	if err := os.WriteFile(filepath.Join(configDir, "config.yml"), content, 0o600); err != nil {
+		t.Fatalf("failed to write config.yml: %v", err)
+	}
+	t.Chdir(dir)
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for invalid db.driver, got nil")
+	}
+}
+
 func TestLoad_ReadsLogConfig(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "internal", "config")
