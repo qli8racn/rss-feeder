@@ -22,6 +22,43 @@ Go 製 RSS リーダー CLI。
 
 ---
 
+## 並行開発（git worktree）
+
+複数の機能を並行して進める場合は、`docs/steering/` のディレクトリ（1機能）ごとに
+ブランチ・worktree・Claude Code セッションを1対1で対応させる。
+
+- **1 steering ドキュメント = 1 ブランチ = 1 worktree = 1 Claude Code セッション**
+- worktree は `/workspaces/rss-feeder-<slug>/` に作成する。`<slug>` はブランチ名の `/` を `-` に
+  置換したもの（例: `fix/cron/poll-feeds` → `rss-feeder-fix-cron-poll-feeds`）。
+
+新規ブランチで着手する場合:
+
+```bash
+git worktree add /workspaces/rss-feeder-<slug> -b <branch-name>
+```
+
+既存ブランチを引き継ぐ場合は `-b <branch-name>` を省略する。
+
+各 worktree は独立した作業ツリーを持つため、メインの worktree とは別に以下の再セットアップが必要:
+
+- `cd web/frontend && npm ci`（`node_modules` は worktree ごとに独立）
+- `cp internal/config/config.yml`（Git管理外のため、メインworktreeから都度コピーするか作り直す）
+- DB ファイル（`rss-feeder-db/reader.db`）は初回起動時に自動生成される。worktree間で共有されず
+  独立するのは意図した挙動（機能間でデータが混ざらない）。
+
+作業完了・PRマージ後の後片付け:
+
+```bash
+git worktree remove /workspaces/rss-feeder-<slug>
+./scripts/cleanup-merged-branches.sh --delete
+```
+
+`git branch -d`（`cleanup-merged-branches.sh` が内部で使用）は、対象ブランチが他のworktreeで
+checkoutされたままだと失敗する。**必ず `git worktree remove` を先に実行してから**
+cleanup スクリプトを実行すること。
+
+---
+
 ## Setup
 
 > **必須:** 本プロジェクトは Go 1.25 系を要求する（`github.com/modelcontextprotocol/go-sdk` が
