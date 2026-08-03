@@ -397,6 +397,15 @@ func TestFeedRepository_Remove_OtherUsersFeedReturnsErrNotFound(t *testing.T) {
 		t.Fatalf("FindByURL: found=%v err=%v", aliceFeed, err)
 	}
 
+	// Remove は所有権チェックを DELETE FROM articles より前に行うことで、他ユーザーの
+	// フィードIDを指定された場合に記事も削除されないことを保証している。この安全性を
+	// 検証するため、記事を1件挿入しておく。
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO articles (feed_id, url, title) VALUES (?, ?, ?)`,
+		aliceFeed.ID, "https://alice-only.example.com/article-1", "Article 1"); err != nil {
+		t.Fatalf("insert article for alice's feed: %v", err)
+	}
+
 	if err := r.Remove(ctx, aliceFeed.ID, bob); !errors.Is(err, feedrepo.ErrNotFound) {
 		t.Errorf("expected ErrNotFound when bob removes alice's feed, got %v", err)
 	}
@@ -408,5 +417,14 @@ func TestFeedRepository_Remove_OtherUsersFeedReturnsErrNotFound(t *testing.T) {
 	}
 	if stillExists == nil {
 		t.Error("alice's feed should still exist after bob's failed Remove attempt")
+	}
+
+	// alice の記事も削除されずに残っていることを確認する。
+	var articleCount int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM articles WHERE feed_id = ?`, aliceFeed.ID).Scan(&articleCount); err != nil {
+		t.Fatalf("count articles after failed Remove: %v", err)
+	}
+	if articleCount != 1 {
+		t.Errorf("alice's article count after bob's failed Remove attempt: got %d, want 1", articleCount)
 	}
 }
