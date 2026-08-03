@@ -124,7 +124,7 @@ bin/rss-feeder categories                 # 記事に付与済みのカテゴリ
 bin/rss-feeder backfill-metadata          # 既存記事の出版元・サムネイルを補完（再取得で判明した分のみ）
 ```
 
-`backfill-metadata` のみ、`articlerepo.Repository.UpdateMetadataBatch` がURL一致で全ユーザー横断に書き込む（userIDでスコープしない）唯一の操作。`default`ユーザーとして実行しても alice・bob 等の記事も補完対象になる（空の列しか埋めないため実害は小さいが、他のCLIコマンド・MCPツールとは分離の扱いが異なる点に注意）。コマンド実行後に表示される更新件数もこの横断集計（`RowsAffected`の総和）であり、`default`ユーザー自身の記事数を表しているわけではない。理由は `internal/adapter/driver/readerdb/article/article.go` のコメントおよび `docs/steering/20260726_mcp_user_management/design.md` 参照。
+`backfill-metadata` のみ、`articlerepo.Repository.UpdateMetadataBatch` がURL一致で全ユーザー横断に書き込む（userIDでスコープしない）唯一の操作。`default`ユーザーとして実行しても alice・bob 等の記事も補完対象になる（空の列しか埋めないため実害は小さいが、他のCLIコマンド・MCPツールとは分離の扱いが異なる点に注意）。コマンド実行後に表示される更新件数もこの横断集計（`RowsAffected`の総和）であり、`default`ユーザー自身の記事数を表しているわけではない。さらに `UNIQUE(feed_id, url)` により同一ユーザー内でも重複するフィードを複数購読していれば同じURLの記事が複数行持てるため、件数はユーザー間だけでなく同一ユーザー内でも記事の実数より膨らみうる。理由は `internal/adapter/driver/readerdb/article/article.go` のコメントおよび `docs/steering/20260726_mcp_user_management/design.md` 参照。
 
 ### rss-agent
 
