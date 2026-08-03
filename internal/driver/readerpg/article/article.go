@@ -47,17 +47,17 @@ func (r *repository) Save(ctx context.Context, a domain.Article) error {
 }
 
 func (r *repository) FindAll(ctx context.Context) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles ORDER BY published_at DESC NULLS LAST", articleColumns)
+	q := fmt.Sprintf("SELECT %s FROM articles ORDER BY published_at DESC NULLS LAST, id DESC", articleColumns)
 	return r.query(ctx, q)
 }
 
 func (r *repository) FindUnread(ctx context.Context) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles WHERE read = FALSE ORDER BY published_at DESC NULLS LAST", articleColumns)
+	q := fmt.Sprintf("SELECT %s FROM articles WHERE read = FALSE ORDER BY published_at DESC NULLS LAST, id DESC", articleColumns)
 	return r.query(ctx, q)
 }
 
 func (r *repository) FindBookmarked(ctx context.Context) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s, COALESCE(f.feed_url, '') FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id WHERE a.bookmarked = TRUE ORDER BY a.published_at DESC NULLS LAST", aliasedArticleColumns)
+	q := fmt.Sprintf("SELECT %s, COALESCE(f.feed_url, '') FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id WHERE a.bookmarked = TRUE ORDER BY a.published_at DESC NULLS LAST, a.id DESC", aliasedArticleColumns)
 	rows, err := r.db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (r *repository) FetchLatest(ctx context.Context, limit int, feedURL string)
 		q += fmt.Sprintf(" WHERE f.feed_url = $%d", len(args))
 	}
 	args = append(args, limit)
-	q += fmt.Sprintf(" ORDER BY a.published_at DESC NULLS LAST LIMIT $%d", len(args))
+	q += fmt.Sprintf(" ORDER BY a.published_at DESC NULLS LAST, a.id DESC LIMIT $%d", len(args))
 
 	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -143,7 +143,7 @@ func (r *repository) Search(ctx context.Context, keyword string, bookmarkedOnly 
 	if bookmarkedOnly {
 		q += " AND bookmarked = TRUE"
 	}
-	q += " ORDER BY published_at DESC NULLS LAST"
+	q += " ORDER BY published_at DESC NULLS LAST, id DESC"
 	return r.queryArgs(ctx, q, args...)
 }
 
@@ -174,7 +174,7 @@ func (r *repository) UpdateEnrichmentBatch(ctx context.Context, updates []articl
 }
 
 func (r *repository) FindWithoutSummary(ctx context.Context, limit int) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles WHERE summary IS NULL OR summary = '' ORDER BY published_at DESC NULLS LAST LIMIT $1", articleColumns)
+	q := fmt.Sprintf("SELECT %s FROM articles WHERE summary IS NULL OR summary = '' ORDER BY published_at DESC NULLS LAST, id DESC LIMIT $1", articleColumns)
 	return r.queryArgs(ctx, q, limit)
 }
 
@@ -284,8 +284,8 @@ func (r *repository) FindFiltered(ctx context.Context, filter articlerepo.ListFi
 	}
 
 	limitArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
-	q := fmt.Sprintf("SELECT %s FROM articles%s ORDER BY %s %s %s LIMIT $%d OFFSET $%d",
-		articleColumns, where, sortColumn, orderDir, nullsOrder, len(limitArgs)-1, len(limitArgs))
+	q := fmt.Sprintf("SELECT %s FROM articles%s ORDER BY %s %s %s, id %s LIMIT $%d OFFSET $%d",
+		articleColumns, where, sortColumn, orderDir, nullsOrder, orderDir, len(limitArgs)-1, len(limitArgs))
 
 	articles, err := r.queryArgs(ctx, q, limitArgs...)
 	if err != nil {

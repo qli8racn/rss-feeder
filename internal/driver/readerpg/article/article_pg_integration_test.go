@@ -665,21 +665,41 @@ func TestArticleRepository_FindFiltered_Pagination(t *testing.T) {
 	ctx := context.Background()
 	r := newRepo(t)
 
+	// published_atが全件同値（makeArticleはゼロ値のまま）でもページが安定するか検証するため、
+	// カテゴリでソートして同値行を作り出す（sort未指定時のタイブレーカーは別テストで検証）。
 	for i := 0; i < 5; i++ {
 		if err := r.Save(ctx, makeArticle(fmt.Sprintf("https://example.com/%d", i))); err != nil {
 			t.Fatalf("Save: %v", err)
 		}
 	}
 
-	articles, total, err := r.FindFiltered(ctx, articlerepo.ListFilter{Page: 2, PerPage: 2})
+	page1, total, err := r.FindFiltered(ctx, articlerepo.ListFilter{Page: 1, PerPage: 2})
 	if err != nil {
-		t.Fatalf("FindFiltered: %v", err)
+		t.Fatalf("FindFiltered page1: %v", err)
 	}
 	if total != 5 {
 		t.Errorf("total: got %d, want 5", total)
 	}
-	if len(articles) != 2 {
-		t.Errorf("page size: got %d, want 2", len(articles))
+	if len(page1) != 2 {
+		t.Errorf("page1 size: got %d, want 2", len(page1))
+	}
+
+	page2, _, err := r.FindFiltered(ctx, articlerepo.ListFilter{Page: 2, PerPage: 2})
+	if err != nil {
+		t.Fatalf("FindFiltered page2: %v", err)
+	}
+	if len(page2) != 2 {
+		t.Errorf("page2 size: got %d, want 2", len(page2))
+	}
+
+	seen := make(map[int64]bool, len(page1))
+	for _, a := range page1 {
+		seen[a.ID] = true
+	}
+	for _, a := range page2 {
+		if seen[a.ID] {
+			t.Errorf("article id %d appears in both page1 and page2 (missing ORDER BY tiebreaker)", a.ID)
+		}
 	}
 }
 

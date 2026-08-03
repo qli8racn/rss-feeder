@@ -77,7 +77,7 @@ func (r *repository) Register(ctx context.Context, url string) error {
 func (r *repository) ListAll(ctx context.Context) ([]domain.Feed, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, feed_url, COALESCE(title, ''), last_fetched, created_at
-		FROM feeds ORDER BY created_at
+		FROM feeds ORDER BY created_at, id
 	`)
 	if err != nil {
 		return nil, err
