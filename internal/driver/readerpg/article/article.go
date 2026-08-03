@@ -174,7 +174,7 @@ func (r *repository) UpdateEnrichmentBatch(ctx context.Context, updates []articl
 }
 
 func (r *repository) FindWithoutSummary(ctx context.Context, limit int) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles WHERE summary IS NULL OR summary = '' ORDER BY published_at DESC LIMIT $1", articleColumns)
+	q := fmt.Sprintf("SELECT %s FROM articles WHERE summary IS NULL OR summary = '' ORDER BY published_at DESC NULLS LAST LIMIT $1", articleColumns)
 	return r.queryArgs(ctx, q, limit)
 }
 
