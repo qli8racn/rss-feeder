@@ -94,6 +94,20 @@
 - [x] `AGENTS.md` のTransaction pooler回避策に `default_query_exec_mode=exec` も選択肢として併記する
 - [ ] `audit --article-id` に存在しない記事IDを渡した場合のFK違反（`.claude/hooks/audit-log.sh` は `|| true` で握り潰しているため実害は小さい）は対応不要と判断（現状維持）
 
+## PRレビュー対応（3巡目）
+
+### Should fix
+
+- [x] `internal/driver/readerpg/article/article.go` の `FindFiltered`（`category`/`publisher`等の同値ソート時）と固定`published_at DESC NULLS LAST`の6箇所（`FindAll`・`FindUnread`・`FindBookmarked`・`FetchLatest`・`Search`・`FindWithoutSummary`）の`ORDER BY`に一意な`id`（`FindFiltered`は`orderDir`に追従、他は`DESC`）をタイブレーカーとして追加し、Postgresでの`LIMIT`/`OFFSET`ページネーションが同値ソートキーで重複・欠落しないようにする。`internal/driver/readerpg/feed/feed.go`の`ListAll`（`ORDER BY created_at`）にも同様に`id`を追加する。`TestArticleRepository_FindFiltered_Pagination`をページ1・2のID集合が重複しないことを検証するよう拡張する
+- [x] `cmd/agent/main.go` の `migration.RunFor` 呼び出しを `cfg.DB.IsSupabase()` の条件下でのみ実行するようにし、SQLite使用時（`rss-agent`が`cmd/web`・`cmd/rss-feeder`からサブプロセスとして頻繁に起動される経路）で`addArticleColumns`のALTER TABLEが親プロセスと書き込みロックを取り合わないようにする。`AGENTS.md`の該当記述も更新する
+
+### Nits
+
+- [x] `internal/config/config.example.yml` のTransaction pooler回避策に `default_query_exec_mode=exec` も併記する（`AGENTS.md`は2巡目で対応済み）
+- [x] `internal/driver/readerpg/client.go` の `NewClient` 内部の `*config.Config` 取得を `do.MustInvoke` から `do.Invoke` + エラーハンドリングに変更する
+- [x] `article_pg_integration_test.go` の `feedID != 1` ハードコードを `testFeedID` 定数に置き換え、`makeArticle`・`newTestDB` 双方の参照元を1箇所に統一する
+- [ ] SQLite `readerdb/feed/feed.go` の `Save` が `ON CONFLICT DO UPDATE` 時に `LastInsertId()` で誤ったid（同一コネクションの直前のINSERTのrowid）を返しうる問題は、本PR（Supabase対応）のスコープ外のため別Issueとして起票する（未着手）
+
 ## 今後のタスク（本フェーズではスコープ外・別フェーズで着手）
 
 - [ ] ローカル環境でSelf-hosted Supabase（`supabase` CLI / docker compose）を使えるようにする
