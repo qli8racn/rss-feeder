@@ -148,6 +148,15 @@ func tableHasUniqueConstraint(db *sql.DB, table, substr string) (bool, error) {
 // 直接ユニーク制約を変更できないため、テーブル再作成手順が必要）。
 // articles.feed_id は数値IDをそのまま参照しているため、id を明示的に指定してコピーすることで
 // articles側の変更なしに整合性を維持する。既に再作成済みの場合は何もしない（冪等）。
+//
+// 手順は「新テーブルを別名(feeds_new)で作成→コピー→旧テーブルをDROP→新テーブルを
+// 本来の名前にRENAME」の順（SQLite公式推奨の12-step手順）で行う。
+// 旧手順（feeds RENAME TO feeds_old → 新feeds作成）だと、SQLite 3.25以降では
+// ALTER TABLE X RENAME TO Y が他テーブルのREFERENCES X(...)句もYへ自動書き換えてしまうため、
+// articles.feed_id REFERENCES feeds(id) が REFERENCES feeds_old(id) に書き換わってしまう
+// （直後にfeeds_oldをDROPして新feedsを作り直すため偶然自己修復していただけ）。
+// 本手順ではRENAME対象が誰からも参照されていないfeeds_newであるため、articles側のFK句は
+// 一切書き換わらない。
 func recreateFeedsTableWithUserScope(db *sql.DB) error {
 	migrated, err := tableHasUniqueConstraint(db, "feeds", feedsUniqueConstraint)
 	if err != nil {
@@ -163,11 +172,8 @@ func recreateFeedsTableWithUserScope(db *sql.DB) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.Exec(`ALTER TABLE feeds RENAME TO feeds_old`); err != nil {
-		return err
-	}
 	if _, err := tx.Exec(`
-		CREATE TABLE feeds (
+		CREATE TABLE feeds_new (
 			id           INTEGER  PRIMARY KEY AUTOINCREMENT,
 			user_id      INTEGER  NOT NULL REFERENCES users(id),
 			feed_url     TEXT     NOT NULL,
@@ -180,12 +186,15 @@ func recreateFeedsTableWithUserScope(db *sql.DB) error {
 		return err
 	}
 	if _, err := tx.Exec(`
-		INSERT INTO feeds (id, user_id, feed_url, title, last_fetched, created_at)
-		SELECT id, user_id, feed_url, title, last_fetched, created_at FROM feeds_old
+		INSERT INTO feeds_new (id, user_id, feed_url, title, last_fetched, created_at)
+		SELECT id, user_id, feed_url, title, last_fetched, created_at FROM feeds
 	`); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DROP TABLE feeds_old`); err != nil {
+	if _, err := tx.Exec(`DROP TABLE feeds`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`ALTER TABLE feeds_new RENAME TO feeds`); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_feeds_user_id ON feeds(user_id)`); err != nil {
@@ -198,6 +207,10 @@ func recreateFeedsTableWithUserScope(db *sql.DB) error {
 // url単体からUNIQUE(feed_id, url)へ変更する。recreateFeedsTableWithUserScope と同じ理由
 // （SQLiteはALTER TABLEでユニーク制約を変更できない）でテーブル再作成が必要。
 // 既に再作成済みの場合は何もしない（冪等）。
+//
+// recreateFeedsTableWithUserScope と同じ理由（audit_log.article_id REFERENCES articles(id)
+// が RENAME により書き換わってしまうのを防ぐため）で、articles_new を作成してから
+// 旧articlesをDROP・articles_newをarticlesへRENAMEする順序を採る。
 func recreateArticlesTableWithFeedScope(db *sql.DB) error {
 	migrated, err := tableHasUniqueConstraint(db, "articles", articlesUniqueConstraint)
 	if err != nil {
@@ -213,11 +226,8 @@ func recreateArticlesTableWithFeedScope(db *sql.DB) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.Exec(`ALTER TABLE articles RENAME TO articles_old`); err != nil {
-		return err
-	}
 	if _, err := tx.Exec(`
-		CREATE TABLE articles (
+		CREATE TABLE articles_new (
 			id            INTEGER  PRIMARY KEY AUTOINCREMENT,
 			feed_id       INTEGER  NOT NULL,
 			url           TEXT     NOT NULL,
@@ -238,14 +248,20 @@ func recreateArticlesTableWithFeedScope(db *sql.DB) error {
 		return err
 	}
 	if _, err := tx.Exec(`
-		INSERT INTO articles (id, feed_id, url, title, content, published_at, read, bookmarked,
+		INSERT INTO articles_new (id, feed_id, url, title, content, published_at, read, bookmarked,
 			fetched_at, publisher, thumbnail_url, summary, category)
 		SELECT id, feed_id, url, title, content, published_at, read, bookmarked,
-			fetched_at, publisher, thumbnail_url, summary, category FROM articles_old
+			fetched_at, publisher, thumbnail_url, summary, category FROM articles
 	`); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DROP TABLE articles_old`); err != nil {
+	if _, err := tx.Exec(`DROP TABLE articles`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`ALTER TABLE articles_new RENAME TO articles`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id)`); err != nil {
 		return err
 	}
 	return tx.Commit()

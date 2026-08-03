@@ -124,6 +124,8 @@ bin/rss-feeder categories                 # 記事に付与済みのカテゴリ
 bin/rss-feeder backfill-metadata          # 既存記事の出版元・サムネイルを補完（再取得で判明した分のみ）
 ```
 
+`backfill-metadata` のみ、`articlerepo.Repository.UpdateMetadataBatch` がURL一致で全ユーザー横断に書き込む（userIDでスコープしない）唯一の操作。`default`ユーザーとして実行しても alice・bob 等の記事も補完対象になる（空の列しか埋めないため実害は小さいが、他のCLIコマンド・MCPツールとは分離の扱いが異なる点に注意）。理由は `internal/adapter/driver/readerdb/article/article.go` のコメントおよび `docs/steering/20260726_mcp_user_management/design.md` 参照。
+
 ### rss-agent
 
 ```bash

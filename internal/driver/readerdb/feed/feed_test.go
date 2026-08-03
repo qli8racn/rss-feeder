@@ -89,6 +89,38 @@ func TestFeedRepository_Save_UpdateExisting(t *testing.T) {
 	}
 }
 
+func TestFeedRepository_Save_ReSaveDoesNotReturnStaleLastInsertID(t *testing.T) {
+	// res.LastInsertId()（last_insert_rowid()）は、UPSERTがON CONFLICT DO UPDATE経路を
+	// 通った場合には更新されず、同一コネクション上の直前の実INSERTのrowidを返してしまう
+	// 回帰バグの再現テスト。2件目のフィードを登録した直後に1件目を再Save（UPDATE経路）すると、
+	// 誤って2件目のIDが返っていた（internal/usecase/fetch.go の fetchFeed がこの戻り値を
+	// articles.feed_id に設定するため、誤ったフィード・他ユーザーのフィードに記事が
+	// 紐づけられてしまう実害があった）。
+	ctx := context.Background()
+	r := newRepo(t)
+	userID := createUser(t, r.db, "alice")
+
+	idA, err := r.Save(ctx, domain.Feed{FeedURL: "https://a.example.com/feed", Title: "A"}, userID)
+	if err != nil {
+		t.Fatalf("Save A: %v", err)
+	}
+	idB, err := r.Save(ctx, domain.Feed{FeedURL: "https://b.example.com/feed", Title: "B"}, userID)
+	if err != nil {
+		t.Fatalf("Save B: %v", err)
+	}
+	if idA == idB {
+		t.Fatalf("setup: expected distinct ids, got idA=%d idB=%d", idA, idB)
+	}
+
+	idA2, err := r.Save(ctx, domain.Feed{FeedURL: "https://a.example.com/feed", Title: "A updated"}, userID)
+	if err != nil {
+		t.Fatalf("re-Save A: %v", err)
+	}
+	if idA2 != idA {
+		t.Errorf("re-save of A returned stale id %d, want %d (A's original id)", idA2, idA)
+	}
+}
+
 func TestFeedRepository_Save_SameURLDifferentUsers(t *testing.T) {
 	// 同一の外部フィードURLを異なるユーザーがそれぞれ独立に購読できることを確認する。
 	ctx := context.Background()

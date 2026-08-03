@@ -30,6 +30,8 @@ func NewRepository(i do.Injector) (articlerepo.Repository, error) {
 	return &repository{db: do.MustInvoke[*sql.DB](i)}, nil
 }
 
+// Save は a.FeedID が呼び出し元によって既にuserIDスコープで検証済みであることを前提とし、
+// 所有権の再チェックは行わない（articlerepo.Repository のインターフェースコメント参照）。
 func (r *repository) Save(ctx context.Context, a domain.Article) error {
 	res, err := r.db.ExecContext(ctx, `
 		INSERT OR IGNORE INTO articles (feed_id, url, title, content, published_at, fetched_at, publisher, thumbnail_url)

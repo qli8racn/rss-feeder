@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/samber/do/v2"
 
@@ -106,6 +107,14 @@ func main() {
 	userIDFlag := flag.String("user-id", domain.DefaultUserName, "MCPクライアントを識別するユーザーID（例: alice）。省略時は CLI/Web UI と同じ default ユーザーとして動作する")
 	flag.Parse()
 
+	// タイポによる空文字・空白のみのユーザーが users テーブルに作られてしまうのを防ぐ
+	// （削除・改名機能はスコープ外のため、一度作られると手動SQLでしか消せない）。
+	trimmedUserID := strings.TrimSpace(*userIDFlag)
+	if trimmedUserID == "" {
+		fmt.Fprintln(os.Stderr, "--user-id は空文字・空白のみを指定できません")
+		os.Exit(1)
+	}
+
 	// DB・config.yml の相対パス解決より前に、必ずリポジトリルートへ cd する。
 	if err := chdirToRepoRoot(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -151,7 +160,7 @@ func main() {
 	// preferenceAgent は *domain.User をDIコンテナ経由で取得する
 	// （internal/driver/anthropic/preference.go 参照）。
 	resolveUserUC := usecase.NewResolveUserUsecase(do.MustInvoke[userrepo.Repository](i))
-	user, err := resolveUserUC.Execute(context.Background(), *userIDFlag)
+	user, err := resolveUserUC.Execute(context.Background(), trimmedUserID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "user resolution failed: %v\n", err)
 		os.Exit(1)

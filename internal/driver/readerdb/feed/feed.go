@@ -20,18 +20,25 @@ func NewRepository(i do.Injector) (feedrepo.Repository, error) {
 	return &repository{db: do.MustInvoke[*sql.DB](i)}, nil
 }
 
+// Save はフィードをUPSERTし、そのIDを返す。res.LastInsertId()（last_insert_rowid()）は
+// UPSERTがON CONFLICT DO UPDATE経路を通った場合には更新されず、同一コネクション上の
+// 直前の実INSERTのrowidを返してしまう（更新対象と無関係な古いIDが返る）ため使えない。
+// RETURNING句（mattn/go-sqlite3がバンドルするSQLite 3.35+でサポート）でINSERT/UPDATE
+// どちらの経路でも常に正しいidを取得する。
 func (r *repository) Save(ctx context.Context, feed domain.Feed, userID int64) (int64, error) {
-	res, err := r.db.ExecContext(ctx, `
+	row := r.db.QueryRowContext(ctx, `
 		INSERT INTO feeds (user_id, feed_url, title, last_fetched)
 		VALUES (?, ?, ?, ?)
 		ON CONFLICT(user_id, feed_url) DO UPDATE SET
 			title        = excluded.title,
 			last_fetched = excluded.last_fetched
+		RETURNING id
 	`, userID, feed.FeedURL, feed.Title, time.Now())
-	if err != nil {
+	var id int64
+	if err := row.Scan(&id); err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	return id, nil
 }
 
 func (r *repository) FindByURL(ctx context.Context, url string, userID int64) (*domain.Feed, error) {

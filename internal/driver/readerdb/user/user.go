@@ -37,13 +37,15 @@ func (r *repository) FindByName(ctx context.Context, name string) (*domain.User,
 }
 
 func (r *repository) Create(ctx context.Context, name string) (*domain.User, error) {
-	res, err := r.db.ExecContext(ctx, `INSERT INTO users (name) VALUES (?)`, name)
-	if err != nil {
+	row := r.db.QueryRowContext(ctx, `INSERT INTO users (name) VALUES (?) RETURNING id, created_at`, name)
+	var u domain.User
+	u.Name = name
+	var createdAt sql.NullTime
+	if err := row.Scan(&u.ID, &createdAt); err != nil {
 		return nil, err
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return nil, err
+	if createdAt.Valid {
+		u.CreatedAt = createdAt.Time
 	}
-	return &domain.User{ID: id, Name: name}, nil
+	return &u, nil
 }

@@ -59,6 +59,9 @@ type MetadataUpdate struct {
 // 外部記事URLを保存している場合に全員分を一度に補完できる方が望ましいため。
 // docs/steering/20260726_mcp_user_management/design.md 参照）。
 type Repository interface {
+	// Save は article.FeedID の所有権チェックを行わない。呼び出し元が事前に
+	// userIDスコープの feedRepo（例: feedRepo.Save の戻り値）から取得した FeedID を
+	// 渡すことが前提（design.md参照）。
 	Save(ctx context.Context, article domain.Article) error
 	FindAll(ctx context.Context, userID int64) ([]domain.Article, error)
 	FindUnread(ctx context.Context, userID int64) ([]domain.Article, error)
