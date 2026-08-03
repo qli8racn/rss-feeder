@@ -14,7 +14,7 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
-// testAgentUserID は preference/curate/discover の各Agentが、DIコンテナから取得した
+// testAgentUserID は preference/curate/discover/summarize の各Agentが、DIコンテナから取得した
 // userIDをrepo呼び出しに正しく伝播していることを検証するための固定値。
 const testAgentUserID int64 = 99
 
@@ -70,10 +70,15 @@ func toolUseThenFinal(t *testing.T, toolName, finalText string) func(context.Con
 type fakeArticleRepoForUserID struct {
 	articlerepo.Repository
 	findBookmarked func(ctx context.Context, userID int64) ([]domain.Article, error)
+	fetchLatest    func(ctx context.Context, limit int, feedURL string, userID int64) ([]domain.Article, error)
 }
 
 func (f *fakeArticleRepoForUserID) FindBookmarked(ctx context.Context, userID int64) ([]domain.Article, error) {
 	return f.findBookmarked(ctx, userID)
+}
+
+func (f *fakeArticleRepoForUserID) FetchLatest(ctx context.Context, limit int, feedURL string, userID int64) ([]domain.Article, error) {
+	return f.fetchLatest(ctx, limit, feedURL, userID)
 }
 
 type fakeFeedRepoForUserID struct {
@@ -152,5 +157,28 @@ func TestDiscoverAgent_Run_PassesUserIDToListAll(t *testing.T) {
 	}
 	if gotUserID != testAgentUserID {
 		t.Errorf("ListAll userID: got %d, want %d", gotUserID, testAgentUserID)
+	}
+}
+
+func TestSummarizeAgent_Run_PassesUserIDToFetchLatest(t *testing.T) {
+	var gotUserID int64
+	repo := &fakeArticleRepoForUserID{
+		fetchLatest: func(_ context.Context, _ int, _ string, userID int64) ([]domain.Article, error) {
+			gotUserID = userID
+			return []domain.Article{{ID: 1, Title: "A"}}, nil
+		},
+	}
+	agent := &summarizeAgent{
+		logger: discardLogger(),
+		client: &fakeMessageCreator{new: toolUseThenFinal(t, "fetch_articles", "要約結果")},
+		reader: repo,
+		userID: testAgentUserID,
+	}
+
+	if _, err := agent.Run(context.Background(), adapteranthropic.SummarizeOptions{}); err != nil {
+		t.Fatalf("Run: unexpected error: %v", err)
+	}
+	if gotUserID != testAgentUserID {
+		t.Errorf("FetchLatest userID: got %d, want %d", gotUserID, testAgentUserID)
 	}
 }
