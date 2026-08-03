@@ -47,6 +47,13 @@ Claude Code のエージェント・Hooks・SQLite の連携を段階的な機�
 | 10 | 記事メタデータ拡充（出版元・サムネイル・要約・カテゴリ） | [20260614_article_metadata](steering/20260614_article_metadata/) |
 | 11 | 設定ファイルによる ANTHROPIC_API_KEY 管理 | [20260615_config_apikey](steering/20260615_config_apikey/) |
 | 12 | OpenAPI による API 仕様管理とコード生成 | [20260617_openapi_codegen](steering/20260617_openapi_codegen/) |
+| — | Supabase（Postgres）DBドライバ対応（`db.driver`設定でSQLite/Supabaseを切替） | [20260726_supabase_db_driver](steering/20260726_supabase_db_driver/) |
+| — | MCPサーバー利用者（クライアント）単位でのフィード管理（マルチユーザー対応） | [20260726_mcp_user_management](steering/20260726_mcp_user_management/) |
+
+> **Note:** 上記フェーズ番号は `20260617_openapi_codegen`（フェーズ12）以降、付番を追従できておらず
+> 欠番（`—`）のまま追加している。フェーズ12以降に追加された `docs/steering/` 配下の全ディレクトリ
+> （フィード管理UI・フィードURL自動探索・curate/discover・構造化ログ・MCPサーバー等）を網羅した
+> 一覧ではないため、最新の全体像は `ls docs/steering/` で確認すること。
 
 ---
 
@@ -54,8 +61,8 @@ Claude Code のエージェント・Hooks・SQLite の連携を段階的な機�
 
 | 項目 | 要求 |
 |------|------|
-| 言語 | Go 1.24 以上 |
-| データストア | SQLite（`rss-feeder-db/reader.db`） |
+| 言語 | Go 1.25 以上 |
+| データストア | SQLite（`rss-feeder-db/reader.db`、デフォルト）または Supabase（Postgres）。`internal/config/config.yml` の `db.driver` で選択 |
 | 開発環境 | VSCode + devcontainer |
 | ビルド | `go build` 単一バイナリ |
 | テスト | 各フェーズに対応するユニットテストを用意 |
@@ -66,27 +73,44 @@ Claude Code のエージェント・Hooks・SQLite の連携を段階的な機�
 ## スコープ外
 
 - プッシュ通知・定期自動取得（cron 等）
-- 複数ユーザーの管理
 - RSS 以外のフォーマット（JSON Feed 等）
-- 認証・認可（Web ビューはローカル利用のみを想定）
+- 認証・認可（`cmd/mcp --user-id` はユーザー識別のみで、なりすまし対策のない任意の文字列。
+  Web ビューはローカル利用のみを想定し引き続き認証を持たない）
+
+> 「複数ユーザーの管理」は [20260726_mcp_user_management](steering/20260726_mcp_user_management/) で
+> 対応済みのためスコープ外から除外（`cmd/mcp` のみ `--user-id` でユーザーを切替可能。
+> `cmd/rss-feeder`・`cmd/web`・`cmd/agent` は引き続き単一の `default` ユーザー固定）。
 
 ---
 
 ## データベーススキーマ
 
+SQLite版（`rss-feeder-db/schema.sql`）を正とする。Supabase（Postgres）版は方言のみ異なる
+同等のスキーマ（詳細は `docs/steering/20260726_supabase_db_driver/design.md`）。
+
 ```sql
+CREATE TABLE users (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT UNIQUE NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+-- name = 'default' は cmd/rss-feeder・cmd/web・cmd/agent が常に暗黙的に利用するユーザー。
+-- cmd/mcp のみ --user-id で任意の識別子に切替可能（マルチユーザー対応）。
+
 CREATE TABLE feeds (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  feed_url     TEXT UNIQUE NOT NULL,
+  user_id      INTEGER NOT NULL REFERENCES users(id),
+  feed_url     TEXT NOT NULL,
   title        TEXT,
   last_fetched DATETIME,
-  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, feed_url)
 );
 
 CREATE TABLE articles (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   feed_id      INTEGER NOT NULL,
-  url          TEXT UNIQUE NOT NULL,
+  url          TEXT NOT NULL,
   title        TEXT NOT NULL,
   content      TEXT,
   published_at DATETIME,
@@ -97,8 +121,12 @@ CREATE TABLE articles (
   thumbnail_url TEXT,
   summary      TEXT,
   category     TEXT,
-  FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
+  FOREIGN KEY(feed_id) REFERENCES feeds(id),
+  UNIQUE(feed_id, url)
 );
+-- articles には user_id を持たせず、feed_id → feeds.user_id の関連で所有ユーザーを判定する
+-- （feeds が「1ユーザー1購読=1行」の設計のため）。url は旧グローバルUNIQUEからfeed_id複合UNIQUEに
+-- 変更されており、同一ユーザーが内容の重なるフィードを複数購読していると記事が複数行になりうる。
 
 CREATE TABLE audit_log (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,6 +137,8 @@ CREATE TABLE audit_log (
   timestamp  DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(article_id) REFERENCES articles(id)
 );
+-- audit_log は user_id でスコープしていない（cmd/web・cmd/rss-feederからのみ書き込まれ、
+-- 常にdefaultユーザーのため現状実害なし）。
 ```
 
 ---
