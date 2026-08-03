@@ -176,6 +176,7 @@ func (uc *ResolveUserUsecase) Execute(ctx context.Context, name string) (*domain
 - フィード単位の設計比較で述べた「同一外部フィードを複数ユーザーが購読した場合のfetch/enrich重複コスト」は、利用者数が増えた場合に再検討する
 - `users` テーブルにはユーザーの削除・改名機能を設けない（要件のスコープ外）。誤った識別子で `cmd/mcp --user-id` を起動してしまった場合の復旧手段（該当ユーザーの `feeds.user_id` を手動で付け替える等）は今回設計しない
 - FK制約（`PRAGMA foreign_keys`）を有効化するかどうかは既存踏襲で見送ったが、データ整合性を厳格化したい場合は別途検討する
+- `audit_log` は `userID` でスコープしていない。現状これを読み書きするのは `cmd/web`・`cmd/rss-feeder`（常に `default` ユーザー）のみのため実害はないが、将来 MCP サーバーに監査ログ関連のツールを追加する場合は、`article_id` 経由で他ユーザーの記事の監査ログが混ざらないよう `articlerepo` と同様のスコープ対応を検討する
 
 ## 実装時の追記（設計からの逸脱点）
 
@@ -216,3 +217,32 @@ func (uc *ResolveUserUsecase) Execute(ctx context.Context, name string) (*domain
    `internal/adapter/driver/readerdb/article/article.go` のコメント参照）、`enrichAgent`・`summarizeAgent`
    （`FetchLatest` を共用する `summarizeAgent` も同様に対応が必要だったため合わせて修正）の両方に
    `userID` フィールドを追加して修正した。
+6. **`UNIQUE(feed_id, url)` 化により、同一ユーザー内でも記事が重複保存されるようになった（レビューで検出）**:
+   項目1の `articles.url` ユニーク制約変更は、複数ユーザーが同じ外部フィードURLを購読するケースに
+   対応するためのものだったが、副作用として単一ユーザーの挙動も変わる。旧実装（`articles.url` が
+   グローバルUNIQUE）では、1人のユーザーがサイト全体フィードとカテゴリ別フィードのように内容が
+   重複するフィードを複数購読していても、同じ記事URLは1行しか保存されなかった（`INSERT OR IGNORE`
+   で2件目以降が `ErrDuplicate` としてスキップされる）。`UNIQUE(feed_id, url)` ではこの重複排除が
+   `feed_id` 単位に閉じるため、`feed_id` が異なれば同じURLの記事が別行として保存される
+   （`list`・`search`・Web UI・`rss_list` に同じ記事が複数件表示され、`rss_enrich` の課金対象にも
+   重複してカウントされる）。「フィードごとに独立した記事集合を持つ」のは案A
+   （`feeds.user_id` 直付け）の自然な帰結であり、`Save` を「同一ユーザーの他フィードに同じURLが
+   既にあればスキップ」に変更するとユーザー分離の単純さが崩れるため、現状の挙動を維持し、
+   既存ユーザーに見える変化として本項目に記録するにとどめる。
+7. **マイグレーション手順・記事所有判定方法が設計と異なる（レビューで検出）**:
+   - 「`feeds`/`articles` テーブル再作成の手順」（本設計の該当節）は「`feeds` を `feeds_old` に
+     リネーム→新スキーマで `feeds` を作成→コピー→`feeds_old` を `DROP TABLE`」という順序で
+     記載していたが、この順序はSQLite 3.25以降で `ALTER TABLE X RENAME TO Y` が他テーブルの
+     `REFERENCES X(...)` 句も自動的に `Y` へ書き換えてしまうため、`audit_log.article_id
+     REFERENCES articles(id)` が意図せず `articles_old(id)` を指したまま残る不具合があった
+     （レビューで検出、`internal/migration/migration.go` の `recreateFeedsTableWithUserScope`・
+     `recreateArticlesTableWithFeedScope` および `rss-feeder-db/20260726_add_user_management.sh`
+     で修正済み）。実装は「新テーブルを別名（`feeds_new`/`articles_new`）で作成→コピー→旧テーブルを
+     `DROP TABLE`→新テーブルを本来の名前に `RENAME`」という、SQLite公式が推奨する12-step手順の順序
+     （RENAME先が誰からも参照されていない新テーブルになる順序）を採用している。
+   - 記事の所有判定は、本設計では `JOIN feeds ON articles.feed_id = feeds.id AND feeds.user_id = ?`
+     を前提にしていたが、実装では相関のないサブクエリ `feed_id IN (SELECT id FROM feeds WHERE
+     user_id = ?)`（`ownedByUserSubquery`、`internal/driver/readerdb/article/article.go`）を
+     採用した。結果は等価だが、`FindFiltered` の動的WHERE組み立てや `MarkAsRead`・`UpdateEnrichmentBatch`
+     等の `UPDATE` 文（SQLiteは `UPDATE ... JOIN` を書けない）に一律で付けやすいため、サブクエリ方式に
+     統一した。
