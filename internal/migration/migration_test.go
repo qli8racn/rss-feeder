@@ -189,6 +189,115 @@ func TestRun_IsIdempotent(t *testing.T) {
 	}
 }
 
+// TestRun_NewMigrationStepAppliesExactlyOnceAcrossRepeatedRuns は、PRAGMA user_version による
+// バージョン管理が正しく機能していることを、実際に新しいステップを1つ追加した状態で検証する。
+// migrationSteps の末尾に追加したステップが、複数回 Run を呼んでも常にちょうど1回だけ適用され、
+// 既存の全ステップが完了済みのDBに対しても（早期returnで丸ごと無視されずに）確実に適用される
+// ことを確認する。
+func TestRun_NewMigrationStepAppliesExactlyOnceAcrossRepeatedRuns(t *testing.T) {
+	db := newTestDB(t)
+	if err := Run(db); err != nil {
+		t.Fatalf("initial Run (existing steps only): %v", err)
+	}
+
+	originalSteps := migrationSteps
+	t.Cleanup(func() { migrationSteps = originalSteps })
+
+	calls := 0
+	newVersion := originalSteps[len(originalSteps)-1].version + 1
+	migrationSteps = append(append([]migrationStep{}, originalSteps...), migrationStep{
+		version: newVersion,
+		apply: func(db *sql.DB) error {
+			calls++
+			return nil
+		},
+	})
+
+	for i := 0; i < 3; i++ {
+		if err := Run(db); err != nil {
+			t.Fatalf("Run #%d after adding new step: %v", i+1, err)
+		}
+	}
+
+	if calls != 1 {
+		t.Errorf("new step apply called %d times, want 1 (already-completed steps must not rerun, but a genuinely new step must still run against an already-migrated DB)", calls)
+	}
+
+	version, err := getUserVersion(db)
+	if err != nil {
+		t.Fatalf("getUserVersion: %v", err)
+	}
+	if version != newVersion {
+		t.Errorf("user_version after new step: got %d, want %d", version, newVersion)
+	}
+}
+
+// TestRun_BackfillsVersionForPreVersioningMigratedDB は、PRAGMA user_version 導入前の
+// isFullyMigrated のみでの判定によって既に「移行済み」だったDB（PRAGMA user_version は
+// 0 のまま）に対して、Run が version 1 の実処理を再実行せずに user_version だけを
+// backfill することを確認する。
+func TestRun_BackfillsVersionForPreVersioningMigratedDB(t *testing.T) {
+	db := newTestDB(t)
+	// Run を経由せず、version 1 到達後の最終スキーマ相当を直接構築する
+	// （PRAGMA user_version 導入前の既存DBを模す。user_version はデフォルトの0のまま）。
+	if _, err := db.Exec(`
+		CREATE TABLE users (
+			id         INTEGER  PRIMARY KEY AUTOINCREMENT,
+			name       TEXT     UNIQUE NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+		INSERT INTO users (name) VALUES ('` + domain.DefaultUserName + `');
+		CREATE TABLE feeds (
+			id           INTEGER  PRIMARY KEY AUTOINCREMENT,
+			user_id      INTEGER  NOT NULL REFERENCES users(id),
+			feed_url     TEXT     NOT NULL,
+			title        TEXT,
+			last_fetched DATETIME,
+			created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(user_id, feed_url)
+		);
+		CREATE TABLE articles (
+			id            INTEGER  PRIMARY KEY AUTOINCREMENT,
+			feed_id       INTEGER  NOT NULL,
+			url           TEXT     NOT NULL,
+			title         TEXT     NOT NULL,
+			content       TEXT,
+			published_at  DATETIME,
+			read          BOOLEAN  DEFAULT 0,
+			bookmarked    BOOLEAN  DEFAULT 0,
+			fetched_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+			publisher     TEXT,
+			thumbnail_url TEXT,
+			summary       TEXT,
+			category      TEXT,
+			FOREIGN KEY(feed_id) REFERENCES feeds(id),
+			UNIQUE(feed_id, url)
+		);
+	`); err != nil {
+		t.Fatalf("seed pre-versioning migrated schema: %v", err)
+	}
+
+	if err := Run(db); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	version, err := getUserVersion(db)
+	if err != nil {
+		t.Fatalf("getUserVersion: %v", err)
+	}
+	if version != 1 {
+		t.Errorf("user_version after backfill: got %d, want 1", version)
+	}
+
+	var userCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE name = ?`, domain.DefaultUserName).Scan(&userCount); err != nil {
+		t.Fatalf("count default users: %v", err)
+	}
+	if userCount != 1 {
+		t.Errorf("default user count: got %d, want 1 (backfill must not rerun applyBaseMigration)", userCount)
+	}
+}
+
 func TestRun_MultipleUsersCanSubscribeToSameFeedURL(t *testing.T) {
 	// feeds.UNIQUE(user_id, feed_url) により、異なるユーザーは同一の外部フィードURLを
 	// それぞれ独立に購読できることを確認する。

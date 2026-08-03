@@ -8,20 +8,92 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
+// migrationStep はバージョン番号付きの1マイグレーションステップ。
+type migrationStep struct {
+	version int
+	apply   func(db *sql.DB) error
+}
+
+// migrationSteps は適用順に並んだマイグレーションステップ。新しいマイグレーションを追加する
+// 場合は、version を直前のステップ+1にした上で末尾に追記すること。PRAGMA user_version で
+// DBごとの適用済みバージョンを管理しているため、追記したステップは次回起動時に既存の全DB
+// （新規DB・移行済みDBを問わず）へ自動的に適用される。
+// version 1 は本来「初期スキーマ作成→articlesへのメタデータ列追加→usersテーブル新設・
+// feedsへのuser_id付与」という複数フェーズだったが、PRAGMA user_version導入以前から存在した
+// フェーズのため1ステップにまとめている（各フェーズ自身も CREATE TABLE IF NOT EXISTS・
+// duplicate column name無視・tableHasUniqueConstraintによる冪等性チェックを持つため、
+// 万一2回連続で実行されても安全）。
+var migrationSteps = []migrationStep{
+	{version: 1, apply: applyBaseMigration},
+}
+
 // Run はDBを最新スキーマまでマイグレーションする。全エントリポイントの起動のたびに
-// 呼ばれるため、既に最新スキーマまで移行済みのDBに対しては isFullyMigrated で早期returnし、
-// ALTER TABLE・INSERT・UPDATE 等の書き込み文（起動のたびに共有DBの書き込みロックを取ってしまう）
-// を一切実行しないようにする。
+// 呼ばれるため、PRAGMA user_version で管理する適用済みバージョンより新しいステップだけを
+// 実行し、既に適用済みのステップ（ALTER TABLE・INSERT・UPDATE 等、起動のたびに共有DBの
+// 書き込みロックを取ってしまう文を含む）は再実行しない。
 func Run(db *sql.DB) error {
-	migrated, err := isFullyMigrated(db)
+	version, err := getUserVersion(db)
 	if err != nil {
 		return err
 	}
-	if migrated {
-		return nil
+
+	if version == 0 {
+		// PRAGMA user_version が0（未設定）のDB。PRAGMA user_versionによる管理を導入する前の
+		// 既存DB（isFullyMigratedによるスキーマ内容検査でのみ移行済みと判定されていたDB）か、
+		// 全くの新規DBのどちらか。前者であれば、version 1 相当のステップは既に完了しているため、
+		// 再実行せずに version だけ backfill する（起動毎の不要な書き込みを避けるための、
+		// 一度きりの移行）。
+		legacy, err := isFullyMigrated(db)
+		if err != nil {
+			return err
+		}
+		if legacy {
+			// ここで即座に永続化する。以降のループは「version以下のステップをskip」する
+			// だけなので、version 1 が最新ステップの場合ループは1文も実行せず、
+			// このbackfillをここで書いておかないと user_version が0のまま残ってしまう。
+			if err := setUserVersion(db, 1); err != nil {
+				return fmt.Errorf("user_versionのbackfillに失敗しました: %w", err)
+			}
+			version = 1
+		}
 	}
 
-	_, err = db.Exec(`
+	for _, step := range migrationSteps {
+		if step.version <= version {
+			continue
+		}
+		if err := step.apply(db); err != nil {
+			return fmt.Errorf("migration step %d: %w", step.version, err)
+		}
+		if err := setUserVersion(db, step.version); err != nil {
+			return fmt.Errorf("migration step %d: user_versionの更新に失敗しました: %w", step.version, err)
+		}
+		version = step.version
+	}
+	return nil
+}
+
+// getUserVersion は PRAGMA user_version の現在値を返す（未設定の新規DBでは0）。
+func getUserVersion(db *sql.DB) (int, error) {
+	var v int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+// setUserVersion は PRAGMA user_version を v に更新する。PRAGMA文はプレースホルダ(?)を
+// サポートしないため文字列埋め込みになるが、v は migrationStep.version というGoコード上の
+// 定数由来でありSQLインジェクションの余地はない。
+func setUserVersion(db *sql.DB, v int) error {
+	_, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", v))
+	return err
+}
+
+// applyBaseMigration は version 1 のステップ本体（初期スキーマ作成・articlesへのメタデータ列
+// 追加・usersテーブル新設とfeeds/articlesのユーザースコープ化）を実行する。
+func applyBaseMigration(db *sql.DB) error {
+	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS feeds (
 			id           INTEGER PRIMARY KEY AUTOINCREMENT,
 			feed_url     TEXT UNIQUE NOT NULL,
@@ -155,12 +227,20 @@ func tableHasUniqueConstraint(db *sql.DB, table, substr string) (bool, error) {
 	return createSQL.Valid && strings.Contains(createSQL.String, substr), nil
 }
 
-// isFullyMigrated は feeds・articles が最終スキーマ（複合ユニーク制約）まで移行済みかどうかを
-// 判定する。articles が UNIQUE(feed_id, url) 付きで存在するのは
-// recreateArticlesTableWithFeedScope による再作成が完了した場合のみであり、その再作成後の
-// スキーマには publisher・thumbnail_url 等のメタデータ列も必ず含まれる（articles_new の
-// CREATE TABLE 文に明示的に列挙されているため）。したがってこの2つのユニーク制約の有無だけで、
-// addArticleColumns・addUserManagement を含む Run 全体が完了済みかどうかを判定できる。
+// isFullyMigrated は feeds・articles が version 1（複合ユニーク制約まで）のスキーマに
+// 到達済みかどうかを、実際のテーブル定義を検査して判定する。articles が
+// UNIQUE(feed_id, url) 付きで存在するのは recreateArticlesTableWithFeedScope による
+// 再作成が完了した場合のみであり、その再作成後のスキーマには publisher・thumbnail_url 等の
+// メタデータ列も必ず含まれる（articles_new の CREATE TABLE 文に明示的に列挙されているため）。
+// したがってこの2つのユニーク制約の有無だけで、version 1（= applyBaseMigration）が
+// 完了済みかどうかを判定できる。
+//
+// この関数は PRAGMA user_version 導入前の既存DBに対して、version 1 が完了済みかどうかを
+// 一度だけ判定してバックフィルする（Run参照）ためだけに使う。version 2 以降の
+// マイグレーションステップが完了しているかどうかの判定には使えない
+// （新しいステップを追加しても、この関数が検査するスキーマ内容には現れないため）。
+// version 2 以降を追加する場合、この関数を拡張する必要はない
+// （PRAGMA user_version による通常のバージョン管理に委ねられる）。
 func isFullyMigrated(db *sql.DB) (bool, error) {
 	feedsOK, err := tableHasUniqueConstraint(db, "feeds", feedsUniqueConstraint)
 	if err != nil || !feedsOK {
