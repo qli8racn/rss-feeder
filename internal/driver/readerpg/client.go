@@ -48,6 +48,7 @@ func NewClient(i do.Injector) (*sql.DB, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
 	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
 		return nil, fmt.Errorf("supabase(postgres)への疎通確認に失敗しました（dsnの設定を確認してください）: %w", err)
 	}
 
