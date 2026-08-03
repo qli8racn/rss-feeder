@@ -135,8 +135,11 @@ db:
 - 手動確認時の注意点: 文字列カラム（`title`・`publisher`・`category`）のソート順は、SQLiteの
   既定コレーション（`BINARY`＝バイト順）とSupabaseの既定コレーション（`en_US.UTF-8`相当）で
   異なる。既知の差として扱い、Postgres側の並び順を正とする。
-- `cmd/agent`（`rss-agent`）は本ブランチから起動時にマイグレーション（`migration.RunFor`）を
-  実行するようになった。変更前は実行していなかった（Postgres対応に伴う意図的な追加）。
+- `cmd/agent`（`rss-agent`）は本ブランチから `db.driver: supabase` 使用時のみ起動時にマイグレーション
+  （`migration.RunPostgres`）を実行するようになった（Postgres対応に伴う意図的な追加）。SQLite使用時は
+  従来通り実行しない。`rss-agent` は `cmd/web`・`cmd/rss-feeder` からサブプロセスとして頻繁に起動され、
+  呼び出し元が起動時に必ずmigrate済みのため冗長になる上、SQLiteでは`addArticleColumns`のALTER TABLEが
+  親プロセスと書き込みロックを取り合ってしまうため。
 - Self-hosted Supabase（Docker版）は現時点で未対応（`docs/steering/20260726_supabase_db_driver/`
   の「今後のタスク」参照）。
 

@@ -65,9 +65,17 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if err := migration.RunFor(cfg, db); err != nil {
-		fmt.Fprintf(os.Stderr, "migration failed: %v\n", err)
-		os.Exit(1)
+	// cmd/agent（rss-agent）はcmd/web・cmd/rss-feederからサブプロセスとして頻繁に起動される
+	// （feeddiscovery・feedenrichのサブプロセス実装参照）。呼び出し元は起動時に必ずmigrateして
+	// いるためSQLiteではmigrationが常に冗長で、かつaddArticleColumnsのALTER TABLEが親プロセスと
+	// 書き込みロックを取り合ってしまう。Supabase側はCREATE TABLE IF NOT EXISTSベースで安価かつ
+	// 単独実行（他エントリポイントを一度も起動していないSupabaseプロジェクト）に備える必要があるため、
+	// Supabase使用時のみ実行する。
+	if cfg.DB.IsSupabase() {
+		if err := migration.RunFor(cfg, db); err != nil {
+			fmt.Fprintf(os.Stderr, "migration failed: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	summarizeUC := usecase.NewSummarizeUsecase(do.MustInvoke[adapteranthropic.SummarizeAgent](i))
