@@ -52,17 +52,20 @@ type FetchUsecase struct {
 	articleRepo articlerepo.Repository
 	feedRepo    feedrepo.Repository
 	rssReader   adapterrss.RSSReader
+	userID      int64
 }
 
 func NewFetchUsecase(
 	articleRepo articlerepo.Repository,
 	feedRepo feedrepo.Repository,
 	rssReader adapterrss.RSSReader,
+	userID int64,
 ) *FetchUsecase {
 	return &FetchUsecase{
 		articleRepo: articleRepo,
 		feedRepo:    feedRepo,
 		rssReader:   rssReader,
+		userID:      userID,
 	}
 }
 
@@ -83,7 +86,7 @@ func (uc *FetchUsecase) Execute(ctx context.Context, feedURLs []string) (FetchRe
 // CLI（fetch コマンド）と Web API（POST /api/articles/fetch）はともに「登録済み全フィードの取得」を
 // 行うため、フィード一覧の取得から URL 抽出までをここに集約する。
 func (uc *FetchUsecase) ExecuteAll(ctx context.Context) (FetchResult, error) {
-	feeds, err := uc.feedRepo.ListAll(ctx)
+	feeds, err := uc.feedRepo.ListAll(ctx, uc.userID)
 	if err != nil {
 		return FetchResult{}, fmt.Errorf("フィード一覧の取得に失敗: %w", err)
 	}
@@ -102,7 +105,7 @@ func (uc *FetchUsecase) fetchFeed(ctx context.Context, feedURL string) FeedFetch
 		return FeedFetchResult{FeedURL: feedURL, Err: fmt.Errorf("フェッチ失敗: %w", err)}
 	}
 
-	feedID, err := uc.feedRepo.Save(ctx, domain.Feed{FeedURL: feedURL, Title: feedTitle})
+	feedID, err := uc.feedRepo.Save(ctx, domain.Feed{FeedURL: feedURL, Title: feedTitle}, uc.userID)
 	if err != nil {
 		return FeedFetchResult{FeedURL: feedURL, Err: fmt.Errorf("フィード保存失敗: %w", err)}
 	}

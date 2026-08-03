@@ -17,54 +17,54 @@ type mockBookmarkArticleRepo struct {
 }
 
 func (m *mockBookmarkArticleRepo) Save(_ context.Context, _ domain.Article) error { return nil }
-func (m *mockBookmarkArticleRepo) FindAll(_ context.Context) ([]domain.Article, error) {
+func (m *mockBookmarkArticleRepo) FindAll(_ context.Context, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockBookmarkArticleRepo) FindUnread(_ context.Context) ([]domain.Article, error) {
+func (m *mockBookmarkArticleRepo) FindUnread(_ context.Context, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockBookmarkArticleRepo) FindBookmarked(_ context.Context) ([]domain.Article, error) {
+func (m *mockBookmarkArticleRepo) FindBookmarked(_ context.Context, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockBookmarkArticleRepo) FindByID(_ context.Context, id int64) (*domain.Article, error) {
+func (m *mockBookmarkArticleRepo) FindByID(_ context.Context, id int64, _ int64) (*domain.Article, error) {
 	if m.findErr != nil {
 		return nil, m.findErr
 	}
 	return m.articles[id], nil
 }
-func (m *mockBookmarkArticleRepo) Update(_ context.Context, a domain.Article) error {
+func (m *mockBookmarkArticleRepo) Update(_ context.Context, a domain.Article, _ int64) error {
 	m.updated = append(m.updated, a)
 	return m.updateErr
 }
-func (m *mockBookmarkArticleRepo) MarkAsRead(_ context.Context, _ []int64) error { return nil }
-func (m *mockBookmarkArticleRepo) DeleteNonBookmarked(_ context.Context) (int64, error) {
+func (m *mockBookmarkArticleRepo) MarkAsRead(_ context.Context, _ []int64, _ int64) error { return nil }
+func (m *mockBookmarkArticleRepo) DeleteNonBookmarked(_ context.Context, _ int64) (int64, error) {
 	return 0, nil
 }
-func (m *mockBookmarkArticleRepo) CountNonBookmarked(_ context.Context) (int64, error) {
+func (m *mockBookmarkArticleRepo) CountNonBookmarked(_ context.Context, _ int64) (int64, error) {
 	return 0, nil
 }
-func (m *mockBookmarkArticleRepo) CountBookmarked(_ context.Context) (int64, error) {
+func (m *mockBookmarkArticleRepo) CountBookmarked(_ context.Context, _ int64) (int64, error) {
 	return 0, nil
 }
-func (m *mockBookmarkArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) {
+func (m *mockBookmarkArticleRepo) FetchLatest(_ context.Context, _ int, _ string, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockBookmarkArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate) error {
+func (m *mockBookmarkArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate, _ int64) error {
 	return nil
 }
-func (m *mockBookmarkArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {
+func (m *mockBookmarkArticleRepo) FindWithoutSummary(_ context.Context, _ int, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
 func (m *mockBookmarkArticleRepo) UpdateMetadataBatch(_ context.Context, _ []articlerepo.MetadataUpdate) (int64, error) {
 	return 0, nil
 }
-func (m *mockBookmarkArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.Article, error) {
+func (m *mockBookmarkArticleRepo) Search(_ context.Context, _ string, _ bool, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockBookmarkArticleRepo) FindFiltered(_ context.Context, _ articlerepo.ListFilter) ([]domain.Article, int64, error) {
+func (m *mockBookmarkArticleRepo) FindFiltered(_ context.Context, _ articlerepo.ListFilter, _ int64) ([]domain.Article, int64, error) {
 	return nil, 0, nil
 }
-func (m *mockBookmarkArticleRepo) DistinctCategories(_ context.Context) ([]string, error) {
+func (m *mockBookmarkArticleRepo) DistinctCategories(_ context.Context, _ int64) ([]string, error) {
 	return nil, nil
 }
 
@@ -74,7 +74,7 @@ func TestBookmarkUsecase_Toggle_FalseToTrue(t *testing.T) {
 			1: {ID: 1, Title: "A", Bookmarked: false},
 		},
 	}
-	uc := NewBookmarkUsecase(repo)
+	uc := NewBookmarkUsecase(repo, testUserID)
 
 	article, err := uc.Execute(context.Background(), 1)
 	if err != nil {
@@ -94,7 +94,7 @@ func TestBookmarkUsecase_Toggle_TrueToFalse(t *testing.T) {
 			1: {ID: 1, Title: "A", Bookmarked: true},
 		},
 	}
-	uc := NewBookmarkUsecase(repo)
+	uc := NewBookmarkUsecase(repo, testUserID)
 
 	article, err := uc.Execute(context.Background(), 1)
 	if err != nil {
@@ -107,7 +107,7 @@ func TestBookmarkUsecase_Toggle_TrueToFalse(t *testing.T) {
 
 func TestBookmarkUsecase_NotFound(t *testing.T) {
 	repo := &mockBookmarkArticleRepo{articles: map[int64]*domain.Article{}}
-	uc := NewBookmarkUsecase(repo)
+	uc := NewBookmarkUsecase(repo, testUserID)
 
 	_, err := uc.Execute(context.Background(), 99)
 	if !errors.Is(err, ErrArticleNotFound) {
@@ -117,7 +117,7 @@ func TestBookmarkUsecase_NotFound(t *testing.T) {
 
 func TestBookmarkUsecase_FindError(t *testing.T) {
 	repo := &mockBookmarkArticleRepo{findErr: errors.New("db error")}
-	uc := NewBookmarkUsecase(repo)
+	uc := NewBookmarkUsecase(repo, testUserID)
 
 	_, err := uc.Execute(context.Background(), 1)
 	if err == nil {

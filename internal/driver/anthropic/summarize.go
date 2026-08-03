@@ -11,20 +11,25 @@ import (
 
 	adapteranthropic "github.com/qli8racn/rss-feeder/internal/adapter/driver/anthropic"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
+	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
 type summarizeAgent struct {
 	client messageCreator
 	reader articlerepo.Repository
 	logger *slog.Logger
+	userID int64
 }
 
+// NewSummarizeAgent は *domain.User をDIコンテナから取得し、userIDを保持する
+// （NewPreferenceAgent と同じ理由。internal/driver/anthropic/preference.go 参照）。
 func NewSummarizeAgent(i do.Injector) (adapteranthropic.SummarizeAgent, error) {
 	client := newAnthropicClient()
 	return &summarizeAgent{
 		client: &client.Messages,
 		reader: do.MustInvoke[articlerepo.Repository](i),
 		logger: do.MustInvoke[*slog.Logger](i),
+		userID: do.MustInvoke[*domain.User](i).ID,
 	}, nil
 }
 
@@ -75,7 +80,7 @@ func (a *summarizeAgent) Run(ctx context.Context, opts adapteranthropic.Summariz
 		if err != nil {
 			return "", err
 		}
-		articles, err := a.reader.FetchLatest(ctx, limit, input.FeedURL)
+		articles, err := a.reader.FetchLatest(ctx, limit, input.FeedURL, a.userID)
 		if err != nil {
 			return "", err
 		}

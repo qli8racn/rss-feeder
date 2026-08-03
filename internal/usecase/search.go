@@ -9,14 +9,15 @@ import (
 
 type SearchUsecase struct {
 	articleRepo articlerepo.Repository
+	userID      int64
 }
 
-func NewSearchUsecase(articleRepo articlerepo.Repository) *SearchUsecase {
-	return &SearchUsecase{articleRepo: articleRepo}
+func NewSearchUsecase(articleRepo articlerepo.Repository, userID int64) *SearchUsecase {
+	return &SearchUsecase{articleRepo: articleRepo, userID: userID}
 }
 
 func (uc *SearchUsecase) Execute(ctx context.Context, keyword string, bookmarkedOnly bool) ([]domain.Article, error) {
-	return uc.articleRepo.Search(ctx, keyword, bookmarkedOnly)
+	return uc.articleRepo.Search(ctx, keyword, bookmarkedOnly, uc.userID)
 }
 
 // SearchFilterOptions は Web API（検索）向けのカテゴリ・並び替え・ページネーション条件を表す。
@@ -39,5 +40,5 @@ func (uc *SearchUsecase) ExecuteFiltered(ctx context.Context, opts SearchFilterO
 		Order:          opts.Order,
 		Page:           opts.Page,
 		PerPage:        opts.PerPage,
-	})
+	}, uc.userID)
 }

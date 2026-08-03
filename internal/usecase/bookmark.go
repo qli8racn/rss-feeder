@@ -11,8 +11,8 @@ import (
 
 var ErrArticleNotFound = errors.New("article not found")
 
-func findArticleByID(ctx context.Context, repo articlerepo.Repository, id int64) (*domain.Article, error) {
-	article, err := repo.FindByID(ctx, id)
+func findArticleByID(ctx context.Context, repo articlerepo.Repository, id int64, userID int64) (*domain.Article, error) {
+	article, err := repo.FindByID(ctx, id, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -24,21 +24,22 @@ func findArticleByID(ctx context.Context, repo articlerepo.Repository, id int64)
 
 type BookmarkUsecase struct {
 	articleRepo articlerepo.Repository
+	userID      int64
 }
 
-func NewBookmarkUsecase(articleRepo articlerepo.Repository) *BookmarkUsecase {
-	return &BookmarkUsecase{articleRepo: articleRepo}
+func NewBookmarkUsecase(articleRepo articlerepo.Repository, userID int64) *BookmarkUsecase {
+	return &BookmarkUsecase{articleRepo: articleRepo, userID: userID}
 }
 
 func (uc *BookmarkUsecase) Execute(ctx context.Context, id int64) (*domain.Article, error) {
-	article, err := findArticleByID(ctx, uc.articleRepo, id)
+	article, err := findArticleByID(ctx, uc.articleRepo, id, uc.userID)
 	if err != nil {
 		return nil, err
 	}
 
 	article.ToggleBookmark()
 
-	if err := uc.articleRepo.Update(ctx, *article); err != nil {
+	if err := uc.articleRepo.Update(ctx, *article, uc.userID); err != nil {
 		return nil, fmt.Errorf("update failed: %w", err)
 	}
 

@@ -14,23 +14,24 @@ type ResetResult struct {
 
 type ResetUsecase struct {
 	articleRepo articlerepo.Repository
+	userID      int64
 }
 
-func NewResetUsecase(articleRepo articlerepo.Repository) *ResetUsecase {
-	return &ResetUsecase{articleRepo: articleRepo}
+func NewResetUsecase(articleRepo articlerepo.Repository, userID int64) *ResetUsecase {
+	return &ResetUsecase{articleRepo: articleRepo, userID: userID}
 }
 
 func (uc *ResetUsecase) Count(ctx context.Context) (int64, error) {
-	return uc.articleRepo.CountNonBookmarked(ctx)
+	return uc.articleRepo.CountNonBookmarked(ctx, uc.userID)
 }
 
 func (uc *ResetUsecase) Execute(ctx context.Context) (ResetResult, error) {
-	deleted, err := uc.articleRepo.DeleteNonBookmarked(ctx)
+	deleted, err := uc.articleRepo.DeleteNonBookmarked(ctx, uc.userID)
 	if err != nil {
 		return ResetResult{}, fmt.Errorf("delete failed: %w", err)
 	}
 
-	bookmarked, err := uc.articleRepo.CountBookmarked(ctx)
+	bookmarked, err := uc.articleRepo.CountBookmarked(ctx, uc.userID)
 	if err != nil {
 		return ResetResult{}, fmt.Errorf("count failed: %w", err)
 	}

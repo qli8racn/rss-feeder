@@ -19,7 +19,7 @@ func TestAddFeedUsecase_RegistersNewFeed(t *testing.T) {
 		findByURLFn: func(_ context.Context, url string) (*domain.Feed, error) {
 			return &domain.Feed{ID: 1, FeedURL: url}, nil
 		},
-	})
+	}, testUserID)
 
 	feed, err := uc.Execute(context.Background(), "https://example.com/feed")
 	if err != nil {
@@ -38,7 +38,7 @@ func TestAddFeedUsecase_AlreadyExists(t *testing.T) {
 		registerFn: func(_ context.Context, _ string) error {
 			return feedrepo.ErrAlreadyExists
 		},
-	})
+	}, testUserID)
 
 	_, err := uc.Execute(context.Background(), "https://example.com/feed")
 	if err == nil {
@@ -55,7 +55,7 @@ func TestAddFeedUsecase_RepoError(t *testing.T) {
 		registerFn: func(_ context.Context, _ string) error {
 			return repoErr
 		},
-	})
+	}, testUserID)
 
 	if _, err := uc.Execute(context.Background(), "https://example.com/feed"); !errors.Is(err, repoErr) {
 		t.Errorf("expected repo error, got %v", err)
@@ -68,7 +68,7 @@ func TestAddFeedUsecase_FindByURLNotFoundAfterRegister(t *testing.T) {
 		findByURLFn: func(_ context.Context, _ string) (*domain.Feed, error) {
 			return nil, nil
 		},
-	})
+	}, testUserID)
 
 	feed, err := uc.Execute(context.Background(), "https://example.com/feed")
 	if err == nil {

@@ -33,7 +33,7 @@ func TestBackfillMetadataUsecase_UpdatesEachFeedFromFreshFetch(t *testing.T) {
 		articles: []domain.Article{
 			{URL: "https://example.com/1", Publisher: "Example", ThumbnailURL: "https://example.com/thumb.jpg"},
 		},
-	})
+	}, testUserID)
 
 	result, err := uc.Execute(context.Background())
 	if err != nil {
@@ -60,7 +60,7 @@ func TestBackfillMetadataUsecase_HandlesFetchError(t *testing.T) {
 		listAllFn: func(_ context.Context) ([]domain.Feed, error) {
 			return []domain.Feed{{FeedURL: "https://feed.example.com/a"}}, nil
 		},
-	}, &mockRSSReader{err: errors.New("connection failed")})
+	}, &mockRSSReader{err: errors.New("connection failed")}, testUserID)
 
 	result, err := uc.Execute(context.Background())
 	if err == nil {
@@ -84,7 +84,7 @@ func TestBackfillMetadataUsecase_HandlesUpdateError(t *testing.T) {
 		listAllFn: func(_ context.Context) ([]domain.Feed, error) {
 			return []domain.Feed{{FeedURL: "https://feed.example.com/a"}}, nil
 		},
-	}, &mockRSSReader{articles: []domain.Article{{URL: "https://example.com/1"}}})
+	}, &mockRSSReader{articles: []domain.Article{{URL: "https://example.com/1"}}}, testUserID)
 
 	result, err := uc.Execute(context.Background())
 	if err == nil {
@@ -100,7 +100,7 @@ func TestBackfillMetadataUsecase_ListFeedsError(t *testing.T) {
 		listAllFn: func(_ context.Context) ([]domain.Feed, error) {
 			return nil, errors.New("db unavailable")
 		},
-	}, &mockRSSReader{})
+	}, &mockRSSReader{}, testUserID)
 
 	result, err := uc.Execute(context.Background())
 	if err == nil {
@@ -112,7 +112,7 @@ func TestBackfillMetadataUsecase_ListFeedsError(t *testing.T) {
 }
 
 func TestBackfillMetadataUsecase_NoFeeds(t *testing.T) {
-	uc := NewBackfillMetadataUsecase(&mockMetadataArticleRepo{}, &mockFeedRepo{}, &mockRSSReader{})
+	uc := NewBackfillMetadataUsecase(&mockMetadataArticleRepo{}, &mockFeedRepo{}, &mockRSSReader{}, testUserID)
 
 	result, err := uc.Execute(context.Background())
 	if err != nil {

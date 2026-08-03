@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/samber/do/v2"
 
@@ -17,9 +18,11 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/adapter/driver/htmlfetch"
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
+	userrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/user"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	handlermcp "github.com/qli8racn/rss-feeder/internal/adapter/handler/mcp"
 	"github.com/qli8racn/rss-feeder/internal/config"
+	"github.com/qli8racn/rss-feeder/internal/domain"
 	driveranthropic "github.com/qli8racn/rss-feeder/internal/driver/anthropic"
 	driverfeeddiscovery "github.com/qli8racn/rss-feeder/internal/driver/feeddiscovery"
 	driverhtmlfetch "github.com/qli8racn/rss-feeder/internal/driver/htmlfetch"
@@ -27,9 +30,11 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
+	dbrepouser "github.com/qli8racn/rss-feeder/internal/driver/readerdb/user"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerpg"
 	pgrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerpg/article"
 	pgrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerpg/feed"
+	pgrepouser "github.com/qli8racn/rss-feeder/internal/driver/readerpg/user"
 	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/migration"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
@@ -103,7 +108,18 @@ func chdirToRepoRoot() error {
 
 func main() {
 	rssAgentPath := flag.String("rss-agent-path", "bin/rss-agent", "フィードURL自動探索のAIフォールバックに使う rss-agent バイナリのパス")
+	userIDFlag := flag.String("user-id", domain.DefaultUserName, "MCPクライアントを識別するユーザーID（例: alice）。省略時は CLI/Web UI と同じ default ユーザーとして動作する")
 	flag.Parse()
+
+	// タイポによる空文字・空白のみのユーザーが users テーブルに作られてしまうのを防ぐ
+	// （削除・改名機能はスコープ外のため、一度作られると手動SQLでしか消せない）。
+	// なお users.name は TEXT UNIQUE（NOCASE指定なし）のため大文字小文字を区別する。
+	// 「alice」と「Alice」は別ユーザー（別フィード集合）として扱われる点に注意。
+	trimmedUserID := strings.TrimSpace(*userIDFlag)
+	if trimmedUserID == "" {
+		fmt.Fprintln(os.Stderr, "--user-id は空文字・空白のみを指定できません")
+		os.Exit(1)
+	}
 
 	// DB・config.yml の相対パス解決より前に、必ずリポジトリルートへ cd する。
 	if err := chdirToRepoRoot(); err != nil {
@@ -139,10 +155,12 @@ func main() {
 		do.Provide(i, readerpg.NewClient)
 		do.Provide(i, pgrepoarticle.NewRepository)
 		do.Provide(i, pgrepofeed.NewRepository)
+		do.Provide(i, pgrepouser.NewRepository)
 	} else {
 		do.Provide(i, readerdb.NewClient)
 		do.Provide(i, dbrepoarticle.NewRepository)
 		do.Provide(i, dbrepofeed.NewRepository)
+		do.Provide(i, dbrepouser.NewRepository)
 	}
 	do.Provide(i, driverrss.NewReader)
 	do.Provide(i, driverhtmlfetch.NewFetcher)
@@ -159,6 +177,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	// --user-id で指定された識別子のユーザーを解決する（初回はレコードを作成するupsert方式）。
+	// preferenceAgent は *domain.User をDIコンテナ経由で取得する
+	// （internal/driver/anthropic/preference.go 参照）。
+	resolveUserUC := usecase.NewResolveUserUsecase(do.MustInvoke[userrepo.Repository](i))
+	user, err := resolveUserUC.Execute(context.Background(), trimmedUserID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "user resolution failed: %v\n", err)
+		os.Exit(1)
+	}
+	do.ProvideValue(i, user)
+	userID := user.ID
+
 	logger := do.MustInvoke[*slog.Logger](i)
 
 	// フィードURL自動探索のAIフォールバックは bin/rss-agent をサブプロセスとして呼び出す
@@ -166,12 +196,12 @@ func main() {
 	// Claude Desktopセッションからの逐次呼び出しを想定するため、同時実行数は1に抑える。
 	feedDiscoveryAgent := driverfeeddiscovery.NewSubprocessAgent(*rssAgentPath, 1)
 
-	listUC := usecase.NewListUsecase(do.MustInvoke[articlerepo.Repository](i))
-	searchUC := usecase.NewSearchUsecase(do.MustInvoke[articlerepo.Repository](i))
-	categoriesUC := usecase.NewListCategoriesUsecase(do.MustInvoke[articlerepo.Repository](i))
-	listFeedsUC := usecase.NewListFeedsUsecase(do.MustInvoke[feedrepo.Repository](i))
-	bookmarkUC := usecase.NewBookmarkUsecase(do.MustInvoke[articlerepo.Repository](i))
-	addFeedUC := usecase.NewAddFeedUsecase(do.MustInvoke[feedrepo.Repository](i))
+	listUC := usecase.NewListUsecase(do.MustInvoke[articlerepo.Repository](i), userID)
+	searchUC := usecase.NewSearchUsecase(do.MustInvoke[articlerepo.Repository](i), userID)
+	categoriesUC := usecase.NewListCategoriesUsecase(do.MustInvoke[articlerepo.Repository](i), userID)
+	listFeedsUC := usecase.NewListFeedsUsecase(do.MustInvoke[feedrepo.Repository](i), userID)
+	bookmarkUC := usecase.NewBookmarkUsecase(do.MustInvoke[articlerepo.Repository](i), userID)
+	addFeedUC := usecase.NewAddFeedUsecase(do.MustInvoke[feedrepo.Repository](i), userID)
 	resolveFeedURLUC := usecase.NewResolveFeedURLUsecase(
 		do.MustInvoke[adapterrss.RSSReader](i),
 		do.MustInvoke[htmlfetch.Fetcher](i),
@@ -181,11 +211,12 @@ func main() {
 		do.MustInvoke[articlerepo.Repository](i),
 		do.MustInvoke[feedrepo.Repository](i),
 		do.MustInvoke[adapterrss.RSSReader](i),
+		userID,
 	)
-	removeFeedUC := usecase.NewRemoveFeedUsecase(do.MustInvoke[feedrepo.Repository](i))
+	removeFeedUC := usecase.NewRemoveFeedUsecase(do.MustInvoke[feedrepo.Repository](i), userID)
 	enrichUC := usecase.NewEnrichUsecase(do.MustInvoke[adapteranthropic.EnrichAgent](i))
 	preferenceUC := usecase.NewPreferenceUsecase(do.MustInvoke[adapteranthropic.PreferenceAgent](i))
-	markReadUC := usecase.NewMarkReadUsecase(do.MustInvoke[articlerepo.Repository](i))
+	markReadUC := usecase.NewMarkReadUsecase(do.MustInvoke[articlerepo.Repository](i), userID)
 
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: serverName, Version: serverVersion}, nil)
 

@@ -20,50 +20,59 @@ type mockSearchArticleRepo struct {
 	filteredTotal int64
 	filteredErr   error
 	gotFilter     articlerepo.ListFilter
+	gotUserID     int64 // 直近に呼ばれたメソッドに渡されたuserID
 }
 
 func (m *mockSearchArticleRepo) Save(_ context.Context, _ domain.Article) error { return nil }
-func (m *mockSearchArticleRepo) FindAll(_ context.Context) ([]domain.Article, error) {
+func (m *mockSearchArticleRepo) FindAll(_ context.Context, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockSearchArticleRepo) FindUnread(_ context.Context) ([]domain.Article, error) {
+func (m *mockSearchArticleRepo) FindUnread(_ context.Context, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockSearchArticleRepo) FindBookmarked(_ context.Context) ([]domain.Article, error) {
+func (m *mockSearchArticleRepo) FindBookmarked(_ context.Context, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockSearchArticleRepo) FindByID(_ context.Context, _ int64) (*domain.Article, error) {
+func (m *mockSearchArticleRepo) FindByID(_ context.Context, _ int64, _ int64) (*domain.Article, error) {
 	return nil, nil
 }
-func (m *mockSearchArticleRepo) Update(_ context.Context, _ domain.Article) error { return nil }
-func (m *mockSearchArticleRepo) MarkAsRead(_ context.Context, _ []int64) error    { return nil }
-func (m *mockSearchArticleRepo) DeleteNonBookmarked(_ context.Context) (int64, error) {
-	return 0, nil
-}
-func (m *mockSearchArticleRepo) CountNonBookmarked(_ context.Context) (int64, error) { return 0, nil }
-func (m *mockSearchArticleRepo) CountBookmarked(_ context.Context) (int64, error)    { return 0, nil }
-func (m *mockSearchArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) {
-	return nil, nil
-}
-func (m *mockSearchArticleRepo) Search(_ context.Context, keyword string, bookmarkedOnly bool) ([]domain.Article, error) {
-	m.gotKeyword = keyword
-	m.gotBookmarkedOnly = bookmarkedOnly
-	return m.results, m.err
-}
-func (m *mockSearchArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate) error {
+func (m *mockSearchArticleRepo) Update(_ context.Context, _ domain.Article, _ int64) error {
 	return nil
 }
-func (m *mockSearchArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {
+func (m *mockSearchArticleRepo) MarkAsRead(_ context.Context, _ []int64, _ int64) error { return nil }
+func (m *mockSearchArticleRepo) DeleteNonBookmarked(_ context.Context, _ int64) (int64, error) {
+	return 0, nil
+}
+func (m *mockSearchArticleRepo) CountNonBookmarked(_ context.Context, _ int64) (int64, error) {
+	return 0, nil
+}
+func (m *mockSearchArticleRepo) CountBookmarked(_ context.Context, _ int64) (int64, error) {
+	return 0, nil
+}
+func (m *mockSearchArticleRepo) FetchLatest(_ context.Context, _ int, _ string, _ int64) ([]domain.Article, error) {
+	return nil, nil
+}
+func (m *mockSearchArticleRepo) Search(_ context.Context, keyword string, bookmarkedOnly bool, userID int64) ([]domain.Article, error) {
+	m.gotKeyword = keyword
+	m.gotBookmarkedOnly = bookmarkedOnly
+	m.gotUserID = userID
+	return m.results, m.err
+}
+func (m *mockSearchArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate, _ int64) error {
+	return nil
+}
+func (m *mockSearchArticleRepo) FindWithoutSummary(_ context.Context, _ int, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
 func (m *mockSearchArticleRepo) UpdateMetadataBatch(_ context.Context, _ []articlerepo.MetadataUpdate) (int64, error) {
 	return 0, nil
 }
-func (m *mockSearchArticleRepo) FindFiltered(_ context.Context, filter articlerepo.ListFilter) ([]domain.Article, int64, error) {
+func (m *mockSearchArticleRepo) FindFiltered(_ context.Context, filter articlerepo.ListFilter, userID int64) ([]domain.Article, int64, error) {
 	m.gotFilter = filter
+	m.gotUserID = userID
 	return m.filtered, m.filteredTotal, m.filteredErr
 }
-func (m *mockSearchArticleRepo) DistinctCategories(_ context.Context) ([]string, error) {
+func (m *mockSearchArticleRepo) DistinctCategories(_ context.Context, _ int64) ([]string, error) {
 	return nil, nil
 }
 
@@ -74,7 +83,7 @@ func TestSearchUsecase_ReturnsMatchingArticles(t *testing.T) {
 			{ID: 2, Title: "Go入門"},
 		},
 	}
-	uc := NewSearchUsecase(repo)
+	uc := NewSearchUsecase(repo, testUserID)
 
 	articles, err := uc.Execute(context.Background(), "Go", false)
 	if err != nil {
@@ -93,7 +102,7 @@ func TestSearchUsecase_ReturnsMatchingArticles(t *testing.T) {
 
 func TestSearchUsecase_ZeroResults(t *testing.T) {
 	repo := &mockSearchArticleRepo{results: []domain.Article{}}
-	uc := NewSearchUsecase(repo)
+	uc := NewSearchUsecase(repo, testUserID)
 
 	articles, err := uc.Execute(context.Background(), "nomatch", false)
 	if err != nil {
@@ -110,7 +119,7 @@ func TestSearchUsecase_BookmarkedOnlyFilter(t *testing.T) {
 			{ID: 3, Title: "お気に入り記事", Bookmarked: true},
 		},
 	}
-	uc := NewSearchUsecase(repo)
+	uc := NewSearchUsecase(repo, testUserID)
 
 	articles, err := uc.Execute(context.Background(), "記事", true)
 	if err != nil {
@@ -129,7 +138,7 @@ func TestSearchUsecase_ExecuteFiltered_PassesThroughOptionsAndTotal(t *testing.T
 		filtered:      []domain.Article{{ID: 1, Title: "Go入門"}},
 		filteredTotal: 7,
 	}
-	uc := NewSearchUsecase(repo)
+	uc := NewSearchUsecase(repo, testUserID)
 
 	articles, total, err := uc.ExecuteFiltered(context.Background(), SearchFilterOptions{
 		Keyword:        "Go",
@@ -154,9 +163,21 @@ func TestSearchUsecase_ExecuteFiltered_PassesThroughOptionsAndTotal(t *testing.T
 	}
 }
 
+func TestSearchUsecase_Execute_PassesUserIDToRepo(t *testing.T) {
+	repo := &mockSearchArticleRepo{}
+	uc := NewSearchUsecase(repo, testUserID)
+
+	if _, err := uc.Execute(context.Background(), "keyword", false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.gotUserID != testUserID {
+		t.Errorf("gotUserID: got %d, want %d", repo.gotUserID, testUserID)
+	}
+}
+
 func TestSearchUsecase_RepoError(t *testing.T) {
 	repo := &mockSearchArticleRepo{err: errors.New("db error")}
-	uc := NewSearchUsecase(repo)
+	uc := NewSearchUsecase(repo, testUserID)
 
 	_, err := uc.Execute(context.Background(), "keyword", false)
 	if err == nil {

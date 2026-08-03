@@ -14,7 +14,7 @@ func TestCheckArticleUsecase_Found(t *testing.T) {
 			1: {ID: 1, Title: "Test"},
 		},
 	}
-	uc := NewCheckArticleUsecase(repo)
+	uc := NewCheckArticleUsecase(repo, testUserID)
 
 	if err := uc.Execute(context.Background(), 1); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -23,7 +23,7 @@ func TestCheckArticleUsecase_Found(t *testing.T) {
 
 func TestCheckArticleUsecase_NotFound(t *testing.T) {
 	repo := &mockBookmarkArticleRepo{articles: map[int64]*domain.Article{}}
-	uc := NewCheckArticleUsecase(repo)
+	uc := NewCheckArticleUsecase(repo, testUserID)
 
 	err := uc.Execute(context.Background(), 99)
 	if !errors.Is(err, ErrArticleNotFound) {
@@ -33,7 +33,7 @@ func TestCheckArticleUsecase_NotFound(t *testing.T) {
 
 func TestCheckArticleUsecase_RepoError(t *testing.T) {
 	repo := &mockBookmarkArticleRepo{findErr: errors.New("db error")}
-	uc := NewCheckArticleUsecase(repo)
+	uc := NewCheckArticleUsecase(repo, testUserID)
 
 	if err := uc.Execute(context.Background(), 1); err == nil {
 		t.Error("expected error, got nil")

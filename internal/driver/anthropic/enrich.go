@@ -25,8 +25,13 @@ type enrichAgent struct {
 	repo    articlerepo.Repository
 	fetcher adapterhtmlfetch.Fetcher
 	logger  *slog.Logger
+	userID  int64
 }
 
+// NewEnrichAgent は *domain.User をDIコンテナから取得し、userIDを保持する
+// （NewPreferenceAgent と同じ理由。internal/driver/anthropic/preference.go 参照）。
+// rss_enrich がユーザー横断で他ユーザーの記事を要約対象・課金対象にしてしまわないよう、
+// FetchLatest・FindWithoutSummary・UpdateEnrichmentBatch の呼び出しに必ずuserIDを渡す。
 func NewEnrichAgent(i do.Injector) (adapteranthropic.EnrichAgent, error) {
 	client := newAnthropicClient()
 	return &enrichAgent{
@@ -34,6 +39,7 @@ func NewEnrichAgent(i do.Injector) (adapteranthropic.EnrichAgent, error) {
 		repo:    do.MustInvoke[articlerepo.Repository](i),
 		fetcher: do.MustInvoke[adapterhtmlfetch.Fetcher](i),
 		logger:  do.MustInvoke[*slog.Logger](i),
+		userID:  do.MustInvoke[*domain.User](i).ID,
 	}, nil
 }
 
@@ -83,9 +89,9 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 	var articles []domain.Article
 	var err error
 	if opts.Force {
-		articles, err = a.repo.FetchLatest(ctx, opts.Limit, opts.FeedURL)
+		articles, err = a.repo.FetchLatest(ctx, opts.Limit, opts.FeedURL, a.userID)
 	} else {
-		articles, err = a.repo.FindWithoutSummary(ctx, opts.Limit)
+		articles, err = a.repo.FindWithoutSummary(ctx, opts.Limit, a.userID)
 	}
 	if err != nil {
 		return 0, err
@@ -149,7 +155,7 @@ func (a *enrichAgent) Run(ctx context.Context, opts adapteranthropic.EnrichOptio
 		if len(updates) == 0 {
 			continue
 		}
-		if err := a.repo.UpdateEnrichmentBatch(ctx, updates); err != nil {
+		if err := a.repo.UpdateEnrichmentBatch(ctx, updates, a.userID); err != nil {
 			errs = append(errs, err)
 			continue
 		}

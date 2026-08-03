@@ -8,12 +8,13 @@ import (
 
 type CheckBookmarkedUsecase struct {
 	articleRepo articlerepo.Repository
+	userID      int64
 }
 
-func NewCheckBookmarkedUsecase(repo articlerepo.Repository) *CheckBookmarkedUsecase {
-	return &CheckBookmarkedUsecase{articleRepo: repo}
+func NewCheckBookmarkedUsecase(repo articlerepo.Repository, userID int64) *CheckBookmarkedUsecase {
+	return &CheckBookmarkedUsecase{articleRepo: repo, userID: userID}
 }
 
 func (uc *CheckBookmarkedUsecase) Execute(ctx context.Context) (int64, error) {
-	return uc.articleRepo.CountBookmarked(ctx)
+	return uc.articleRepo.CountBookmarked(ctx, uc.userID)
 }

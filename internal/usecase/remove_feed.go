@@ -10,14 +10,15 @@ import (
 
 type RemoveFeedUsecase struct {
 	feedRepo feedrepo.Repository
+	userID   int64
 }
 
-func NewRemoveFeedUsecase(feedRepo feedrepo.Repository) *RemoveFeedUsecase {
-	return &RemoveFeedUsecase{feedRepo: feedRepo}
+func NewRemoveFeedUsecase(feedRepo feedrepo.Repository, userID int64) *RemoveFeedUsecase {
+	return &RemoveFeedUsecase{feedRepo: feedRepo, userID: userID}
 }
 
 func (uc *RemoveFeedUsecase) Execute(ctx context.Context, id int64) error {
-	if err := uc.feedRepo.Remove(ctx, id); err != nil {
+	if err := uc.feedRepo.Remove(ctx, id, uc.userID); err != nil {
 		if errors.Is(err, feedrepo.ErrNotFound) {
 			return fmt.Errorf("フィードが見つかりません id=%d: %w", id, err)
 		}

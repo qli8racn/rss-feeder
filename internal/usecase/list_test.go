@@ -21,49 +21,62 @@ type mockListArticleRepo struct {
 	gotFilter     articlerepo.ListFilter
 	categories    []string
 	categoriesErr error
+	gotUserID     int64 // 直近に呼ばれたメソッドに渡されたuserID
 }
 
 func (m *mockListArticleRepo) Save(_ context.Context, _ domain.Article) error { return nil }
-func (m *mockListArticleRepo) FindAll(_ context.Context) ([]domain.Article, error) {
+func (m *mockListArticleRepo) FindAll(_ context.Context, userID int64) ([]domain.Article, error) {
+	m.gotUserID = userID
 	return m.all, m.findErr
 }
-func (m *mockListArticleRepo) FindUnread(_ context.Context) ([]domain.Article, error) {
+func (m *mockListArticleRepo) FindUnread(_ context.Context, userID int64) ([]domain.Article, error) {
+	m.gotUserID = userID
 	return m.unread, m.findErr
 }
-func (m *mockListArticleRepo) FindBookmarked(_ context.Context) ([]domain.Article, error) {
+func (m *mockListArticleRepo) FindBookmarked(_ context.Context, userID int64) ([]domain.Article, error) {
+	m.gotUserID = userID
 	return m.bookmarked, m.findErr
 }
-func (m *mockListArticleRepo) FindByID(_ context.Context, _ int64) (*domain.Article, error) {
+func (m *mockListArticleRepo) FindByID(_ context.Context, _ int64, _ int64) (*domain.Article, error) {
 	return nil, nil
 }
-func (m *mockListArticleRepo) Update(_ context.Context, _ domain.Article) error { return nil }
-func (m *mockListArticleRepo) MarkAsRead(_ context.Context, ids []int64) error {
+func (m *mockListArticleRepo) Update(_ context.Context, _ domain.Article, _ int64) error { return nil }
+func (m *mockListArticleRepo) MarkAsRead(_ context.Context, ids []int64, userID int64) error {
 	m.markedIDs = append(m.markedIDs, ids...)
+	m.gotUserID = userID
 	return m.markErr
 }
-func (m *mockListArticleRepo) DeleteNonBookmarked(_ context.Context) (int64, error) { return 0, nil }
-func (m *mockListArticleRepo) CountNonBookmarked(_ context.Context) (int64, error)  { return 0, nil }
-func (m *mockListArticleRepo) CountBookmarked(_ context.Context) (int64, error)     { return 0, nil }
-func (m *mockListArticleRepo) FetchLatest(_ context.Context, _ int, _ string) ([]domain.Article, error) {
+func (m *mockListArticleRepo) DeleteNonBookmarked(_ context.Context, _ int64) (int64, error) {
+	return 0, nil
+}
+func (m *mockListArticleRepo) CountNonBookmarked(_ context.Context, _ int64) (int64, error) {
+	return 0, nil
+}
+func (m *mockListArticleRepo) CountBookmarked(_ context.Context, _ int64) (int64, error) {
+	return 0, nil
+}
+func (m *mockListArticleRepo) FetchLatest(_ context.Context, _ int, _ string, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockListArticleRepo) Search(_ context.Context, _ string, _ bool) ([]domain.Article, error) {
+func (m *mockListArticleRepo) Search(_ context.Context, _ string, _ bool, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
-func (m *mockListArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate) error {
+func (m *mockListArticleRepo) UpdateEnrichmentBatch(_ context.Context, _ []articlerepo.EnrichmentUpdate, _ int64) error {
 	return nil
 }
-func (m *mockListArticleRepo) FindWithoutSummary(_ context.Context, _ int) ([]domain.Article, error) {
+func (m *mockListArticleRepo) FindWithoutSummary(_ context.Context, _ int, _ int64) ([]domain.Article, error) {
 	return nil, nil
 }
 func (m *mockListArticleRepo) UpdateMetadataBatch(_ context.Context, _ []articlerepo.MetadataUpdate) (int64, error) {
 	return 0, nil
 }
-func (m *mockListArticleRepo) FindFiltered(_ context.Context, filter articlerepo.ListFilter) ([]domain.Article, int64, error) {
+func (m *mockListArticleRepo) FindFiltered(_ context.Context, filter articlerepo.ListFilter, userID int64) ([]domain.Article, int64, error) {
 	m.gotFilter = filter
+	m.gotUserID = userID
 	return m.filtered, m.filteredTotal, m.filteredErr
 }
-func (m *mockListArticleRepo) DistinctCategories(_ context.Context) ([]string, error) {
+func (m *mockListArticleRepo) DistinctCategories(_ context.Context, userID int64) ([]string, error) {
+	m.gotUserID = userID
 	return m.categories, m.categoriesErr
 }
 
@@ -74,7 +87,7 @@ func TestListUsecase_DefaultMode_ReturnsUnread(t *testing.T) {
 			{ID: 2, Title: "B", Read: false},
 		},
 	}
-	uc := NewListUsecase(repo)
+	uc := NewListUsecase(repo, testUserID)
 
 	articles, err := uc.Execute(context.Background(), ListModeUnread)
 	if err != nil {
@@ -92,7 +105,7 @@ func TestListUsecase_AllMode(t *testing.T) {
 			{ID: 2, Title: "B", Read: false},
 		},
 	}
-	uc := NewListUsecase(repo)
+	uc := NewListUsecase(repo, testUserID)
 
 	articles, err := uc.Execute(context.Background(), ListModeAll)
 	if err != nil {
@@ -109,7 +122,7 @@ func TestListUsecase_BookmarkedMode(t *testing.T) {
 			{ID: 3, Title: "C", Bookmarked: true},
 		},
 	}
-	uc := NewListUsecase(repo)
+	uc := NewListUsecase(repo, testUserID)
 
 	articles, err := uc.Execute(context.Background(), ListModeBookmarked)
 	if err != nil {
@@ -127,7 +140,7 @@ func TestListUsecase_MarksUnreadAsRead(t *testing.T) {
 			{ID: 2, Title: "B", Read: false},
 		},
 	}
-	uc := NewListUsecase(repo)
+	uc := NewListUsecase(repo, testUserID)
 
 	if _, err := uc.Execute(context.Background(), ListModeUnread); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -145,7 +158,7 @@ func TestListUsecase_SkipsAlreadyRead(t *testing.T) {
 			{ID: 2, Title: "B", Read: false},
 		},
 	}
-	uc := NewListUsecase(repo)
+	uc := NewListUsecase(repo, testUserID)
 
 	if _, err := uc.Execute(context.Background(), ListModeAll); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -164,7 +177,7 @@ func TestListUsecase_ExecuteFiltered_ModeMapping(t *testing.T) {
 		filtered:      []domain.Article{{ID: 1, Title: "A", Read: true}},
 		filteredTotal: 1,
 	}
-	uc := NewListUsecase(repo)
+	uc := NewListUsecase(repo, testUserID)
 
 	if _, _, err := uc.ExecuteFiltered(context.Background(), ListFilterOptions{Mode: ListModeBookmarked}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -196,7 +209,7 @@ func TestListUsecase_ExecuteFiltered_PassesThroughOptionsAndTotal(t *testing.T) 
 		filtered:      []domain.Article{{ID: 1, Title: "A", Read: true}},
 		filteredTotal: 42,
 	}
-	uc := NewListUsecase(repo)
+	uc := NewListUsecase(repo, testUserID)
 
 	articles, total, err := uc.ExecuteFiltered(context.Background(), ListFilterOptions{
 		Category: "Tech",
@@ -226,7 +239,7 @@ func TestListUsecase_ExecuteFiltered_MarksUnreadAsRead(t *testing.T) {
 			{ID: 2, Title: "B", Read: true},
 		},
 	}
-	uc := NewListUsecase(repo)
+	uc := NewListUsecase(repo, testUserID)
 
 	if _, _, err := uc.ExecuteFiltered(context.Background(), ListFilterOptions{Mode: ListModeAll}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -243,7 +256,7 @@ func TestListUsecase_ExecuteFiltered_SkipMarkAsRead(t *testing.T) {
 			{ID: 2, Title: "B", Read: true},
 		},
 	}
-	uc := NewListUsecase(repo)
+	uc := NewListUsecase(repo, testUserID)
 
 	if _, _, err := uc.ExecuteFiltered(context.Background(), ListFilterOptions{
 		Mode:           ListModeAll,
@@ -256,9 +269,33 @@ func TestListUsecase_ExecuteFiltered_SkipMarkAsRead(t *testing.T) {
 	}
 }
 
+func TestListUsecase_Execute_PassesUserIDToRepo(t *testing.T) {
+	repo := &mockListArticleRepo{unread: []domain.Article{}}
+	uc := NewListUsecase(repo, testUserID)
+
+	if _, err := uc.Execute(context.Background(), ListModeUnread); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.gotUserID != testUserID {
+		t.Errorf("gotUserID: got %d, want %d", repo.gotUserID, testUserID)
+	}
+}
+
+func TestListUsecase_ExecuteFiltered_PassesUserIDToRepo(t *testing.T) {
+	repo := &mockListArticleRepo{filtered: []domain.Article{}}
+	uc := NewListUsecase(repo, testUserID)
+
+	if _, _, err := uc.ExecuteFiltered(context.Background(), ListFilterOptions{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.gotUserID != testUserID {
+		t.Errorf("gotUserID: got %d, want %d", repo.gotUserID, testUserID)
+	}
+}
+
 func TestListUsecase_EmptyList(t *testing.T) {
 	repo := &mockListArticleRepo{unread: []domain.Article{}}
-	uc := NewListUsecase(repo)
+	uc := NewListUsecase(repo, testUserID)
 
 	articles, err := uc.Execute(context.Background(), ListModeUnread)
 	if err != nil {

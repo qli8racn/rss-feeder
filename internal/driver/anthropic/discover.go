@@ -20,8 +20,11 @@ type discoverAgent struct {
 	articleRepo articlerepo.Repository
 	feedRepo    feedrepo.Repository
 	logger      *slog.Logger
+	userID      int64
 }
 
+// NewDiscoverAgent は *domain.User をDIコンテナから取得し、userIDを保持する
+// （NewPreferenceAgent と同じ理由。internal/driver/anthropic/preference.go 参照）。
 func NewDiscoverAgent(i do.Injector) (adapteranthropic.DiscoverAgent, error) {
 	client := newAnthropicClient()
 	return &discoverAgent{
@@ -29,6 +32,7 @@ func NewDiscoverAgent(i do.Injector) (adapteranthropic.DiscoverAgent, error) {
 		articleRepo: do.MustInvoke[articlerepo.Repository](i),
 		feedRepo:    do.MustInvoke[feedrepo.Repository](i),
 		logger:      do.MustInvoke[*slog.Logger](i),
+		userID:      do.MustInvoke[*domain.User](i).ID,
 	}, nil
 }
 
@@ -91,7 +95,7 @@ func (a *discoverAgent) Run(ctx context.Context) (string, error) {
 		switch name {
 		case "fetch_bookmarked_articles":
 			log.Info("ブックマーク記事を取得中")
-			articles, err := a.articleRepo.FindBookmarked(ctx)
+			articles, err := a.articleRepo.FindBookmarked(ctx, a.userID)
 			if err != nil {
 				return "", err
 			}
@@ -111,7 +115,7 @@ func (a *discoverAgent) Run(ctx context.Context) (string, error) {
 
 		case "fetch_registered_feeds":
 			log.Info("登録済みフィードを取得中")
-			feeds, err := a.feedRepo.ListAll(ctx)
+			feeds, err := a.feedRepo.ListAll(ctx, a.userID)
 			if err != nil {
 				return "", err
 			}

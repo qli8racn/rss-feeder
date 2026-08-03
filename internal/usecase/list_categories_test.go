@@ -8,7 +8,7 @@ import (
 
 func TestListCategoriesUsecase_ReturnsCategories(t *testing.T) {
 	repo := &mockListArticleRepo{categories: []string{"AI", "Tech"}}
-	uc := NewListCategoriesUsecase(repo)
+	uc := NewListCategoriesUsecase(repo, testUserID)
 
 	categories, err := uc.Execute(context.Background())
 	if err != nil {
@@ -21,7 +21,7 @@ func TestListCategoriesUsecase_ReturnsCategories(t *testing.T) {
 
 func TestListCategoriesUsecase_RepoError(t *testing.T) {
 	repo := &mockListArticleRepo{categoriesErr: errors.New("db error")}
-	uc := NewListCategoriesUsecase(repo)
+	uc := NewListCategoriesUsecase(repo, testUserID)
 
 	if _, err := uc.Execute(context.Background()); err == nil {
 		t.Error("expected error, got nil")

@@ -16,17 +16,18 @@ var ErrMarkReadIDsRequired = errors.New("ids には1件以上指定してくだ�
 // MCP経由で明示的に既読管理を行うための手段として設ける。
 type MarkReadUsecase struct {
 	articleRepo articlerepo.Repository
+	userID      int64
 }
 
-func NewMarkReadUsecase(articleRepo articlerepo.Repository) *MarkReadUsecase {
-	return &MarkReadUsecase{articleRepo: articleRepo}
+func NewMarkReadUsecase(articleRepo articlerepo.Repository, userID int64) *MarkReadUsecase {
+	return &MarkReadUsecase{articleRepo: articleRepo, userID: userID}
 }
 
 func (uc *MarkReadUsecase) Execute(ctx context.Context, ids []int64) error {
 	if len(ids) == 0 {
 		return ErrMarkReadIDsRequired
 	}
-	if err := uc.articleRepo.MarkAsRead(ctx, ids); err != nil {
+	if err := uc.articleRepo.MarkAsRead(ctx, ids, uc.userID); err != nil {
 		return fmt.Errorf("既読化に失敗しました: %w", err)
 	}
 	return nil

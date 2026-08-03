@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -16,19 +17,23 @@ import (
 	articlerepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/article"
 	auditlogrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/auditlog"
 	feedrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/feed"
+	userrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/user"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/adapter/handler/web"
 	"github.com/qli8racn/rss-feeder/internal/config"
+	"github.com/qli8racn/rss-feeder/internal/domain"
 	driverfeeddiscovery "github.com/qli8racn/rss-feeder/internal/driver/feeddiscovery"
 	driverhtmlfetch "github.com/qli8racn/rss-feeder/internal/driver/htmlfetch"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerdb"
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerdb/auditlog"
 	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
+	dbrepouser "github.com/qli8racn/rss-feeder/internal/driver/readerdb/user"
 	"github.com/qli8racn/rss-feeder/internal/driver/readerpg"
 	pgrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerpg/article"
 	pgrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerpg/auditlog"
 	pgrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerpg/feed"
+	pgrepouser "github.com/qli8racn/rss-feeder/internal/driver/readerpg/user"
 	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/migration"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
@@ -54,11 +59,13 @@ func main() {
 		do.Provide(i, pgrepoarticle.NewRepository)
 		do.Provide(i, pgrepoauditlog.NewRepository)
 		do.Provide(i, pgrepofeed.NewRepository)
+		do.Provide(i, pgrepouser.NewRepository)
 	} else {
 		do.Provide(i, readerdb.NewClient)
 		do.Provide(i, dbrepoarticle.NewRepository)
 		do.Provide(i, dbrepoauditlog.NewRepository)
 		do.Provide(i, dbrepofeed.NewRepository)
+		do.Provide(i, dbrepouser.NewRepository)
 	}
 	do.Provide(i, driverrss.NewReader)
 	do.Provide(i, driverhtmlfetch.NewFetcher)
@@ -71,19 +78,29 @@ func main() {
 		log.Fatalf("migration failed: %v", err)
 	}
 
-	listUC := usecase.NewListUsecase(do.MustInvoke[articlerepo.Repository](i))
-	searchUC := usecase.NewSearchUsecase(do.MustInvoke[articlerepo.Repository](i))
-	bookmarkUC := usecase.NewBookmarkUsecase(do.MustInvoke[articlerepo.Repository](i))
+	// cmd/web はユーザー概念に対応しない（要件のスコープ外）ため、常に
+	// デフォルトユーザーとして暗黙的に動作する。
+	resolveUserUC := usecase.NewResolveUserUsecase(do.MustInvoke[userrepo.Repository](i))
+	user, err := resolveUserUC.Execute(context.Background(), domain.DefaultUserName)
+	if err != nil {
+		log.Fatalf("default user resolution failed: %v", err)
+	}
+	userID := user.ID
+
+	listUC := usecase.NewListUsecase(do.MustInvoke[articlerepo.Repository](i), userID)
+	searchUC := usecase.NewSearchUsecase(do.MustInvoke[articlerepo.Repository](i), userID)
+	bookmarkUC := usecase.NewBookmarkUsecase(do.MustInvoke[articlerepo.Repository](i), userID)
 	auditUC := usecase.NewAuditUsecase(do.MustInvoke[auditlogrepo.Repository](i))
-	categoriesUC := usecase.NewListCategoriesUsecase(do.MustInvoke[articlerepo.Repository](i))
+	categoriesUC := usecase.NewListCategoriesUsecase(do.MustInvoke[articlerepo.Repository](i), userID)
 	fetchUC := usecase.NewFetchUsecase(
 		do.MustInvoke[articlerepo.Repository](i),
 		do.MustInvoke[feedrepo.Repository](i),
 		do.MustInvoke[adapterrss.RSSReader](i),
+		userID,
 	)
-	addFeedUC := usecase.NewAddFeedUsecase(do.MustInvoke[feedrepo.Repository](i))
-	listFeedsUC := usecase.NewListFeedsUsecase(do.MustInvoke[feedrepo.Repository](i))
-	removeFeedUC := usecase.NewRemoveFeedUsecase(do.MustInvoke[feedrepo.Repository](i))
+	addFeedUC := usecase.NewAddFeedUsecase(do.MustInvoke[feedrepo.Repository](i), userID)
+	listFeedsUC := usecase.NewListFeedsUsecase(do.MustInvoke[feedrepo.Repository](i), userID)
+	removeFeedUC := usecase.NewRemoveFeedUsecase(do.MustInvoke[feedrepo.Repository](i), userID)
 	feedDiscoveryAgent := driverfeeddiscovery.NewSubprocessAgent(*rssAgentPath, *feedDiscoveryConcurrency)
 	resolveFeedURLUC := usecase.NewResolveFeedURLUsecase(
 		do.MustInvoke[adapterrss.RSSReader](i),
