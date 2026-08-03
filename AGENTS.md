@@ -24,12 +24,33 @@ Go 製 RSS リーダー CLI。
 
 ## 並行開発（git worktree）
 
-複数の機能を並行して進める場合は、`docs/steering/` のディレクトリ（1機能）ごとに
-ブランチ・worktree・Claude Code セッションを1対1で対応させる。
+新しい機能の追加・既存機能の改修に着手する場合は、並行実行の有無に関わらず**毎回**
+`docs/steering/` のディレクトリ（1機能）ごとにブランチ・worktree を1対1で対応させる。
 
-- **1 steering ドキュメント = 1 ブランチ = 1 worktree = 1 Claude Code セッション**
-- worktree は `/workspaces/rss-feeder-<slug>/` に作成する。`<slug>` はブランチ名の `/` を `-` に
-  置換したもの（例: `fix/cron/poll-feeds` → `rss-feeder-fix-cron-poll-feeds`）。
+- **1 steering ドキュメント = 1 ブランチ = 1 worktree**
+- **ブランチ名は steering スラッグに合わせる**（例: `docs/steering/20260726_mcp_server/` →
+  ブランチ `20260726_mcp_server`）。スラッグに `/` を含めないため worktree パスへの変換もそのまま
+- worktree は `/workspaces/rss-feeder-<slug>/` に作成する（`<slug>` はブランチ名の `/` を `-` に
+  置換したもの。旧形式のブランチ名の例: `fix/cron/poll-feeds` → `rss-feeder-fix-cron-poll-feeds`）
+- **セッションは worktree ごとに新規に立ち上げず、`EnterWorktree`（`path` 指定）で現在の
+  セッションの作業ディレクトリを切り替えて引き継ぐ**（要件定義から実装まで会話コンテキストを
+  保持したまま進める）。目視確認用にエディタで worktree を別途開きたい場合は、
+  `code /workspaces/rss-feeder-<slug>` で同一 devcontainer 内に新規ウィンドウを開く
+  （`EnterWorktree` はツールの作業ディレクトリを切り替えるのみで、エディタのウィンドウ・
+  ファイルツリーの表示は連動しない）
+
+### タスク粒度
+
+並列 worktree 運用を前提に、`docs/steering` の分割単位（＝1ブランチ・1worktreeの範囲）は
+以下の基準で決める。要件定義（`@pm`）の段階で、大きな要望は分割できないか検討すること。
+
+- **独立してマージ可能な単位で切る**：他の未マージ steering 案件のコードに依存する機能は、
+  分けても並列化できないため同じ案件にまとめる
+- **触るファイル・テーブルスキーマが重ならない単位で切る**：重なる場合はマージ順序で
+  コンフリクトが発生しやすいため、並列ではなく順次対応にする
+- **1 steering = 1 PR で完結する大きさに抑える**：tasklist は目安 5〜10 項目程度
+  （`docs/steering/20260725_curate` 等を参考）。worktree の生存期間が延びるほど
+  main との乖離・コンフリクトリスクが増える
 
 新規ブランチで着手する場合:
 
