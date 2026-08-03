@@ -60,6 +60,22 @@ func TestRun_FeedsTableHasUserScopedUniqueConstraint(t *testing.T) {
 	}
 }
 
+// TestRun_PreservesAuditLogForeignKey は、feeds/articles のテーブル再作成手順が
+// 「旧テーブルをリネームしてから新テーブルを作る」順序に戻っていないことを確認する回帰テスト。
+// その順序だとSQLite 3.25以降ではRENAMEにより audit_log.article_id の REFERENCES 句が
+// articles_old(id) 等へ書き換わってしまう（design.mdの「実装時の追記」7参照）。
+func TestRun_PreservesAuditLogForeignKey(t *testing.T) {
+	db := newTestDB(t)
+	if err := Run(db); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	createSQL := createSQLFor(t, db, "audit_log")
+	if !strings.Contains(createSQL, "REFERENCES articles(id)") {
+		t.Errorf("audit_log の FK が articles(id) を指していない（rename-old-first に戻った可能性）: %s", createSQL)
+	}
+}
+
 func TestRun_ArticlesTableHasFeedScopedUniqueConstraint(t *testing.T) {
 	db := newTestDB(t)
 	if err := Run(db); err != nil {
