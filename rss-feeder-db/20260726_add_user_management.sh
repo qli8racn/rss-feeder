@@ -5,6 +5,9 @@
 # UNIQUE(feed_id, url) へ、それぞれユニーク制約を変更する（SQLiteはALTER TABLEでユニーク制約を
 # 直接変更できないため、テーブル再作成手順を用いる）。
 # 複数回実行しても安全（冪等）。詳細は docs/steering/20260726_mcp_user_management/design.md 参照。
+# 前提: feeds・articles テーブルが既に存在する既存の reader.db に対して実行すること
+# （空のDBや schema.sql 未適用のDBに対して実行すると、冒頭の ALTER TABLE articles ADD COLUMN が
+# 「no such table: articles」で失敗する。新規DBは schema.sql を直接適用すれば本スクリプトは不要）。
 set -euo pipefail
 
 DB="${1:-rss-feeder-db/reader.db}"

@@ -124,7 +124,7 @@ bin/rss-feeder categories                 # 記事に付与済みのカテゴリ
 bin/rss-feeder backfill-metadata          # 既存記事の出版元・サムネイルを補完（再取得で判明した分のみ）
 ```
 
-`backfill-metadata` のみ、`articlerepo.Repository.UpdateMetadataBatch` がURL一致で全ユーザー横断に書き込む（userIDでスコープしない）唯一の操作。`default`ユーザーとして実行しても alice・bob 等の記事も補完対象になる（空の列しか埋めないため実害は小さいが、他のCLIコマンド・MCPツールとは分離の扱いが異なる点に注意）。理由は `internal/adapter/driver/readerdb/article/article.go` のコメントおよび `docs/steering/20260726_mcp_user_management/design.md` 参照。
+`backfill-metadata` のみ、`articlerepo.Repository.UpdateMetadataBatch` がURL一致で全ユーザー横断に書き込む（userIDでスコープしない）唯一の操作。`default`ユーザーとして実行しても alice・bob 等の記事も補完対象になる（空の列しか埋めないため実害は小さいが、他のCLIコマンド・MCPツールとは分離の扱いが異なる点に注意）。コマンド実行後に表示される更新件数もこの横断集計（`RowsAffected`の総和）であり、`default`ユーザー自身の記事数を表しているわけではない。理由は `internal/adapter/driver/readerdb/article/article.go` のコメントおよび `docs/steering/20260726_mcp_user_management/design.md` 参照。
 
 ### rss-agent
 
@@ -172,6 +172,8 @@ preferenceがすべてユーザーごとに分離される）。同じ識別子�
 フィードが重複作成されることはない。`--user-id` を省略した場合は `bin/rss-feeder`・`bin/web`・
 `bin/rss-agent` と同じ `default` ユーザーとして動作する。`--user-id` は認証・なりすまし対策のない
 自己申告文字列である（詳細は `docs/steering/20260726_mcp_user_management/design.md` 参照）。
+大文字小文字を区別する（`users.name` は `NOCASE` 指定なしの `TEXT UNIQUE`）ため、
+`--user-id alice` と `--user-id Alice` は別ユーザー（別フィード集合）になる点に注意。
 
 公開するツール（他のMCPサーバーとの判別のため `rss_` 接頭辞を付与）: `rss_list`・`rss_search`・
 `rss_categories`・`rss_list_feeds`・`rss_bookmark`・`rss_mark_read`・`rss_add_feed`・`rss_fetch`・

@@ -109,6 +109,8 @@ func main() {
 
 	// タイポによる空文字・空白のみのユーザーが users テーブルに作られてしまうのを防ぐ
 	// （削除・改名機能はスコープ外のため、一度作られると手動SQLでしか消せない）。
+	// なお users.name は TEXT UNIQUE（NOCASE指定なし）のため大文字小文字を区別する。
+	// 「alice」と「Alice」は別ユーザー（別フィード集合）として扱われる点に注意。
 	trimmedUserID := strings.TrimSpace(*userIDFlag)
 	if trimmedUserID == "" {
 		fmt.Fprintln(os.Stderr, "--user-id は空文字・空白のみを指定できません")
