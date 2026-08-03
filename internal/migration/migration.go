@@ -8,8 +8,20 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/domain"
 )
 
+// Run はDBを最新スキーマまでマイグレーションする。全エントリポイントの起動のたびに
+// 呼ばれるため、既に最新スキーマまで移行済みのDBに対しては isFullyMigrated で早期returnし、
+// ALTER TABLE・INSERT・UPDATE 等の書き込み文（起動のたびに共有DBの書き込みロックを取ってしまう）
+// を一切実行しないようにする。
 func Run(db *sql.DB) error {
-	_, err := db.Exec(`
+	migrated, err := isFullyMigrated(db)
+	if err != nil {
+		return err
+	}
+	if migrated {
+		return nil
+	}
+
+	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS feeds (
 			id           INTEGER PRIMARY KEY AUTOINCREMENT,
 			feed_url     TEXT UNIQUE NOT NULL,
@@ -141,6 +153,20 @@ func tableHasUniqueConstraint(db *sql.DB, table, substr string) (bool, error) {
 		return false, err
 	}
 	return createSQL.Valid && strings.Contains(createSQL.String, substr), nil
+}
+
+// isFullyMigrated は feeds・articles が最終スキーマ（複合ユニーク制約）まで移行済みかどうかを
+// 判定する。articles が UNIQUE(feed_id, url) 付きで存在するのは
+// recreateArticlesTableWithFeedScope による再作成が完了した場合のみであり、その再作成後の
+// スキーマには publisher・thumbnail_url 等のメタデータ列も必ず含まれる（articles_new の
+// CREATE TABLE 文に明示的に列挙されているため）。したがってこの2つのユニーク制約の有無だけで、
+// addArticleColumns・addUserManagement を含む Run 全体が完了済みかどうかを判定できる。
+func isFullyMigrated(db *sql.DB) (bool, error) {
+	feedsOK, err := tableHasUniqueConstraint(db, "feeds", feedsUniqueConstraint)
+	if err != nil || !feedsOK {
+		return false, err
+	}
+	return tableHasUniqueConstraint(db, "articles", articlesUniqueConstraint)
 }
 
 // recreateFeedsTableWithUserScope は feeds テーブルのユニーク制約を
