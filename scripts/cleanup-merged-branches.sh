@@ -20,7 +20,7 @@ git fetch origin main
 
 current_branch=$(git branch --show-current)
 
-merged_branches=$(git branch --merged origin/main --format='%(refname:short)' | grep -v -E '^(main|master)$' || true)
+merged_branches=$(git branch --merged origin/main --format='%(refname:short)' | grep -v -E '^(main|master)$' | grep -v -E '^\(HEAD detached' || true)
 if [ -n "$current_branch" ]; then
     merged_branches=$(echo "$merged_branches" | grep -v -F -x "$current_branch" || true)
 fi
