@@ -2,6 +2,13 @@
 -- 新規 DB 作成時はこのファイルをそのまま適用する:
 --   sqlite3 rss-feeder-db/reader.db < rss-feeder-db/schema.sql
 
+-- internal/migration/migration.go の migrationSteps が管理する現在の最新バージョンと
+-- 一致させる。このファイルから作成したDBは isFullyMigrated による文字列一致判定を経由せず、
+-- 最初から最新バージョンとして扱われる（migration.go の Run はこの値を見て、既に完了済みの
+-- ステップを再実行しない）。migrationSteps に新しいステップを追記したら、この値も
+-- 追記したステップの version に合わせて更新すること。
+PRAGMA user_version = 1;
+
 CREATE TABLE IF NOT EXISTS users (
     id         INTEGER  PRIMARY KEY AUTOINCREMENT,
     name       TEXT     UNIQUE NOT NULL,

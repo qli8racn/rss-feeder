@@ -16,6 +16,11 @@ func newTestDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
+	// go-sqlite3の :memory:（cache=shared無し）はコネクションごとに別々の空DBになるため、
+	// プールが2本目のコネクションを開くと「no such table」になる。全テストが単一コネクションを
+	// 使い続けるようにする（internal/driver/readerdb/article/article_test.go の
+	// newTestDB コメント参照）。
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() {
 		if err := db.Close(); err != nil {
 			t.Fatalf("close db: %v", err)
@@ -200,6 +205,19 @@ func TestRun_NewMigrationStepAppliesExactlyOnceAcrossRepeatedRuns(t *testing.T) 
 		t.Fatalf("initial Run (existing steps only): %v", err)
 	}
 
+	// 新しいステップを追加する前に、素のRunがversionを正しく1まで進めていることを
+	// 明示的に確認しておく。これが無いと、以下で追加する新ステップの検証だけでは
+	// 「step 1（applyBaseMigration）自体が毎回再実行されているか」を検出できない
+	// （setUserVersionが壊れて既存ステップの版数が正しく永続化されなくても、新ステップの
+	// calls・最終versionのアサーションだけでは気づけないケースがあるため）。
+	initialVersion, err := getUserVersion(db)
+	if err != nil {
+		t.Fatalf("getUserVersion after initial Run: %v", err)
+	}
+	if initialVersion != 1 {
+		t.Fatalf("user_version after initial Run: got %d, want 1", initialVersion)
+	}
+
 	originalSteps := migrationSteps
 	t.Cleanup(func() { migrationSteps = originalSteps })
 
@@ -289,12 +307,20 @@ func TestRun_BackfillsVersionForPreVersioningMigratedDB(t *testing.T) {
 		t.Errorf("user_version after backfill: got %d, want 1", version)
 	}
 
-	var userCount int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE name = ?`, domain.DefaultUserName).Scan(&userCount); err != nil {
-		t.Fatalf("count default users: %v", err)
+	// このテストのフィクスチャは users・feeds・articles のみを作成し、audit_log は
+	// 意図的に作成していない。applyBaseMigration の唯一冪等でない観測可能な副作用が
+	// 「CREATE TABLE IF NOT EXISTS audit_log」（ensureDefaultUser の INSERT は
+	// ON CONFLICT DO NOTHING のため再実行されても件数が変化せず検出に使えない）なので、
+	// audit_log が作成されていないことを確認すれば、backfill経路がapplyBaseMigrationを
+	// 再実行していないことをピンポイントで検出できる。
+	var auditLogTableCount int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'audit_log'`,
+	).Scan(&auditLogTableCount); err != nil {
+		t.Fatalf("count audit_log table: %v", err)
 	}
-	if userCount != 1 {
-		t.Errorf("default user count: got %d, want 1 (backfill must not rerun applyBaseMigration)", userCount)
+	if auditLogTableCount != 0 {
+		t.Error("audit_log が作成されている（backfill経路がapplyBaseMigrationを再実行してしまっている）")
 	}
 }
 

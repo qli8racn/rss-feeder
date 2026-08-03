@@ -9,6 +9,13 @@ import (
 )
 
 // migrationStep はバージョン番号付きの1マイグレーションステップ。
+// apply は同じバージョンに対して2回連続で実行されても安全（冪等）でなければならない。
+// setUserVersion は apply の呼び出しとは別のトランザクションで実行されるため、apply成功後・
+// setUserVersion実行前にプロセスが落ちる、あるいはsetUserVersion自体が失敗すると、
+// 次回起動時に同じステップが再実行される可能性がある（DDLとPRAGMA user_versionの更新を
+// 1トランザクションで原子化する形にはしていない。各ステップの内部実装が
+// CREATE TABLE IF NOT EXISTS・ADD COLUMN IF NOT EXISTS・存在チェック付きALTER等で
+// 冪等性を担保する前提）。
 type migrationStep struct {
 	version int
 	apply   func(db *sql.DB) error
@@ -18,14 +25,24 @@ type migrationStep struct {
 // 場合は、version を直前のステップ+1にした上で末尾に追記すること。PRAGMA user_version で
 // DBごとの適用済みバージョンを管理しているため、追記したステップは次回起動時に既存の全DB
 // （新規DB・移行済みDBを問わず）へ自動的に適用される。
+// ステップを追記したら、rss-feeder-db/schema.sql 冒頭の `PRAGMA user_version = N;` も
+// 必ず同じ値に更新すること（schema.sql から作成した新規DBは isFullyMigrated による
+// スキーマ内容の判定を経由せず、schema.sql自身が明示するuser_versionをそのまま使うため、
+// 更新を怠るとschema.sql経由で作った新規DBに対して古いステップが再実行されてしまう）。
 // version 1 は本来「初期スキーマ作成→articlesへのメタデータ列追加→usersテーブル新設・
 // feedsへのuser_id付与」という複数フェーズだったが、PRAGMA user_version導入以前から存在した
 // フェーズのため1ステップにまとめている（各フェーズ自身も CREATE TABLE IF NOT EXISTS・
 // duplicate column name無視・tableHasUniqueConstraintによる冪等性チェックを持つため、
 // 万一2回連続で実行されても安全）。
 var migrationSteps = []migrationStep{
-	{version: 1, apply: applyBaseMigration},
+	{version: baseMigrationVersion, apply: applyBaseMigration},
 }
+
+// baseMigrationVersion は applyBaseMigration（version 1）のバージョン番号。
+// isFullyMigratedによるbackfill（Run参照）はこの値に固定して結びつく必要があるため、
+// migrationSteps中の定義とbackfill側の両方から参照できるよう定数化する
+// （字面上の "1" が2箇所に分散して食い違うことを防ぐ）。
+const baseMigrationVersion = 1
 
 // Run はDBを最新スキーマまでマイグレーションする。全エントリポイントの起動のたびに
 // 呼ばれるため、PRAGMA user_version で管理する適用済みバージョンより新しいステップだけを
@@ -49,12 +66,12 @@ func Run(db *sql.DB) error {
 		}
 		if legacy {
 			// ここで即座に永続化する。以降のループは「version以下のステップをskip」する
-			// だけなので、version 1 が最新ステップの場合ループは1文も実行せず、
+			// だけなので、baseMigrationVersion が最新ステップの場合ループは1文も実行せず、
 			// このbackfillをここで書いておかないと user_version が0のまま残ってしまう。
-			if err := setUserVersion(db, 1); err != nil {
+			if err := setUserVersion(db, baseMigrationVersion); err != nil {
 				return fmt.Errorf("user_versionのbackfillに失敗しました: %w", err)
 			}
-			version = 1
+			version = baseMigrationVersion
 		}
 	}
 
