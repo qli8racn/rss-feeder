@@ -8,6 +8,8 @@ import (
 	"github.com/samber/do/v2"
 )
 
+var _ adaptermaint.Maintainer = (*maintainer)(nil)
+
 type maintainer struct {
 	db *sql.DB
 }

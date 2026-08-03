@@ -22,7 +22,7 @@ func NewRepository(i do.Injector) (adapterauditlog.Repository, error) {
 func (r *repository) Save(ctx context.Context, log domain.AuditLog) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO audit_log (action, article_id, old_state, new_state)
-		VALUES (?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4)
 	`, log.Action, log.ArticleID, nullableStr(log.OldState), nullableStr(log.NewState))
 	return err
 }

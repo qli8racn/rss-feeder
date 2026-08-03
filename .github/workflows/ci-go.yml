@@ -49,3 +49,6 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+      - name: Vet (pg integration tests)
+        run: go vet -tags pg_integration ./internal/driver/readerpg/...

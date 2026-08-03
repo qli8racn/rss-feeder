@@ -29,8 +29,9 @@ func NewRepository(i do.Injector) (articlerepo.Repository, error) {
 
 func (r *repository) Save(ctx context.Context, a domain.Article) error {
 	res, err := r.db.ExecContext(ctx, `
-		INSERT OR IGNORE INTO articles (feed_id, url, title, content, published_at, fetched_at, publisher, thumbnail_url)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO articles (feed_id, url, title, content, published_at, fetched_at, publisher, thumbnail_url)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (url) DO NOTHING
 	`, a.FeedID, a.URL, a.Title, a.Content, a.PublishedAt, time.Now(), a.Publisher, a.ThumbnailURL)
 	if err != nil {
 		return err
@@ -46,17 +47,17 @@ func (r *repository) Save(ctx context.Context, a domain.Article) error {
 }
 
 func (r *repository) FindAll(ctx context.Context) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles ORDER BY published_at DESC", articleColumns)
+	q := fmt.Sprintf("SELECT %s FROM articles ORDER BY published_at DESC NULLS LAST, id DESC", articleColumns)
 	return r.query(ctx, q)
 }
 
 func (r *repository) FindUnread(ctx context.Context) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles WHERE read = 0 ORDER BY published_at DESC", articleColumns)
+	q := fmt.Sprintf("SELECT %s FROM articles WHERE read = FALSE ORDER BY published_at DESC NULLS LAST, id DESC", articleColumns)
 	return r.query(ctx, q)
 }
 
 func (r *repository) FindBookmarked(ctx context.Context) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s, COALESCE(f.feed_url, '') FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id WHERE a.bookmarked = 1 ORDER BY a.published_at DESC", aliasedArticleColumns)
+	q := fmt.Sprintf("SELECT %s, COALESCE(f.feed_url, '') FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id WHERE a.bookmarked = TRUE ORDER BY a.published_at DESC NULLS LAST, a.id DESC", aliasedArticleColumns)
 	rows, err := r.db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, err
@@ -69,11 +70,11 @@ func (r *repository) FetchLatest(ctx context.Context, limit int, feedURL string)
 	q := fmt.Sprintf("SELECT %s, COALESCE(f.feed_url, '') FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id", aliasedArticleColumns)
 	args := []any{}
 	if feedURL != "" {
-		q += " WHERE f.feed_url = ?"
 		args = append(args, feedURL)
+		q += fmt.Sprintf(" WHERE f.feed_url = $%d", len(args))
 	}
-	q += " ORDER BY a.published_at DESC LIMIT ?"
 	args = append(args, limit)
+	q += fmt.Sprintf(" ORDER BY a.published_at DESC NULLS LAST, a.id DESC LIMIT $%d", len(args))
 
 	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -84,7 +85,7 @@ func (r *repository) FetchLatest(ctx context.Context, limit int, feedURL string)
 }
 
 func (r *repository) FindByID(ctx context.Context, id int64) (*domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles WHERE id = ?", articleColumns)
+	q := fmt.Sprintf("SELECT %s FROM articles WHERE id = $1", articleColumns)
 	row := r.db.QueryRowContext(ctx, q, id)
 	a, err := scanArticle(row.Scan)
 	if err != nil {
@@ -98,7 +99,7 @@ func (r *repository) FindByID(ctx context.Context, id int64) (*domain.Article, e
 
 func (r *repository) Update(ctx context.Context, a domain.Article) error {
 	_, err := r.db.ExecContext(ctx, `
-		UPDATE articles SET read = ?, bookmarked = ? WHERE id = ?
+		UPDATE articles SET read = $1, bookmarked = $2 WHERE id = $3
 	`, a.Read, a.Bookmarked, a.ID)
 	return err
 }
@@ -107,20 +108,20 @@ func (r *repository) MarkAsRead(ctx context.Context, ids []int64) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	placeholders := strings.Repeat("?,", len(ids))
-	placeholders = placeholders[:len(placeholders)-1]
+	placeholders := make([]string, len(ids))
 	args := make([]any, len(ids))
 	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
 		args[i] = id
 	}
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE articles SET read = 1 WHERE id IN (`+placeholders+`)`,
+		`UPDATE articles SET read = TRUE WHERE id IN (`+strings.Join(placeholders, ",")+`)`,
 		args...)
 	return err
 }
 
 func (r *repository) DeleteNonBookmarked(ctx context.Context) (int64, error) {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM articles WHERE bookmarked = 0`)
+	res, err := r.db.ExecContext(ctx, `DELETE FROM articles WHERE bookmarked = FALSE`)
 	if err != nil {
 		return 0, err
 	}
@@ -129,25 +130,25 @@ func (r *repository) DeleteNonBookmarked(ctx context.Context) (int64, error) {
 
 func (r *repository) CountNonBookmarked(ctx context.Context) (int64, error) {
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM articles WHERE bookmarked = 0`).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM articles WHERE bookmarked = FALSE`).Scan(&count)
 	return count, err
 }
 
+// Search は ILIKE を使う。PostgresのLIKEはSQLiteと異なりASCII範囲でも大文字小文字を
+// 区別するため、SQLite実装（LIKE）と挙動を揃えるためILIKEを使う。
 func (r *repository) Search(ctx context.Context, keyword string, bookmarkedOnly bool) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles WHERE (title LIKE ? OR content LIKE ?)", articleColumns)
+	q := fmt.Sprintf("SELECT %s FROM articles WHERE (title ILIKE $1 OR content ILIKE $2)", articleColumns)
 	like := "%" + keyword + "%"
 	args := []any{like, like}
 	if bookmarkedOnly {
-		q += " AND bookmarked = 1"
+		q += " AND bookmarked = TRUE"
 	}
-	q += " ORDER BY published_at DESC"
+	q += " ORDER BY published_at DESC NULLS LAST, id DESC"
 	return r.queryArgs(ctx, q, args...)
 }
 
 // UpdateEnrichmentBatch は複数件の要約・カテゴリ更新を1トランザクションでまとめて行う。
-// 1件ずつ ExecContext するより、ジャーナルへのfsyncをまとめられる分高速。
-// 1件でも失敗すればトランザクション全体をロールバックする（呼び出し元はこの単位を
-// 「DBへの保存単位」として扱うため、部分成功させたい場合は呼び出し元で複数回に分けて呼ぶ）。
+// SQLite実装と同様、1件でも失敗すればトランザクション全体をロールバックする。
 func (r *repository) UpdateEnrichmentBatch(ctx context.Context, updates []articlerepo.EnrichmentUpdate) error {
 	if len(updates) == 0 {
 		return nil
@@ -158,7 +159,7 @@ func (r *repository) UpdateEnrichmentBatch(ctx context.Context, updates []articl
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.PrepareContext(ctx, `UPDATE articles SET summary = ?, category = ? WHERE id = ?`)
+	stmt, err := tx.PrepareContext(ctx, `UPDATE articles SET summary = $1, category = $2 WHERE id = $3`)
 	if err != nil {
 		return err
 	}
@@ -173,17 +174,13 @@ func (r *repository) UpdateEnrichmentBatch(ctx context.Context, updates []articl
 }
 
 func (r *repository) FindWithoutSummary(ctx context.Context, limit int) ([]domain.Article, error) {
-	q := fmt.Sprintf("SELECT %s FROM articles WHERE summary IS NULL OR summary = '' ORDER BY published_at DESC LIMIT ?", articleColumns)
+	q := fmt.Sprintf("SELECT %s FROM articles WHERE summary IS NULL OR summary = '' ORDER BY published_at DESC NULLS LAST, id DESC LIMIT $1", articleColumns)
 	return r.queryArgs(ctx, q, limit)
 }
 
 // UpdateMetadataBatch は既存記事への出版元・サムネイルのバックフィル用。
-// publisher・thumbnail_url は列ごとに「現在空（NULL または空文字）、かつ新しい値が空でない場合のみ」更新し、
-// 既に値がある列は上書きしない（何度実行しても安全、かつ手動で編集された値を壊さない）。
-// `ALTER TABLE ... ADD COLUMN`（migration.go）で追加した既存行は NULL になるため、
-// 空文字判定だけでは検出できず COALESCE で NULL も空として扱う。
-// 新しい値も空（フィードがそもそもサムネイルを提供しない等）の場合は対象外とする
-// （WHERE句に含めないと、永遠に「補完」件数として数えられてしまう）。
+// SQLite実装（sql.Named）と異なり、Postgres実装では名前付きパラメータの互換性が
+// 不確実なため位置引数（$1,$2,$3）で書く（design.md参照）。
 func (r *repository) UpdateMetadataBatch(ctx context.Context, updates []articlerepo.MetadataUpdate) (int64, error) {
 	if len(updates) == 0 {
 		return 0, nil
@@ -196,12 +193,12 @@ func (r *repository) UpdateMetadataBatch(ctx context.Context, updates []articler
 
 	stmt, err := tx.PrepareContext(ctx, `
 		UPDATE articles SET
-			publisher = CASE WHEN COALESCE(publisher, '') = '' AND :publisher != '' THEN :publisher ELSE publisher END,
-			thumbnail_url = CASE WHEN COALESCE(thumbnail_url, '') = '' AND :thumbnail_url != '' THEN :thumbnail_url ELSE thumbnail_url END
-		WHERE url = :url
+			publisher = CASE WHEN COALESCE(publisher, '') = '' AND $1 != '' THEN $1 ELSE publisher END,
+			thumbnail_url = CASE WHEN COALESCE(thumbnail_url, '') = '' AND $2 != '' THEN $2 ELSE thumbnail_url END
+		WHERE url = $3
 			AND (
-				(COALESCE(publisher, '') = '' AND :publisher != '')
-				OR (COALESCE(thumbnail_url, '') = '' AND :thumbnail_url != '')
+				(COALESCE(publisher, '') = '' AND $1 != '')
+				OR (COALESCE(thumbnail_url, '') = '' AND $2 != '')
 			)
 	`)
 	if err != nil {
@@ -211,11 +208,7 @@ func (r *repository) UpdateMetadataBatch(ctx context.Context, updates []articler
 
 	var total int64
 	for _, u := range updates {
-		res, err := stmt.ExecContext(ctx,
-			sql.Named("publisher", u.Publisher),
-			sql.Named("thumbnail_url", u.ThumbnailURL),
-			sql.Named("url", u.URL),
-		)
+		res, err := stmt.ExecContext(ctx, u.Publisher, u.ThumbnailURL, u.URL)
 		if err != nil {
 			return 0, fmt.Errorf("記事 %s の更新に失敗しました: %w", u.URL, err)
 		}
@@ -230,7 +223,7 @@ func (r *repository) UpdateMetadataBatch(ctx context.Context, updates []articler
 
 func (r *repository) CountBookmarked(ctx context.Context) (int64, error) {
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM articles WHERE bookmarked = 1`).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM articles WHERE bookmarked = TRUE`).Scan(&count)
 	return count, err
 }
 
@@ -239,19 +232,21 @@ func (r *repository) FindFiltered(ctx context.Context, filter articlerepo.ListFi
 	var args []any
 
 	if filter.Unread {
-		conditions = append(conditions, "read = 0")
+		conditions = append(conditions, "read = FALSE")
 	}
 	if filter.BookmarkedOnly {
-		conditions = append(conditions, "bookmarked = 1")
+		conditions = append(conditions, "bookmarked = TRUE")
 	}
 	if filter.Keyword != "" {
-		conditions = append(conditions, "(title LIKE ? OR content LIKE ?)")
+		// ILIKE: PostgresのLIKEはSQLiteと異なりASCII範囲でも大文字小文字を区別するため、
+		// SQLite実装（LIKE）と挙動を揃える。
 		like := "%" + filter.Keyword + "%"
 		args = append(args, like, like)
+		conditions = append(conditions, fmt.Sprintf("(title ILIKE $%d OR content ILIKE $%d)", len(args)-1, len(args)))
 	}
 	if filter.Category != "" {
-		conditions = append(conditions, "category = ?")
 		args = append(args, filter.Category)
+		conditions = append(conditions, fmt.Sprintf("category = $%d", len(args)))
 	}
 
 	where := ""
@@ -269,9 +264,14 @@ func (r *repository) FindFiltered(ctx context.Context, filter articlerepo.ListFi
 	if !articlerepo.ValidSortFields[sortColumn] {
 		sortColumn = "published_at"
 	}
+	// NULLS FIRST/LAST: SQLiteはASCでNULLSFIRST・DESCでNULLSLASTがデフォルトだが、
+	// Postgresはその逆（ASCでNULLSLAST・DESCでNULLSFIRST）がデフォルトのため、
+	// sortColumn（category・publisher等はNULL/空になりうる）でSQLite側の挙動と揃えるために明示する。
 	orderDir := "DESC"
+	nullsOrder := "NULLS LAST"
 	if filter.Order == "asc" {
 		orderDir = "ASC"
+		nullsOrder = "NULLS FIRST"
 	}
 
 	page := filter.Page
@@ -283,10 +283,11 @@ func (r *repository) FindFiltered(ctx context.Context, filter articlerepo.ListFi
 		perPage = articlerepo.DefaultPerPage
 	}
 
-	q := fmt.Sprintf("SELECT %s FROM articles%s ORDER BY %s %s LIMIT ? OFFSET ?", articleColumns, where, sortColumn, orderDir)
-	queryArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
+	limitArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
+	q := fmt.Sprintf("SELECT %s FROM articles%s ORDER BY %s %s %s, id %s LIMIT $%d OFFSET $%d",
+		articleColumns, where, sortColumn, orderDir, nullsOrder, orderDir, len(limitArgs)-1, len(limitArgs))
 
-	articles, err := r.queryArgs(ctx, q, queryArgs...)
+	articles, err := r.queryArgs(ctx, q, limitArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
