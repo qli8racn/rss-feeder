@@ -39,8 +39,14 @@ func newTestDB(t *testing.T) *sql.DB {
 	if _, err := db.Exec(`TRUNCATE TABLE audit_log, articles, feeds RESTART IDENTITY CASCADE`); err != nil {
 		t.Fatalf("truncate tables: %v", err)
 	}
-	if _, err := db.Exec(`INSERT INTO feeds (id, feed_url, title) VALUES (1, 'https://example.com/feed', 'Test')`); err != nil {
+	// idを明示せずRETURNINGで採番させる。RESTART IDENTITY直後のため常に1になり、
+	// makeArticleがハードコードするFeedID: 1と一致しつつ、feeds_id_seqも正しく進む。
+	var feedID int64
+	if err := db.QueryRow(`INSERT INTO feeds (feed_url, title) VALUES ('https://example.com/feed', 'Test') RETURNING id`).Scan(&feedID); err != nil {
 		t.Fatalf("setup feed: %v", err)
+	}
+	if feedID != 1 {
+		t.Fatalf("expected feed id 1 after RESTART IDENTITY, got %d", feedID)
 	}
 	t.Cleanup(func() {
 		if err := db.Close(); err != nil {
