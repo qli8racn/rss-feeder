@@ -171,7 +171,8 @@ rss-feeder/
 │   ├── domain/
 │   │   ├── article.go                           # Article エンティティ・ToggleBookmark() など
 │   │   ├── audit_log.go                         # AuditLog エンティティ
-│   │   └── feed.go                              # Feed エンティティ
+│   │   ├── feed.go                              # Feed エンティティ
+│   │   └── user.go                              # User エンティティ・DefaultUserName定数（マルチユーザー対応）
 │   ├── config/
 │   │   ├── config.go                            # config.yml 読み込み（viper, ANTHROPIC_API_KEY 等）
 │   │   ├── config.example.yml                   # config.yml のテンプレート
@@ -196,7 +197,8 @@ rss-feeder/
 │   │   ├── enrich.go                            # 要約・カテゴリ付与（EnrichAgent への薄いラッパー）
 │   │   ├── discover_feed.go                     # DiscoverFeedUsecase（HTML取得→Claude問い合わせ→RSSReaderで再検証。cmd/agent専用）
 │   │   ├── resolve_feed_url.go                  # ResolveFeedURLUsecase（直接判定→標準探索→AIフォールバックの探索フロー、findFeedLink純粋関数）
-│   │   └── trigger_enrich.go                    # TriggerEnrichUsecase（feedenrich.Agent への薄いラッパー、enrichTimeout=30秒）
+│   │   ├── trigger_enrich.go                    # TriggerEnrichUsecase（feedenrich.Agent への薄いラッパー、enrichTimeout=30秒）
+│   │   └── resolve_user.go                      # ResolveUserUsecase（ユーザー名からuserIDをfind-or-create。全エントリポイントがmigration直後・他Usecase構築前に1回呼ぶ）
 │   ├── adapter/
 │   │   ├── driver/
 │   │   │   ├── readerdb/
@@ -206,8 +208,10 @@ rss-feeder/
 │   │   │   │   │   └── auditlog.go             # AuditLogRepository interface
 │   │   │   │   ├── dbmaintenance/
 │   │   │   │   │   └── dbmaintenance.go        # DBMaintenance interface
-│   │   │   │   └── feed/
-│   │   │   │       └── feed.go                 # FeedRepository interface（ErrAlreadyExists・ErrNotFound 定義）
+│   │   │   │   ├── feed/
+│   │   │   │   │   └── feed.go                 # FeedRepository interface（ErrAlreadyExists・ErrNotFound 定義）
+│   │   │   │   └── user/
+│   │   │   │       └── user.go                 # UserRepository interface（SQLite/Postgres実装共通。パッケージパスはreaderdb配下のまま据え置き）
 │   │   │   ├── rss/
 │   │   │   │   └── rss_reader.go               # RSSReader interface
 │   │   │   ├── htmlfetch/
@@ -260,8 +264,22 @@ rss-feeder/
 │       │   │   └── auditlog.go                 # AuditLogRepository 実装
 │       │   ├── dbmaintenance/
 │       │   │   └── dbmaintenance.go            # DBMaintenance 実装（VACUUM・整合性チェック）
-│       │   └── feed/
-│       │       └── feed.go                     # FeedRepository 実装
+│       │   ├── feed/
+│       │   │   └── feed.go                     # FeedRepository 実装
+│       │   └── user/
+│       │       └── user.go                     # UserRepository 実装（find-or-create、UNIQUE制約違反時は再FindByNameでレース条件を吸収）
+│       ├── readerpg/                            # Supabase（Postgres）への接続・リポジトリ実装。config.yml の db.driver: supabase 使用時のみDIで注入される
+│       │   ├── client.go                        # DB 接続（sql.Open("pgx", dsn)、pgx/v5/stdlib 経由）
+│       │   ├── article/
+│       │   │   └── article.go                  # ArticleRepository 実装（Postgres方言。ILIKE・RETURNING id 等）
+│       │   ├── auditlog/
+│       │   │   └── auditlog.go                 # AuditLogRepository 実装
+│       │   ├── dbmaintenance/
+│       │   │   └── dbmaintenance.go            # DBMaintenance 実装（IntegrityCheckはPostgres非対応のため説明的な戻り値を返す）
+│       │   ├── feed/
+│       │   │   └── feed.go                     # FeedRepository 実装
+│       │   └── user/
+│       │       └── user.go                     # UserRepository 実装
 │       ├── rss/
 │       │   └── reader.go                       # RSSReader 実装（gofeed による HTTP Fetch）
 │       ├── htmlfetch/
@@ -280,10 +298,59 @@ rss-feeder/
 │   ├── schema.sql                               # 現在の DDL（新規 DB 作成用）
 │   ├── 20260607_initial_schema.sh               # 初期スキーマ作成
 │   ├── 20260614_add_article_metadata.sh         # articles へメタデータカラムを追加
+│   ├── 20260726_add_user_management.sh          # users テーブル新設・feeds/articlesのユーザースコープ化（手動適用用。internal/migrationと同内容）
 │   └── reader.db                               # SQLite データベース（gitignore）
 ├── go.mod
 └── go.sum
 ```
+
+### DBドライバ切り替え（SQLite / Supabase）
+
+`internal/config/config.yml` の `db.driver`（`sqlite`（デフォルト）| `supabase`）で使用するDBを切り替える。
+`internal/adapter/driver/readerdb/{feed,article,auditlog,user}` の既存インターフェースは変更せず、
+Postgres向けの実装を `internal/driver/readerpg/...` に別実装として追加し、各エントリポイントの
+`main.go` が `cfg.DB.IsSupabase()`（`internal/config`）で `do.Provide` する実装（`readerdb.*` /
+`readerpg.*`）とスキーマ初期化処理（`migration.RunFor(cfg, db)`）を分岐する方式を採る
+（SQL方言を吸収する共通レイヤーは新設しない。理由・比較検討は
+`docs/steering/20260726_supabase_db_driver/design.md` 参照）。
+
+- Postgresドライバは `github.com/jackc/pgx/v5`（`pgx/v5/stdlib` 経由）を採用し、`*sql.DB` 型のシグネチャは維持する
+- SQL方言差分の主な例: プレースホルダ `?` → `$1,$2,...`、`INSERT OR IGNORE` → `ON CONFLICT ... DO NOTHING`、
+  `LastInsertId()` 不使用のため `INSERT ... RETURNING id`、`LIKE` → `ILIKE`
+- `internal/migration.RunFor(cfg, db)` が `cfg.DB.Driver` に応じて SQLite 用 `Run` / Postgres 用
+  `RunPostgres` のどちらを実行するかを内部で振り分ける
+- `dbmaintenance`（VACUUM・整合性チェック）はPostgres実装でも提供するが、`PRAGMA integrity_check`
+  相当の機能がPostgresに無いため `IntegrityCheck` は「未サポート」を返す
+- Postgres実装への自動テストは無し（CI秘密情報管理・testcontainers導入のコストが学習目的のスコープに
+  見合わないため）。`go build` でのコンパイル確認とユーザーによる手動動作確認で妥当性を担保する
+- `internal/config/config.yml` の設定例・Supabase接続時の注意点（Session pooler推奨・コレーション差異等）は
+  `AGENTS.md` の「DB ドライバの切り替え（SQLite / Supabase）」を参照
+
+### ユーザー管理（マルチユーザー対応）
+
+`users` テーブルを新設し、`feeds` に `user_id`（`UNIQUE(user_id, feed_url)`）を追加することで、
+MCPサーバー利用者（`cmd/mcp --user-id`）単位でフィード・記事・ブックマーク・既読状態・趣向分析を分離する。
+`cmd/rss-feeder`・`cmd/web`・`cmd/agent` は `--user-id` フラグを持たず、常に `domain.DefaultUserName`
+（`"default"`）として動作する（外部から見た挙動・ハンドラ層は無変更）。
+
+- 各エントリポイントの `main.go` は migration 実行の直後・他Usecase構築より前に
+  `usecase.NewResolveUserUsecase(userRepo).Execute(ctx, name)`（find-or-create）で `userID int64` を解決し、
+  `usecase.NewListUsecase(articleRepo, userID)` のように**構築時の引数**として各Usecaseへ渡す
+  （`Execute(ctx, userID, ...)` のような呼び出し時引数にはしない。既存ハンドラ層
+  （`internal/adapter/handler/{cli,web,agent}`）を無変更に保つための判断）
+- `articles` テーブルには `user_id` を追加せず、`articles.feed_id → feeds.user_id` の関連で所有ユーザーを
+  判定する（`internal/driver/readerdb/article/article.go` の `ownedByUserSubquery` 相当）。記事一覧・検索・
+  カテゴリ一覧・enrich・preference 等、記事に触れる操作はすべてこの経路でユーザースコープされる
+- `articles` は `UNIQUE(feed_id, url)`（旧: グローバルな `UNIQUE(url)`）に変更されており、
+  同一ユーザーが内容の重なる複数フィードを購読している場合、同じ記事URLが `feed_id` ごとに
+  別行として保存されうる（`list`/`search`/`rss_enrich` の件数がその分膨らむ、既知の挙動）
+- `backfill-metadata`（`UpdateMetadataBatch`）のみ userID でスコープされない全ユーザー横断操作
+  （理由は `internal/adapter/driver/readerdb/article/article.go` のコメント参照）
+- `audit_log` は userID でスコープしていない（現状 `cmd/web`・`cmd/rss-feeder` からのみ書き込まれ、
+  常に `default` ユーザーのため実害なし。将来 MCP に監査ログ関連ツールを追加する場合は要検討）
+- 設計の背景・比較検討（フィード行複製方式を採用した理由等）・実装時に設計から逸脱した点の記録は
+  `docs/steering/20260726_mcp_user_management/design.md` を参照。`--user-id` の利用方法・複数MCPサーバー
+  登録手順は `AGENTS.md` の「MCP Server（cmd/mcp）」を参照
 
 ---
 
@@ -294,6 +361,7 @@ rss-feeder/
 | `github.com/spf13/cobra` | CLI サブコマンド管理 | 複数サブコマンドの構造化に適している |
 | `github.com/mmcdole/gofeed` | RSS/Atom パース | RSS 2.0・Atom 両対応、メンテ活発 |
 | `github.com/mattn/go-sqlite3` | SQLite ドライバ | CGO 使用。devcontainer に GCC あり・純 Go 版は コンパイル時メモリ不足のため除外 |
+| `github.com/jackc/pgx/v5`（`pgx/v5/stdlib`） | Postgres（Supabase）ドライバ | `config.yml` の `db.driver: supabase` 選択時に使用。`pgx/v5/stdlib` で `database/sql` 互換ドライバとして登録し、既存の `*sql.DB` ベースの実装パターンを維持。メンテナンス状況を重視し `lib/pq`（メンテナンスモード）は不採用。詳細は `docs/steering/20260726_supabase_db_driver/design.md` を参照 |
 | `github.com/samber/do/v2` | DI コンテナ | CLI 向きのシンプルな API、コード生成不要 |
 | `github.com/anthropics/anthropic-sdk-go` | Claude API クライアント | エージェント機能・記事要約・フィードURL自動探索・enrich（`cmd/agent` のみが直接依存。`cmd/web`・`cmd/rss-feeder` は使用せずサブプロセス経由） |
 | `github.com/go-chi/chi/v5` | HTTP ルーター | Web ビュー（`cmd/web`）のルーティング・ミドルウェア |
@@ -372,58 +440,67 @@ Hook スクリプトは `sqlite3` コマンドを直接呼ばず、**Go バイ�
 usecase 層は `do.MustInvoke` でリポジトリを取り出して直接構築し、handler/cli・handler/web・handler/agent に渡す。
 `cmd/agent/main.go` も同じ構造で、`internal/driver/anthropic` の各 Agent を `do.Provide` で登録し、`internal/usecase/{summarize,preference,enrich}.go` 経由で `handler/agent` のコマンドに渡す。
 
+DBドライバ（SQLite/Supabase）の切り替え・ユーザー解決（`ResolveUserUsecase`）が加わったことで、
+migration 実行の前後に以下2ステップが追加されている（`cfg.DB.IsSupabase()` は `internal/config`、
+`migration.RunFor` は `internal/migration` に定義）。
+
 ```go
 // cmd/rss-feeder/main.go
 func main() {
     i := do.New()
 
-    // driver 層をコンテナに登録
-    do.Provide(i, readerdb.NewClient)               // *sql.DB
-    do.Provide(i, dbrepoarticle.NewRepository)      // articlerepo.Repository
-    do.Provide(i, dbrepofeed.NewRepository)         // feedrepo.Repository
-    do.Provide(i, driverrss.NewReader)              // adapterrss.RSSReader
-    do.Provide(i, dbrepoauditlog.NewRepository)     // auditlogrepo.Repository
-    do.Provide(i, dbrepodbmaint.NewMaintainer)      // dbmaintrepo.Maintainer
+    do.Provide(i, config.NewProvider)
+    cfg := do.MustInvoke[*config.Config](i)
 
-    // migration
+    // driver 層をコンテナに登録（DBドライバはconfig.ymlのdb.driverで分岐）
+    if cfg.DB.IsSupabase() {
+        do.Provide(i, readerpg.NewClient)               // *sql.DB（pgx/v5経由）
+        do.Provide(i, pgrepoarticle.NewRepository)      // articlerepo.Repository（Postgres実装）
+        do.Provide(i, pgrepofeed.NewRepository)         // feedrepo.Repository（Postgres実装）
+        do.Provide(i, pgrepouser.NewRepository)         // userrepo.Repository（Postgres実装）
+        do.Provide(i, pgrepoauditlog.NewRepository)     // auditlogrepo.Repository（Postgres実装）
+        do.Provide(i, pgrepodbmaint.NewMaintainer)      // dbmaintrepo.Maintainer（Postgres実装）
+    } else {
+        do.Provide(i, readerdb.NewClient)               // *sql.DB（SQLite）
+        do.Provide(i, dbrepoarticle.NewRepository)      // articlerepo.Repository（SQLite実装）
+        do.Provide(i, dbrepofeed.NewRepository)         // feedrepo.Repository（SQLite実装）
+        do.Provide(i, dbrepouser.NewRepository)         // userrepo.Repository（SQLite実装）
+        do.Provide(i, dbrepoauditlog.NewRepository)     // auditlogrepo.Repository（SQLite実装）
+        do.Provide(i, dbrepodbmaint.NewMaintainer)      // dbmaintrepo.Maintainer（SQLite実装）
+    }
+    do.Provide(i, driverrss.NewReader)              // adapterrss.RSSReader
+
+    // migration（ドライバに応じてSQLite用/Postgres用のスキーマ初期化を内部で振り分ける）
     db := do.MustInvoke[*sql.DB](i)
-    if err := migration.Run(db); err != nil {
+    if err := migration.RunFor(cfg, db); err != nil {
         log.Fatalf("migration failed: %v", err)
     }
 
-    // usecase 層を直接構築（依存はコンテナから取り出す）
-    fetchUC           := usecase.NewFetchUsecase(
+    // ユーザー解決（cmd/rss-feederは常にdefaultユーザーとして動作。cmd/mcpのみ--user-idの値を使う）
+    user, err := usecase.NewResolveUserUsecase(do.MustInvoke[userrepo.Repository](i)).
+        Execute(context.Background(), domain.DefaultUserName)
+    if err != nil {
+        log.Fatalf("default user resolution failed: %v", err)
+    }
+    userID := user.ID
+
+    // usecase 層を直接構築（依存はコンテナから取り出し、userIDを構築時引数として渡す）
+    fetchUC := usecase.NewFetchUsecase(
         do.MustInvoke[articlerepo.Repository](i),
         do.MustInvoke[feedrepo.Repository](i),
         do.MustInvoke[adapterrss.RSSReader](i),
+        userID,
     )
-    listUC            := usecase.NewListUsecase(do.MustInvoke[articlerepo.Repository](i))
-    bookmarkUC        := usecase.NewBookmarkUsecase(do.MustInvoke[articlerepo.Repository](i))
-    resetUC           := usecase.NewResetUsecase(do.MustInvoke[articlerepo.Repository](i))
-    searchUC          := usecase.NewSearchUsecase(do.MustInvoke[articlerepo.Repository](i))
-    checkArticleUC    := usecase.NewCheckArticleUsecase(do.MustInvoke[articlerepo.Repository](i))
-    checkBookmarkedUC := usecase.NewCheckBookmarkedUsecase(do.MustInvoke[articlerepo.Repository](i))
-    auditUC           := usecase.NewAuditUsecase(do.MustInvoke[auditlogrepo.Repository](i))
-    maintenanceUC     := usecase.NewMaintenanceUsecase(do.MustInvoke[dbmaintrepo.Maintainer](i))
-    addFeedUC         := usecase.NewAddFeedUsecase(do.MustInvoke[feedrepo.Repository](i))
-    listFeedsUC       := usecase.NewListFeedsUsecase(do.MustInvoke[feedrepo.Repository](i))
-    removeFeedUC      := usecase.NewRemoveFeedUsecase(do.MustInvoke[feedrepo.Repository](i))
+    listUC := usecase.NewListUsecase(do.MustInvoke[articlerepo.Repository](i), userID)
+    // 以下同様に、リポジトリを直接保持する各Usecase（bookmark・reset・search・add_feed・
+    // list_feeds・remove_feed 等）のコンストラクタに userID を渡す
 
-    // cobra コマンド組み立て
+    // cobra コマンド組み立て（handler層は無変更、以下省略）
     root := &cobra.Command{Use: "rss-feeder", Short: "RSS フィードを取得・管理する CLI ツール"}
     root.AddCommand(
         cli.NewFetchCommand(fetchUC),
         cli.NewListCommand(listUC),
-        cli.NewBookmarkCommand(bookmarkUC),
-        cli.NewResetCommand(resetUC),
-        cli.NewSearchCommand(searchUC),
-        cli.NewCheckArticleCommand(checkArticleUC),
-        cli.NewCheckBookmarkedCommand(checkBookmarkedUC),
-        cli.NewAuditCommand(auditUC),
-        cli.NewMaintenanceCommand(maintenanceUC),
-        cli.NewAddFeedCommand(addFeedUC),
-        cli.NewListFeedsCommand(listFeedsUC),
-        cli.NewRemoveFeedCommand(removeFeedUC),
+        // ...
     )
 
     if err := root.Execute(); err != nil {
