@@ -18,6 +18,10 @@ import (
 	"github.com/qli8racn/rss-feeder/internal/migration"
 )
 
+// testFeedID は各テストのセットアップで作成する唯一のfeedのID。TRUNCATE ... RESTART IDENTITY
+// 直後のRETURNING idは常にこの値になる（makeArticleのFeedIDともここを唯一の参照元として揃える）。
+const testFeedID int64 = 1
+
 // newTestDB は環境変数 TEST_POSTGRES_DSN が設定されている場合のみ実際のPostgresに接続する。
 // 未設定の場合は t.Skip する（通常の `go test ./...`（ビルドタグなし）ではこのファイル自体が
 // コンパイル対象外のため、CIコストは増えない）。
@@ -39,14 +43,13 @@ func newTestDB(t *testing.T) *sql.DB {
 	if _, err := db.Exec(`TRUNCATE TABLE audit_log, articles, feeds RESTART IDENTITY CASCADE`); err != nil {
 		t.Fatalf("truncate tables: %v", err)
 	}
-	// idを明示せずRETURNINGで採番させる。RESTART IDENTITY直後のため常に1になり、
-	// makeArticleがハードコードするFeedID: 1と一致しつつ、feeds_id_seqも正しく進む。
+	// idを明示せずRETURNINGで採番させる（feeds_id_seqを正しく進めるため）。
 	var feedID int64
 	if err := db.QueryRow(`INSERT INTO feeds (feed_url, title) VALUES ('https://example.com/feed', 'Test') RETURNING id`).Scan(&feedID); err != nil {
 		t.Fatalf("setup feed: %v", err)
 	}
-	if feedID != 1 {
-		t.Fatalf("expected feed id 1 after RESTART IDENTITY, got %d", feedID)
+	if feedID != testFeedID {
+		t.Fatalf("expected feed id %d after RESTART IDENTITY, got %d", testFeedID, feedID)
 	}
 	t.Cleanup(func() {
 		if err := db.Close(); err != nil {
@@ -62,7 +65,7 @@ func newRepo(t *testing.T) *repository {
 }
 
 func makeArticle(url string) domain.Article {
-	return domain.Article{FeedID: 1, URL: url, Title: "Title " + url, Content: "body"}
+	return domain.Article{FeedID: testFeedID, URL: url, Title: "Title " + url, Content: "body"}
 }
 
 func TestArticleRepository_Save_InsertNew(t *testing.T) {
