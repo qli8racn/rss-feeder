@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS articles (
     UNIQUE(feed_id, url)
 );
 
+CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id         INTEGER  PRIMARY KEY AUTOINCREMENT,
     action     TEXT     NOT NULL,
