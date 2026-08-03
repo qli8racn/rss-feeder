@@ -11,7 +11,8 @@ anthropic_api_key: "sk-ant-xxxxxxxx"
 # 接続文字列にはDirect connection・Session pooler（ポート5432）・Transaction pooler
 # （ポート6543）の3種類がある。Session pooler（5432）の利用を推奨する。Transaction pooler
 # （6543）はpgxのprepared statementキャッシュと衝突する可能性があるため、やむを得ず使う場合は
-# DSNに `?default_query_exec_mode=simple_protocol` を付与すること。
+# DSNに `?default_query_exec_mode=simple_protocol` または `?default_query_exec_mode=exec` を
+# 付与すること（execの方がPgBouncerのtransactionモードと共存しやすく、より一般的に推奨される）。
 # db:
 #   driver: supabase
 #   supabase:
