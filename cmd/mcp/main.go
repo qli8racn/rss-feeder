@@ -125,7 +125,11 @@ func main() {
 	// stdio transport では標準出力(stdout)がJSON-RPC通信そのものに使われるため、
 	// ログ出力先が stdout だと通信を破壊してしまう。誤設定に気づけるよう、DI配線を
 	// 進める前に検知して起動を中断する（docs/steering/20260726_mcp_server/design.md 参照）。
-	cfg := do.MustInvoke[*config.Config](i)
+	cfg, err := do.Invoke[*config.Config](i)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if isStdoutOutput(cfg.Log.Output) {
 		fmt.Fprintln(os.Stderr, "cmd/mcp は stdio transport を使用するため、config.yml の log.output に標準出力（stdout・/dev/stdout・/proc/self/fd/1）は指定できません（stderr またはファイルパスを指定してください）")
 		os.Exit(1)
@@ -145,7 +149,11 @@ func main() {
 	do.Provide(i, driveranthropic.NewEnrichAgent)
 	do.Provide(i, driveranthropic.NewPreferenceAgent)
 
-	db := do.MustInvoke[*sql.DB](i)
+	db, err := do.Invoke[*sql.DB](i)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if err := migration.RunFor(cfg, db); err != nil {
 		fmt.Fprintf(os.Stderr, "migration failed: %v\n", err)
 		os.Exit(1)

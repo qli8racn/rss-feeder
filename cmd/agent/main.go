@@ -36,7 +36,11 @@ func main() {
 	i := do.New()
 	do.Provide(i, config.NewProvider)
 	do.Provide(i, driverlogger.NewLogger)
-	cfg := do.MustInvoke[*config.Config](i)
+	cfg, err := do.Invoke[*config.Config](i)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 
 	if cfg.DB.IsSupabase() {
 		do.Provide(i, readerpg.NewClient)
@@ -56,7 +60,11 @@ func main() {
 	do.Provide(i, driveranthropic.NewCurateAgent)
 	do.Provide(i, driveranthropic.NewDiscoverAgent)
 
-	db := do.MustInvoke[*sql.DB](i)
+	db, err := do.Invoke[*sql.DB](i)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if err := migration.RunFor(cfg, db); err != nil {
 		fmt.Fprintf(os.Stderr, "migration failed: %v\n", err)
 		os.Exit(1)

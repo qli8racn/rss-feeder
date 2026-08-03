@@ -44,7 +44,10 @@ func main() {
 
 	i := do.New()
 	do.Provide(i, config.NewProvider)
-	cfg := do.MustInvoke[*config.Config](i)
+	cfg, err := do.Invoke[*config.Config](i)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
 
 	if cfg.DB.IsSupabase() {
 		do.Provide(i, readerpg.NewClient)
@@ -60,7 +63,10 @@ func main() {
 	do.Provide(i, driverrss.NewReader)
 	do.Provide(i, driverhtmlfetch.NewFetcher)
 
-	db := do.MustInvoke[*sql.DB](i)
+	db, err := do.Invoke[*sql.DB](i)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
 	if err := migration.RunFor(cfg, db); err != nil {
 		log.Fatalf("migration failed: %v", err)
 	}
