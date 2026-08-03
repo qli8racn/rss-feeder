@@ -29,7 +29,10 @@ const (
 
 // NewClient は config.yml の db.supabase.dsn を用いて Supabase（Postgres）への接続を作る。
 func NewClient(i do.Injector) (*sql.DB, error) {
-	cfg := do.MustInvoke[*config.Config](i)
+	cfg, err := do.Invoke[*config.Config](i)
+	if err != nil {
+		return nil, err
+	}
 	if cfg.DB.Supabase.DSN == "" {
 		return nil, errors.New("db.driver: supabase が指定されていますが db.supabase.dsn が設定されていません")
 	}
