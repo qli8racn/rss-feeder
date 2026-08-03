@@ -18,8 +18,10 @@ func NewMaintainer(i do.Injector) (adaptermaint.Maintainer, error) {
 	return &maintainer{db: do.MustInvoke[*sql.DB](i)}, nil
 }
 
+// Vacuum は対象テーブルを明示して実行する。引数なしの VACUUM は所有していないテーブル
+// （Supabase側が管理する他スキーマのテーブル等）に対してWARNINGを出す可能性があるため。
 func (m *maintainer) Vacuum(ctx context.Context) error {
-	_, err := m.db.ExecContext(ctx, `VACUUM`)
+	_, err := m.db.ExecContext(ctx, `VACUUM (ANALYZE) articles, feeds, audit_log`)
 	return err
 }
 

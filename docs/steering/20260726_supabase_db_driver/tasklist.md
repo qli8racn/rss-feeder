@@ -54,6 +54,28 @@
 - [x] `AGENTS.md`（または該当ドキュメント）に `db.driver` 設定・Supabase接続時のセットアップ手順を追記する
 - [x] `internal/config/config.example.yml` の更新内容が実際の設定手順と一致していることを確認する
 
+## PRレビュー対応
+
+### Must fix
+
+- [x] `internal/migration/postgres.go` の `audit_log.article_id` の外部キーを `ON DELETE SET NULL` に変更し、`CREATE TABLE IF NOT EXISTS` のため既存テーブルには反映されない旨をコメントで残す
+- [x] `internal/driver/readerpg/article/article.go` の `Search`・`FindFiltered` の `LIKE` を `ILIKE` に書き換え、`design.md` にも追記する
+
+### Should fix
+
+- [x] `internal/driver/readerpg/client.go` の `NewClient` に DSN 空文字チェック・`PingContext`（タイムアウト付き）による疎通確認・コネクションプール設定（`SetMaxOpenConns`/`SetMaxIdleConns`/`SetConnMaxLifetime`）を追加する
+- [x] `internal/config/config.go` の `Load()` で `db.driver` の値を検証し、`""`・`"sqlite"`・`"supabase"` 以外はエラーにする（`DBConfig.Validate`）。`config_test.go` にテストケースを追加する
+- [x] `AGENTS.md`・`internal/config/config.example.yml` に Supabase の Session pooler(5432)/Transaction pooler(6543) の違いと `default_query_exec_mode=simple_protocol` の注記、TIMESTAMPTZ/DATETIME の表示差異の注意点を追記する
+- [x] `internal/driver/readerpg/{feed,article}` に `//go:build pg_integration` タグ付きの統合テストを追加する（`TEST_POSTGRES_DSN` 未設定時は `t.Skip`。通常の `go build`/`go test`（タグなし）はコンパイル対象外であることを確認済み）
+
+### Nits
+
+- [x] `internal/migration` に `RunFor(cfg *config.Config, db *sql.DB) error` を追加し、4つの `cmd/*/main.go` の migration 呼び分けをこの1関数呼び出しに集約する
+- [x] `internal/driver/readerpg/dbmaintenance/dbmaintenance.go` の `Vacuum` で対象テーブル（`articles, feeds, audit_log`）を明示する
+- [x] `internal/driver/readerpg/article/article.go` の `published_at DESC` 固定の箇所（`FindAll`・`FindUnread`・`FindBookmarked`・`FetchLatest`・`Search`）に `NULLS LAST` を明示する。`FindFiltered` はソート順（ASC/DESC）が動的なため、SQLiteのデフォルト（ASC→NULLS FIRST、DESC→NULLS LAST）に合わせてorderDirに応じて`NULLS FIRST`/`NULLS LAST`を出し分ける（`category`・`publisher`等NULLになりうる列でのソートに影響するため）
+- [x] `internal/driver/readerdb/{article,auditlog,dbmaintenance}` に `var _ XxxRepository = (*repository)(nil)` のインターフェース充足アサーションを追加する（`readerpg` 側と対称にする）
+- [x] `IntegrityCheck`（`internal/driver/readerpg/dbmaintenance/dbmaintenance.go`）は現状維持（対応不要）
+
 ## 今後のタスク（本フェーズではスコープ外・別フェーズで着手）
 
 - [ ] ローカル環境でSelf-hosted Supabase（`supabase` CLI / docker compose）を使えるようにする

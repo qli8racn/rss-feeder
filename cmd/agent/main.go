@@ -57,12 +57,7 @@ func main() {
 	do.Provide(i, driveranthropic.NewDiscoverAgent)
 
 	db := do.MustInvoke[*sql.DB](i)
-	if cfg.DB.IsSupabase() {
-		if err := migration.RunPostgres(db); err != nil {
-			fmt.Fprintf(os.Stderr, "migration failed: %v\n", err)
-			os.Exit(1)
-		}
-	} else if err := migration.Run(db); err != nil {
+	if err := migration.RunFor(cfg, db); err != nil {
 		fmt.Fprintf(os.Stderr, "migration failed: %v\n", err)
 		os.Exit(1)
 	}

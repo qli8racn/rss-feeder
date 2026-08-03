@@ -9,6 +9,8 @@ import (
 	"github.com/samber/do/v2"
 )
 
+var _ adapterauditlog.Repository = (*repository)(nil)
+
 type repository struct {
 	db *sql.DB
 }

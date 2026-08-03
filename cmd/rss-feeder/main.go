@@ -61,11 +61,7 @@ func main() {
 	do.Provide(i, driverhtmlfetch.NewFetcher)
 
 	db := do.MustInvoke[*sql.DB](i)
-	if cfg.DB.IsSupabase() {
-		if err := migration.RunPostgres(db); err != nil {
-			log.Fatalf("migration failed: %v", err)
-		}
-	} else if err := migration.Run(db); err != nil {
+	if err := migration.RunFor(cfg, db); err != nil {
 		log.Fatalf("migration failed: %v", err)
 	}
 
