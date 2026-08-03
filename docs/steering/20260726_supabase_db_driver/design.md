@@ -53,6 +53,7 @@ Claude Desktop / CLI / Web UI
   - `sql.Named`（`UpdateMetadataBatch`）→ 名前付きパラメータの互換性が不確実なため、位置引数（`$1, $2, $3`）ベースの素直な書き方に書き換える。
   - `LIKE` → `ILIKE`: SQLiteの`LIKE`はASCII範囲で大文字小文字を区別しないが、Postgresの`LIKE`は区別する。`Search`・`FindFiltered`のキーワード検索は`ILIKE`に書き換えてSQLite側の挙動と揃える。
   - `BOOLEAN`・`DATETIME` 型のGo側スキャン（`sql.NullTime`・`bool`）は `database/sql` の標準型で吸収されるため、リポジトリのScanコード自体は大きな変更なしで動作する見込み（Postgresの `TIMESTAMPTZ`/`BOOLEAN` は `sql.NullTime`/`bool` に問題なくマッピングされる）。
+  - 文字列カラム（`title`・`publisher`・`category`）のソート順: SQLiteの既定コレーションは`BINARY`（バイト順）、Supabaseの既定は`en_US.UTF-8`相当のため、`sort=title`等の並び順がSQLite版と厳密には一致しない。既知の差として扱い、Postgres側の並び順を正とする（`COLLATE "C"`等での完全一致は本フェーズではスコープ外）。
 - `internal/driver/readerpg/dbmaintenance` も追加する。ただしSQLite固有のPRAGMAはPostgresに存在しないため、以下のように役割を読み替える。
   - `Vacuum`: Postgresの `VACUUM` をそのまま実行（`VACUUM ANALYZE` にするかは実装時に検討）。
   - `IntegrityCheck`: Postgresには `PRAGMA integrity_check` に相当する組み込み機能がない。フェーズ1では「Postgres実装では未サポートである」旨を返す（空配列 + 何もしない、またはエラーではなく `[]string{"postgres: integrity check is not supported"}` のような説明的な戻り値とする）方針とし、必要であれば将来的に `pg_catalog` を用いた代替チェックを検討する。

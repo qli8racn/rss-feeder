@@ -125,12 +125,18 @@ db:
 - Supabaseダッシュボードの接続文字列には **Direct connection**・**Session pooler**（ポート`5432`）・
   **Transaction pooler**（ポート`6543`）の3種類がある。**Session pooler（`5432`）の利用を推奨**する。
   Transaction pooler（`6543`）はpgxのprepared statementキャッシュと衝突する可能性があるため、
-  やむを得ず使う場合はDSNに `default_query_exec_mode=simple_protocol` を付与すること
-  （`pgx/v5/stdlib` がサポートするクエリ実行モードの1つ）。
+  やむを得ず使う場合はDSNに `default_query_exec_mode=simple_protocol` または `exec` を付与すること
+  （いずれも`pgx/v5/stdlib`がサポートするクエリ実行モード。`exec`は拡張プロトコルのunnamed
+  statementを使うためPgBouncerのtransactionモードと共存しやすく、より一般的に推奨される）。
 - スキーマ（`feeds`・`articles`・`audit_log`）は各エントリポイントの起動時に自動作成される
   （SQLite同様、Supabase側も初回起動時の簡易マイグレーションで初期化される）。
 - 手動確認時の注意点: PostgresのTIMESTAMPTZはUTCに正規化して返すのに対し、SQLiteのDATETIMEは
   保存時のロケーションをそのまま引きずるため、日時の表示フォーマットに差が出ることがある。
+- 手動確認時の注意点: 文字列カラム（`title`・`publisher`・`category`）のソート順は、SQLiteの
+  既定コレーション（`BINARY`＝バイト順）とSupabaseの既定コレーション（`en_US.UTF-8`相当）で
+  異なる。既知の差として扱い、Postgres側の並び順を正とする。
+- `cmd/agent`（`rss-agent`）は本ブランチから起動時にマイグレーション（`migration.RunFor`）を
+  実行するようになった。変更前は実行していなかった（Postgres対応に伴う意図的な追加）。
 - Self-hosted Supabase（Docker版）は現時点で未対応（`docs/steering/20260726_supabase_db_driver/`
   の「今後のタスク」参照）。
 
@@ -265,6 +271,16 @@ Claude Desktop への登録は `claude_desktop_config.json`（macOSでは
 go test ./internal/domain/...
 go test ./internal/usecase/...
 go test $(go list ./internal/driver/... | grep -v internal/driver/anthropic)
+```
+
+Postgres（Supabase）向けの統合テストはビルドタグ `pg_integration` を付けた場合のみコンパイル・実行される
+（`TEST_POSTGRES_DSN` 未設定時は各テストが `t.Skip` する）。CI では実DBを用意せず `go vet -tags pg_integration`
+のみ実行しているため、型チェックはCIで通るが実行はローカルで行う必要がある。
+
+```bash
+# -p 1 必須: readerpg/article・readerpg/feed の2パッケージが同じDBの全テーブルをTRUNCATEするため、
+# 並列実行するとテスト同士がセットアップデータを消し合う。
+TEST_POSTGRES_DSN="postgres://..." go test -p 1 -tags pg_integration ./internal/driver/readerpg/...
 ```
 
 ---
