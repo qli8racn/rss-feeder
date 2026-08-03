@@ -76,6 +76,24 @@
 - [x] `internal/driver/readerdb/{article,auditlog,dbmaintenance}` に `var _ XxxRepository = (*repository)(nil)` のインターフェース充足アサーションを追加する（`readerpg` 側と対称にする）
 - [x] `IntegrityCheck`（`internal/driver/readerpg/dbmaintenance/dbmaintenance.go`）は現状維持（対応不要）
 
+## PRレビュー対応（2巡目）
+
+### Should fix
+
+- [x] `.github/workflows/ci-go.yml` に `go vet -tags pg_integration ./internal/driver/readerpg/...` のステップを追加し、統合テストが実DBなしで型チェックされるようにする
+- [x] `AGENTS.md` の Test セクションに `TEST_POSTGRES_DSN`・`-tags pg_integration`・`-p 1`（article/feedパッケージが同じDBをTRUNCATEするため並列実行不可）を追記する
+- [x] `internal/driver/readerpg/article/article.go` の `FindWithoutSummary` に `NULLS LAST` を追加し、他5箇所と揃える
+- [x] 4つの `cmd/*/main.go` の `*config.Config`・`*sql.DB` の取得を `do.MustInvoke` から `do.Invoke` + 明示的なエラーハンドリングに変更し、DSN誤り等の接続エラーがpanicではなくエラーメッセージとして表示されるようにする
+
+### Nits
+
+- [x] `internal/driver/readerpg/client.go` の `NewClient` で `PingContext` 失敗時に `db.Close()` を呼ぶ
+- [x] `AGENTS.md` に文字列カラムのソート順（SQLite=`BINARY`／Supabase=`en_US.UTF-8`相当）の差異は既知としてPostgres側を正とする旨を追記する
+- [x] `internal/driver/readerpg/article/article_pg_integration_test.go` の `INSERT INTO feeds (id, ...)` を明示的なid指定からRETURNING経由の取得に変更し、`feeds_id_seq` を進める
+- [x] `AGENTS.md` に `cmd/agent` が本ブランチから起動時マイグレーションを実行するようになった旨（意図的な変更）を追記する
+- [x] `AGENTS.md` のTransaction pooler回避策に `default_query_exec_mode=exec` も選択肢として併記する
+- [ ] `audit --article-id` に存在しない記事IDを渡した場合のFK違反（`.claude/hooks/audit-log.sh` は `|| true` で握り潰しているため実害は小さい）は対応不要と判断（現状維持）
+
 ## 今後のタスク（本フェーズではスコープ外・別フェーズで着手）
 
 - [ ] ローカル環境でSelf-hosted Supabase（`supabase` CLI / docker compose）を使えるようにする
