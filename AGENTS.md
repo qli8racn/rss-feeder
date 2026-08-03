@@ -105,6 +105,44 @@ cp internal/config/config.example.yml internal/config/config.yml
 > 同様に `go test ./...` も `internal/driver/anthropic` を含む場合 OOM するため、
 > `go test $(go list ./... | grep -v internal/driver/anthropic)` のように除外して実行すること。
 
+### DB ドライバの切り替え（SQLite / Supabase）
+
+`internal/config/config.yml` の `db.driver` で使用するDBを選択する（`rss-feeder`・`web`・
+`rss-agent`・`mcp` の4エントリポイント共通）。
+
+```yaml
+db:
+  driver: supabase   # 省略時・"sqlite" の場合は従来通りローカルの rss-feeder-db/reader.db（SQLite）を使用する
+  supabase:
+    dsn: "postgres://postgres.xxxxxxxx:xxxxxxxx@aws-0-xxxxx.pooler.supabase.com:5432/postgres?sslmode=require"
+```
+
+- `db.driver` が未設定 または `"sqlite"` の場合は既存挙動（SQLiteへの読み書き）のまま。
+  `"sqlite"`・`"supabase"`・空文字以外の値（タイプミス等）を指定した場合は起動時にエラーになる。
+- `db.driver: supabase` を指定する場合は、あらかじめ [supabase.com](https://supabase.com) で
+  プロジェクトを作成し、プロジェクト設定画面に表示される接続文字列（Connection string）を
+  そのまま `db.supabase.dsn` に貼り付ける。
+- Supabaseダッシュボードの接続文字列には **Direct connection**・**Session pooler**（ポート`5432`）・
+  **Transaction pooler**（ポート`6543`）の3種類がある。**Session pooler（`5432`）の利用を推奨**する。
+  Transaction pooler（`6543`）はpgxのprepared statementキャッシュと衝突する可能性があるため、
+  やむを得ず使う場合はDSNに `default_query_exec_mode=simple_protocol` または `exec` を付与すること
+  （いずれも`pgx/v5/stdlib`がサポートするクエリ実行モード。`exec`は拡張プロトコルのunnamed
+  statementを使うためPgBouncerのtransactionモードと共存しやすく、より一般的に推奨される）。
+- スキーマ（`feeds`・`articles`・`audit_log`）は各エントリポイントの起動時に自動作成される
+  （SQLite同様、Supabase側も初回起動時の簡易マイグレーションで初期化される）。
+- 手動確認時の注意点: PostgresのTIMESTAMPTZはUTCに正規化して返すのに対し、SQLiteのDATETIMEは
+  保存時のロケーションをそのまま引きずるため、日時の表示フォーマットに差が出ることがある。
+- 手動確認時の注意点: 文字列カラム（`title`・`publisher`・`category`）のソート順は、SQLiteの
+  既定コレーション（`BINARY`＝バイト順）とSupabaseの既定コレーション（`en_US.UTF-8`相当）で
+  異なる。既知の差として扱い、Postgres側の並び順を正とする。
+- `cmd/agent`（`rss-agent`）は本ブランチから `db.driver: supabase` 使用時のみ起動時にマイグレーション
+  （`migration.RunPostgres`）を実行するようになった（Postgres対応に伴う意図的な追加）。SQLite使用時は
+  従来通り実行しない。`rss-agent` は `cmd/web`・`cmd/rss-feeder` からサブプロセスとして頻繁に起動され、
+  呼び出し元が起動時に必ずmigrate済みのため冗長になる上、SQLiteでは`addArticleColumns`のALTER TABLEが
+  親プロセスと書き込みロックを取り合ってしまうため。
+- Self-hosted Supabase（Docker版）は現時点で未対応（`docs/steering/20260726_supabase_db_driver/`
+  の「今後のタスク」参照）。
+
 ---
 
 ## CLI Commands
@@ -256,6 +294,16 @@ Claude Desktop への登録は `claude_desktop_config.json`（macOSでは
 go test ./internal/domain/...
 go test ./internal/usecase/...
 go test $(go list ./internal/driver/... | grep -v internal/driver/anthropic)
+```
+
+Postgres（Supabase）向けの統合テストはビルドタグ `pg_integration` を付けた場合のみコンパイル・実行される
+（`TEST_POSTGRES_DSN` 未設定時は各テストが `t.Skip` する）。CI では実DBを用意せず `go vet -tags pg_integration`
+のみ実行しているため、型チェックはCIで通るが実行はローカルで行う必要がある。
+
+```bash
+# -p 1 必須: readerpg/article・readerpg/feed の2パッケージが同じDBの全テーブルをTRUNCATEするため、
+# 並列実行するとテスト同士がセットアップデータを消し合う。
+TEST_POSTGRES_DSN="postgres://..." go test -p 1 -tags pg_integration ./internal/driver/readerpg/...
 ```
 
 ---

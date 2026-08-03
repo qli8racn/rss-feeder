@@ -12,6 +12,8 @@ import (
 	"github.com/samber/do/v2"
 )
 
+var _ articlerepo.Repository = (*repository)(nil)
+
 type repository struct {
 	db *sql.DB
 }

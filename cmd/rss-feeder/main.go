@@ -18,6 +18,7 @@ import (
 	userrepo "github.com/qli8racn/rss-feeder/internal/adapter/driver/readerdb/user"
 	adapterrss "github.com/qli8racn/rss-feeder/internal/adapter/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/adapter/handler/cli"
+	"github.com/qli8racn/rss-feeder/internal/config"
 	"github.com/qli8racn/rss-feeder/internal/domain"
 	driverfeeddiscovery "github.com/qli8racn/rss-feeder/internal/driver/feeddiscovery"
 	driverfeedenrich "github.com/qli8racn/rss-feeder/internal/driver/feedenrich"
@@ -28,6 +29,12 @@ import (
 	dbrepodbmaint "github.com/qli8racn/rss-feeder/internal/driver/readerdb/dbmaintenance"
 	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
 	dbrepouser "github.com/qli8racn/rss-feeder/internal/driver/readerdb/user"
+	"github.com/qli8racn/rss-feeder/internal/driver/readerpg"
+	pgrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerpg/article"
+	pgrepoauditlog "github.com/qli8racn/rss-feeder/internal/driver/readerpg/auditlog"
+	pgrepodbmaint "github.com/qli8racn/rss-feeder/internal/driver/readerpg/dbmaintenance"
+	pgrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerpg/feed"
+	pgrepouser "github.com/qli8racn/rss-feeder/internal/driver/readerpg/user"
 	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/migration"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
@@ -39,17 +46,35 @@ func main() {
 
 	i := do.New()
 
-	do.Provide(i, readerdb.NewClient)
-	do.Provide(i, dbrepoarticle.NewRepository)
-	do.Provide(i, dbrepofeed.NewRepository)
-	do.Provide(i, dbrepouser.NewRepository)
+	do.Provide(i, config.NewProvider)
+	cfg, err := do.Invoke[*config.Config](i)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+
+	if cfg.DB.IsSupabase() {
+		do.Provide(i, readerpg.NewClient)
+		do.Provide(i, pgrepoarticle.NewRepository)
+		do.Provide(i, pgrepofeed.NewRepository)
+		do.Provide(i, pgrepouser.NewRepository)
+		do.Provide(i, pgrepoauditlog.NewRepository)
+		do.Provide(i, pgrepodbmaint.NewMaintainer)
+	} else {
+		do.Provide(i, readerdb.NewClient)
+		do.Provide(i, dbrepoarticle.NewRepository)
+		do.Provide(i, dbrepofeed.NewRepository)
+		do.Provide(i, dbrepouser.NewRepository)
+		do.Provide(i, dbrepoauditlog.NewRepository)
+		do.Provide(i, dbrepodbmaint.NewMaintainer)
+	}
 	do.Provide(i, driverrss.NewReader)
-	do.Provide(i, dbrepoauditlog.NewRepository)
-	do.Provide(i, dbrepodbmaint.NewMaintainer)
 	do.Provide(i, driverhtmlfetch.NewFetcher)
 
-	db := do.MustInvoke[*sql.DB](i)
-	if err := migration.Run(db); err != nil {
+	db, err := do.Invoke[*sql.DB](i)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	if err := migration.RunFor(cfg, db); err != nil {
 		log.Fatalf("migration failed: %v", err)
 	}
 

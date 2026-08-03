@@ -23,6 +23,10 @@ import (
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
 	dbrepouser "github.com/qli8racn/rss-feeder/internal/driver/readerdb/user"
+	"github.com/qli8racn/rss-feeder/internal/driver/readerpg"
+	pgrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerpg/article"
+	pgrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerpg/feed"
+	pgrepouser "github.com/qli8racn/rss-feeder/internal/driver/readerpg/user"
 	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/migration"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
@@ -37,15 +41,38 @@ func main() {
 	i := do.New()
 	do.Provide(i, config.NewProvider)
 	do.Provide(i, driverlogger.NewLogger)
-	do.Provide(i, readerdb.NewClient)
-	do.Provide(i, dbrepoarticle.NewRepository)
-	do.Provide(i, dbrepofeed.NewRepository)
-	do.Provide(i, dbrepouser.NewRepository)
+	cfg, err := do.Invoke[*config.Config](i)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	if cfg.DB.IsSupabase() {
+		do.Provide(i, readerpg.NewClient)
+		do.Provide(i, pgrepoarticle.NewRepository)
+		do.Provide(i, pgrepofeed.NewRepository)
+		do.Provide(i, pgrepouser.NewRepository)
+	} else {
+		do.Provide(i, readerdb.NewClient)
+		do.Provide(i, dbrepoarticle.NewRepository)
+		do.Provide(i, dbrepofeed.NewRepository)
+		do.Provide(i, dbrepouser.NewRepository)
+	}
 	do.Provide(i, driverrss.NewReader)
 	do.Provide(i, driverhtmlfetch.NewFetcher)
 
-	db := do.MustInvoke[*sql.DB](i)
-	if err := migration.Run(db); err != nil {
+	db, err := do.Invoke[*sql.DB](i)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	// cmd/agent（rss-agent）はcmd/web・cmd/rss-feederからサブプロセスとして頻繁に起動されるが、
+	// usersテーブルを含むスキーマの存在は前提にできない（cmd/agent単独起動や、親プロセスの
+	// マイグレーションより前に子プロセスが起動する競合を考慮）ため無条件に実行する。SQLite側は
+	// PRAGMA user_versionによるバージョン管理（internal/migration/migration.go）により、既に
+	// 最新スキーマまで移行済みのDBに対しては読み取り専用の2クエリで即returnするため、頻繁な
+	// 起動でも書き込みロックを取り合う心配はない。
+	if err := migration.RunFor(cfg, db); err != nil {
 		fmt.Fprintf(os.Stderr, "migration failed: %v\n", err)
 		os.Exit(1)
 	}

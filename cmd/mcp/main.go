@@ -31,6 +31,10 @@ import (
 	dbrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerdb/article"
 	dbrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerdb/feed"
 	dbrepouser "github.com/qli8racn/rss-feeder/internal/driver/readerdb/user"
+	"github.com/qli8racn/rss-feeder/internal/driver/readerpg"
+	pgrepoarticle "github.com/qli8racn/rss-feeder/internal/driver/readerpg/article"
+	pgrepofeed "github.com/qli8racn/rss-feeder/internal/driver/readerpg/feed"
+	pgrepouser "github.com/qli8racn/rss-feeder/internal/driver/readerpg/user"
 	driverrss "github.com/qli8racn/rss-feeder/internal/driver/rss"
 	"github.com/qli8racn/rss-feeder/internal/migration"
 	"github.com/qli8racn/rss-feeder/internal/usecase"
@@ -137,23 +141,38 @@ func main() {
 	// stdio transport では標準出力(stdout)がJSON-RPC通信そのものに使われるため、
 	// ログ出力先が stdout だと通信を破壊してしまう。誤設定に気づけるよう、DI配線を
 	// 進める前に検知して起動を中断する（docs/steering/20260726_mcp_server/design.md 参照）。
-	cfg := do.MustInvoke[*config.Config](i)
+	cfg, err := do.Invoke[*config.Config](i)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if isStdoutOutput(cfg.Log.Output) {
 		fmt.Fprintln(os.Stderr, "cmd/mcp は stdio transport を使用するため、config.yml の log.output に標準出力（stdout・/dev/stdout・/proc/self/fd/1）は指定できません（stderr またはファイルパスを指定してください）")
 		os.Exit(1)
 	}
 
-	do.Provide(i, readerdb.NewClient)
-	do.Provide(i, dbrepoarticle.NewRepository)
-	do.Provide(i, dbrepofeed.NewRepository)
-	do.Provide(i, dbrepouser.NewRepository)
+	if cfg.DB.IsSupabase() {
+		do.Provide(i, readerpg.NewClient)
+		do.Provide(i, pgrepoarticle.NewRepository)
+		do.Provide(i, pgrepofeed.NewRepository)
+		do.Provide(i, pgrepouser.NewRepository)
+	} else {
+		do.Provide(i, readerdb.NewClient)
+		do.Provide(i, dbrepoarticle.NewRepository)
+		do.Provide(i, dbrepofeed.NewRepository)
+		do.Provide(i, dbrepouser.NewRepository)
+	}
 	do.Provide(i, driverrss.NewReader)
 	do.Provide(i, driverhtmlfetch.NewFetcher)
 	do.Provide(i, driveranthropic.NewEnrichAgent)
 	do.Provide(i, driveranthropic.NewPreferenceAgent)
 
-	db := do.MustInvoke[*sql.DB](i)
-	if err := migration.Run(db); err != nil {
+	db, err := do.Invoke[*sql.DB](i)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if err := migration.RunFor(cfg, db); err != nil {
 		fmt.Fprintf(os.Stderr, "migration failed: %v\n", err)
 		os.Exit(1)
 	}
